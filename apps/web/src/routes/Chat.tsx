@@ -49,10 +49,8 @@ import {
 import { useProfiles } from '@/lib/useProfiles'
 
 import { ProfileDialog } from './ProfileDialog'
+import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 import styles from './Chat.module.css'
-
-/** How often chat history is re-fetched. */
-const MESSAGE_POLL_MS = 5000
 
 /** Offered in the hover bar without opening the picker. */
 const QUICK_REACTIONS = ['👍', '❤️', '😂']
@@ -87,6 +85,7 @@ export function Chat({
 
   const [items, setItems] = useState<Message[]>([])
   const [pending, setPending] = useState<PendingMessage[]>([])
+  const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -108,14 +107,19 @@ export function Chat({
 
   const lookup = useProfiles([...new Set(items.map((message) => message.author_id))])
 
-  // ── loading ──────────────────────────────────────────────────────────────
+  // ── WebSocket Real-Time Subscription & Initial Load ─────────────────────────
 
   useEffect(() => {
     let cancelled = false
 
-    async function poll() {
+    async function initSocketAndFetch() {
       try {
-        const page = await messagesApi.history(await getToken(), room.id)
+        const token = await getToken()
+        if (cancelled) return
+        chatSocket.setToken(token)
+        chatSocket.subscribe(room.id)
+
+        const page = await messagesApi.history(token, room.id)
         if (cancelled) return
         // The API returns newest-first; the UI reads oldest-first.
         const fresh = [...page.messages].reverse()
@@ -123,8 +127,6 @@ export function Chat({
         setOlderCursor((current) => current ?? page.next_before)
         setError(null)
       } catch (cause) {
-        // A transient failure must not blank the transcript, so the error is
-        // only surfaced when there is nothing on screen to keep.
         if (cancelled) return
         setItems((current) => {
           if (current.length === 0) {
@@ -137,13 +139,59 @@ export function Chat({
       }
     }
 
-    void poll()
-    const timer = setInterval(() => void poll(), MESSAGE_POLL_MS)
+    void initSocketAndFetch()
+
+    // Real-time WebSocket event listeners
+    const unsubs = [
+      chatSocket.on<ChatServerEvent>('message_created', (event) => {
+        if (event.type === 'message_created' && event.room_id === room.id) {
+          setItems((current) => merge(current, [event.message]))
+        }
+      }),
+      chatSocket.on<ChatServerEvent>('message_updated', (event) => {
+        if (event.type === 'message_updated' && event.room_id === room.id) {
+          setItems((current) =>
+            current.map((m) =>
+              m.id === event.message.id ? { ...event.message, reactions: m.reactions } : m,
+            ),
+          )
+        }
+      }),
+      chatSocket.on<ChatServerEvent>('message_deleted', (event) => {
+        if (event.type === 'message_deleted' && event.room_id === room.id) {
+          setItems((current) => current.filter((m) => m.id !== event.message_id))
+        }
+      }),
+      chatSocket.on<ChatServerEvent>('reactions_updated', (event) => {
+        if (event.type === 'reactions_updated' && event.room_id === room.id) {
+          setItems((current) =>
+            current.map((m) =>
+              m.id === event.message_id ? { ...m, reactions: event.reactions } : m,
+            ),
+          )
+        }
+      }),
+      chatSocket.on<ChatServerEvent>('typing', (event) => {
+        if (event.type === 'typing' && event.room_id === room.id && event.user_id !== user?.id) {
+          setTypingUsers((prev) => {
+            const next = new Map(prev)
+            if (event.is_typing) {
+              next.set(event.user_id, event.display_name)
+            } else {
+              next.delete(event.user_id)
+            }
+            return next
+          })
+        }
+      }),
+    ]
+
     return () => {
       cancelled = true
-      clearInterval(timer)
+      chatSocket.unsubscribe(room.id)
+      for (const unsub of unsubs) unsub()
     }
-  }, [getToken, room.id])
+  }, [getToken, room.id, user?.id])
 
   /** Fetch the page before the oldest message currently held. */
   const loadOlder = useCallback(async () => {
@@ -217,10 +265,26 @@ export function Chat({
     }
   }, [items.length, pending.length])
 
-  // ── sending ──────────────────────────────────────────────────────────────
+  const typingTimerRef = useRef<number | null>(null)
+  const notifyTyping = useCallback(() => {
+    chatSocket.sendTyping(room.id, true)
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current)
+    }
+    typingTimerRef.current = window.setTimeout(() => {
+      chatSocket.sendTyping(room.id, false)
+      typingTimerRef.current = null
+    }, 2500)
+  }, [room.id])
 
   const send = useCallback(
     async (content: string) => {
+      chatSocket.sendTyping(room.id, false)
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current)
+        typingTimerRef.current = null
+      }
+
       const localId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
       setPending((current) => [
         ...current,
@@ -421,10 +485,27 @@ export function Chat({
         </button>
       )}
 
+      {/* Real-time Typing Indicator */}
+      {typingUsers.size > 0 && (
+        <div className={styles.typingIndicator}>
+          <span className={styles.typingDots}>
+            <span className={styles.typingDot} />
+            <span className={styles.typingDot} />
+            <span className={styles.typingDot} />
+          </span>
+          <span>
+            <strong>{Array.from(typingUsers.values()).slice(0, 3).join(', ')}</strong>
+            {typingUsers.size > 3 ? ` and ${typingUsers.size - 3} others` : ''}{' '}
+            {typingUsers.size === 1 ? 'is typing...' : 'are typing...'}
+          </span>
+        </div>
+      )}
+
       {canSend ? (
         <Composer
           roomName={room.name}
           onSend={send}
+          onTyping={notifyTyping}
           isAnonymous={isAnonymousPersona}
           onTogglePersona={onTogglePersona}
           anonAlias={room.anonymous_identity?.alias_name}
@@ -450,6 +531,7 @@ export function Chat({
 function Composer({
   roomName,
   onSend,
+  onTyping,
   isAnonymous,
   onTogglePersona,
   anonAlias,
@@ -457,6 +539,7 @@ function Composer({
 }: {
   roomName: string
   onSend: (content: string) => Promise<void>
+  onTyping?: () => void
   isAnonymous?: boolean
   onTogglePersona?: (isAnon: boolean) => void
   anonAlias?: string
@@ -525,7 +608,10 @@ function Composer({
           ref={textareaRef}
           className={styles.composerInput}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value)
+            onTyping?.()
+          }}
           onKeyDown={onKeyDown}
           placeholder={`Message #${roomName}`}
           aria-label={`Message ${roomName}`}

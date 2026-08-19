@@ -37,6 +37,8 @@ pub struct CreateRoom {
     pub position: Option<i32>,
     /// Participant cap for media rooms.
     pub max_participants: Option<i32>,
+    /// Additional participants to join immediately (e.g. for Direct Message rooms).
+    pub participant_ids: Option<Vec<UserId>>,
 }
 
 /// Input for updating a room.
@@ -203,6 +205,24 @@ impl RoomService {
                 .await;
         }
 
+        // Join any additional participants (e.g. for Direct Messages)
+        if let Some(participants) = input.participant_ids {
+            for pid in participants {
+                if pid != user_id {
+                    let _ = self
+                        .rooms
+                        .join_room(created.id, pid, RoomParticipantRole::Participant)
+                        .await;
+                    if created.is_anonymous {
+                        let _ = self
+                            .rooms
+                            .get_or_create_anonymous_identity(created.id, pid)
+                            .await;
+                    }
+                }
+            }
+        }
+
         tracing::info!(
             room_id = %created.id,
             community_id = ?created.community_id,
@@ -211,6 +231,14 @@ impl RoomService {
             "room created"
         );
         Ok(created)
+    }
+
+    /// List standalone or direct conversation rooms the user participates in.
+    pub async fn list_user_rooms(&self, user_id: UserId) -> ServiceResult<Vec<Room>> {
+        self.rooms
+            .list_user_rooms(user_id)
+            .await
+            .map_err(ServiceError::from)
     }
 
     /// Fetch a room the caller can see.

@@ -26,6 +26,11 @@ impl MessagingService {
         }
     }
 
+    /// Underlying repository.
+    pub fn repository(&self) -> &MessageRepository {
+        &self.messages
+    }
+
     /// Post a message.
     pub async fn post(
         &self,

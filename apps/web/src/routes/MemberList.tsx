@@ -2,7 +2,11 @@ import { useState } from 'react'
 
 import { Avatar } from '@/components/Avatar'
 import { Skeleton } from '@/components/Skeleton'
-import { communities as communitiesApi, type Uuid } from '@/lib/api'
+import {
+  communities as communitiesApi,
+  rooms as roomsApi,
+  type Uuid,
+} from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
 import { useProfiles } from '@/lib/useProfiles'
@@ -10,25 +14,35 @@ import { useProfiles } from '@/lib/useProfiles'
 import { ProfileDialog } from './ProfileDialog'
 import styles from './MemberList.module.css'
 
-/**
- * Everyone in a community.
- */
-export function MemberList({ communityId }: { communityId: Uuid }) {
+interface MemberListProps {
+  communityId?: Uuid | null
+  roomId?: Uuid
+}
+
+export function MemberList({ communityId, roomId }: MemberListProps) {
   const { getToken, user } = useAuth()
   const [selectedUserId, setSelectedUserId] = useState<Uuid | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const members = useAsync(
-    async () => communitiesApi.members(await getToken(), communityId),
-    [getToken, communityId],
-  )
+  const members = useAsync(async () => {
+    const token = await getToken()
+    if (communityId) {
+      const list = await communitiesApi.members(token, communityId)
+      return list.map((m) => ({ user_id: m.user_id, nickname: m.nickname }))
+    }
+    if (roomId) {
+      const list = await roomsApi.participants(token, roomId)
+      return list.map((p) => ({ user_id: p.user_id, nickname: undefined }))
+    }
+    return []
+  }, [getToken, communityId, roomId])
 
   const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? [])
 
   return (
     <div className={styles.panel}>
       <h2 className={styles.heading}>
-        Members
+        {communityId ? 'Members' : 'Participants'}
         {members.data && <span className={styles.count}>{members.data.length}</span>}
       </h2>
 

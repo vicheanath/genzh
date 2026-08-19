@@ -140,6 +140,7 @@ pub async fn create(
                 duration_minutes: None,
                 position: Some(0),
                 max_participants: None,
+                participant_ids: None,
             },
         )
         .await;

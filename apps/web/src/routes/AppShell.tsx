@@ -11,6 +11,7 @@ import {
   HomeIcon,
   LockIcon,
   MenuIcon,
+  MessageSquareIcon,
   MicIcon,
   MicOffIcon,
   MonitorIcon,
@@ -84,6 +85,11 @@ export function AppShell() {
     return roomsApi.list(await getToken(), communityId)
   }, [getToken, communityId])
 
+  const myRooms = useAsync(async () => {
+    if (communityId) return []
+    return roomsApi.mine(await getToken())
+  }, [getToken, communityId])
+
   const navigation = (
     <>
       <CommunityRail
@@ -95,7 +101,8 @@ export function AppShell() {
         communityId={communityId}
         community={communities.data?.find((item) => item.id === communityId)}
         rooms={rooms.data}
-        loading={rooms.loading}
+        directRooms={myRooms.data?.filter((r) => r.category === 'dm') ?? []}
+        loading={rooms.loading || myRooms.loading}
         onOpenSettings={() => openUserSettings()}
       />
     </>
@@ -127,6 +134,7 @@ export function AppShell() {
               {
                 reloadCommunities: communities.reload,
                 reloadRooms: rooms.reload,
+                reloadMyRooms: myRooms.reload,
               } satisfies ShellContext
             }
           />
@@ -166,6 +174,7 @@ export function AppShell() {
 export interface ShellContext {
   reloadCommunities: () => void
   reloadRooms: () => void
+  reloadMyRooms?: () => void
 }
 
 // ── the rail ───────────────────────────────────────────────────────────────
@@ -276,12 +285,14 @@ function ChannelSidebar({
   communityId,
   community,
   rooms,
+  directRooms = [],
   loading,
   onOpenSettings,
 }: {
   communityId?: string
   community?: Community
   rooms: Room[] | null
+  directRooms?: Room[]
   loading: boolean
   onOpenSettings: () => void
 }) {
@@ -306,11 +317,51 @@ function ChannelSidebar({
         )}
       </header>
 
-      <nav className={styles.nav} aria-label="Rooms">
+      <nav className={styles.nav} aria-label="Navigation">
         {!communityId && (
-          <p className={styles.sidebarHint}>
-            Pick a community from the rail, or explore public communities.
-          </p>
+          <>
+            <div className={styles.group}>
+              <h2 className={styles.groupHeading}>Social & Playground</h2>
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) => cx(styles.navItem, isActive && styles.navItemActive)}
+              >
+                <SparkleIcon size={17} className={styles.navIcon} />
+                <span className={styles.navLabel}>Discover Moments</span>
+              </NavLink>
+              <NavLink
+                to="/friends"
+                className={({ isActive }) => cx(styles.navItem, isActive && styles.navItemActive)}
+              >
+                <UsersIcon size={17} className={styles.navIcon} />
+                <span className={styles.navLabel}>Friends</span>
+              </NavLink>
+              <NavLink
+                to="/explore"
+                className={({ isActive }) => cx(styles.navItem, isActive && styles.navItemActive)}
+              >
+                <CompassIcon size={17} className={styles.navIcon} />
+                <span className={styles.navLabel}>Explore Communities</span>
+              </NavLink>
+            </div>
+
+            {directRooms.length > 0 && (
+              <div className={styles.group}>
+                <h2 className={styles.groupHeading}>Direct Messages</h2>
+                {directRooms.map((dm) => (
+                  <NavLink
+                    key={dm.id}
+                    to={`/rooms/${dm.id}`}
+                    className={({ isActive }) => cx(styles.navItem, isActive && styles.navItemActive)}
+                  >
+                    <MessageSquareIcon size={16} className={styles.navIcon} />
+                    <span className={styles.navLabel}>{dm.name.replace(/^DM:\s*/, '')}</span>
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {communityId && loading && (

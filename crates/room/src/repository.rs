@@ -270,6 +270,26 @@ impl RoomRepository {
         }
     }
 
+    /// List standalone or direct conversation rooms where the user is a participant or owner.
+    pub async fn list_user_rooms(&self, user_id: UserId) -> RepositoryResult<Vec<Room>> {
+        sqlx::query_as(
+            "SELECT DISTINCT r.id, r.community_id, r.owner_id, r.name, r.topic, r.category, r.room_type,
+                    r.visibility, r.status, r.is_anonymous, r.position, r.max_participants,
+                    r.current_participants, r.started_at, r.expires_at, r.ended_at,
+                    r.created_at, r.updated_at
+             FROM rooms r
+             LEFT JOIN room_participants p ON p.room_id = r.id
+             WHERE r.community_id IS NULL
+               AND (r.owner_id = $1 OR p.user_id = $1)
+             ORDER BY r.updated_at DESC
+             LIMIT 50",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
     /// Partially update a room.
     pub async fn update(
         &self,

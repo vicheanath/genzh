@@ -61,6 +61,11 @@ pub struct AuthService {
 }
 
 impl AuthService {
+    /// Access the JWT service.
+    pub fn jwt(&self) -> &JwtService {
+        &self.jwt
+    }
+
     /// Assemble the service from a pool and a configured [`JwtService`].
     pub fn new(pool: DbPool, jwt: std::sync::Arc<JwtService>) -> Self {
         Self {

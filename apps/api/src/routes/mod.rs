@@ -13,3 +13,4 @@ pub mod messages;
 pub mod rooms;
 pub mod social;
 pub mod users;
+pub mod ws;

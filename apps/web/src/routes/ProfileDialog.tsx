@@ -1,11 +1,13 @@
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
   CopyIcon,
+  MessageSquareIcon,
   ShieldIcon,
   UserPlusIcon,
 } from '@/components/Icons'
@@ -18,6 +20,7 @@ import {
   auth as authApi,
   blocks as blocksApi,
   friends as friendsApi,
+  rooms as roomsApi,
   users as usersApi,
   type CurrentUser,
   type Uuid,
@@ -85,6 +88,7 @@ function PublicProfileCard({
   onClose: () => void
 }) {
   const { getToken } = useAuth()
+  const navigate = useNavigate()
   const toast = useToast()
 
   const publicProfile = useAsync(
@@ -93,6 +97,48 @@ function PublicProfileCard({
   )
 
   const [busy, setBusy] = useState(false)
+
+  async function handleOpenDM() {
+    setBusy(true)
+    try {
+      const token = await getToken()
+      const targetName = publicProfile.data?.display_name ?? 'User'
+      const handle = publicProfile.data?.handle ?? ''
+
+      // Reuse existing DM if one was already established
+      try {
+        const mine = await roomsApi.mine(token)
+        const existing = mine.find(
+          (r) => r.category === 'dm' && (r.name.includes(`@${handle}`) || r.topic?.includes(`@${handle}`))
+        )
+        if (existing) {
+          toast.success(`Opening conversation with ${targetName}!`)
+          onClose()
+          void navigate(`/rooms/${existing.id}`)
+          return
+        }
+      } catch {
+        // Fall back to creating a new one
+      }
+
+      const dmRoom = await roomsApi.createStandalone(token, {
+        name: `DM: @${handle || 'User'}`,
+        topic: `Direct chat with ${targetName}`,
+        category: 'dm',
+        room_type: 'text',
+        visibility: 'private',
+        is_anonymous: false,
+        participant_ids: [userId],
+      })
+      toast.success(`Opening direct chat with ${targetName}!`)
+      onClose()
+      void navigate(`/rooms/${dmRoom.id}`)
+    } catch (cause) {
+      toast.error('Could not start direct message', cause instanceof ApiError ? cause.message : undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function handleSendFriendRequest() {
     setBusy(true)
@@ -163,37 +209,49 @@ function PublicProfileCard({
         </div>
       </div>
 
-      <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
-            {userId}
-          </span>
+      {profile?.bio && <div className={styles.bioCard}>{profile.bio}</div>}
+
+      <div className={styles.cardSection}>
+        <div className={styles.idRow}>
+          <span className={styles.idCode}>{userId}</span>
           <Button size="sm" variant="secondary" onClick={copyId}>
             <CopyIcon size={14} />
             Copy ID
           </Button>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+        <div className={styles.cardActions}>
           <Button
             size="sm"
-            onClick={() => void handleSendFriendRequest()}
+            onClick={() => void handleOpenDM()}
             disabled={busy}
-            style={{ flex: 1 }}
           >
             {busy && <Spinner />}
-            <UserPlusIcon size={15} />
-            Add Friend
+            <MessageSquareIcon size={15} />
+            Send Direct Message (DM)
           </Button>
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={() => void handleBlockUser()}
-            disabled={busy}
-          >
-            <ShieldIcon size={15} />
-            Block
-          </Button>
+
+          <div className={styles.actionRow}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleSendFriendRequest()}
+              disabled={busy}
+              style={{ flex: 1 }}
+            >
+              <UserPlusIcon size={15} />
+              Add Friend
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => void handleBlockUser()}
+              disabled={busy}
+            >
+              <ShieldIcon size={15} />
+              Block
+            </Button>
+          </div>
         </div>
       </div>
     </div>

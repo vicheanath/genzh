@@ -181,6 +181,9 @@ export const rooms = {
   get: (token: string, id: Uuid) =>
     request<RoomWithPermissions>(`/api/v1/rooms/${id}`, { token }),
 
+  mine: (token: string) =>
+    request<Room[]>('/api/v1/rooms/mine', { token }),
+
   createStandalone: (
     token: string,
     input: {
@@ -192,6 +195,7 @@ export const rooms = {
       is_anonymous?: boolean
       duration_minutes?: number
       max_participants?: number
+      participant_ids?: Uuid[]
     },
   ) =>
     request<Room>('/api/v1/rooms', {

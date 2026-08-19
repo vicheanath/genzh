@@ -43,6 +43,8 @@ pub struct AppState {
     pub rate_limiter: Arc<dyn RateLimiter>,
     /// Tighter budget for credential endpoints.
     pub auth_rate_limiter: Arc<dyn RateLimiter>,
+    /// Broadcast channel for real-time WebSocket chat interactions.
+    pub chat_tx: tokio::sync::broadcast::Sender<crate::routes::ws::ChatServerEvent>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -119,6 +121,7 @@ impl AppState {
             messaging,
             social,
             media,
+            chat_tx: tokio::sync::broadcast::channel(4096).0,
             config: Arc::new(config),
         })
     }

@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use genzh_domain::room::{
     RoomAnonymousIdentity, RoomParticipant, RoomStatus, RoomType, RoomVisibility,
 };
-use genzh_domain::{CommunityId, Permission, Room, RoomId};
+use genzh_domain::{CommunityId, Permission, Room, RoomId, UserId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ApiResult;
@@ -42,6 +42,9 @@ pub struct CreateRoomRequest {
     /// Participant cap, media rooms only.
     #[serde(default)]
     pub max_participants: Option<i32>,
+    /// Participant user IDs to add immediately.
+    #[serde(default)]
+    pub participant_ids: Option<Vec<UserId>>,
 }
 
 /// Query parameters for discovery.
@@ -143,13 +146,14 @@ pub async fn create_community_room(
                 duration_minutes: body.duration_minutes,
                 position: body.position,
                 max_participants: body.max_participants,
+                participant_ids: body.participant_ids,
             },
         )
         .await?;
     Ok((StatusCode::CREATED, Json(room)))
 }
 
-/// `POST /api/v1/rooms` (Create standalone playground room)
+/// `POST /api/v1/rooms` (Create standalone playground room or DM)
 pub async fn create_standalone_room(
     State(state): State<AppState>,
     caller: CurrentUser,
@@ -171,10 +175,20 @@ pub async fn create_standalone_room(
                 duration_minutes: body.duration_minutes,
                 position: body.position,
                 max_participants: body.max_participants,
+                participant_ids: body.participant_ids,
             },
         )
         .await?;
     Ok((StatusCode::CREATED, Json(room)))
+}
+
+/// `GET /api/v1/rooms/mine` (Caller's joined and direct conversation rooms)
+pub async fn list_mine(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+) -> ApiResult<Json<Vec<Room>>> {
+    let rooms = state.rooms.list_user_rooms(caller.user_id).await?;
+    Ok(Json(rooms))
 }
 
 /// `GET /api/v1/rooms/discovery`

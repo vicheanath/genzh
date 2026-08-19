@@ -75,6 +75,7 @@ dependencies = [
  "axum",
  "chrono",
  "dotenvy",
+ "futures",
  "genzh-auth",
  "genzh-community",
  "genzh-domain",

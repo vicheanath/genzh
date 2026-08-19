@@ -186,6 +186,7 @@ async fn main() -> anyhow::Result<()> {
                         duration_minutes: None,
                         position: Some(0),
                         max_participants: None,
+                        participant_ids: None,
                     },
                 )
                 .await
@@ -282,6 +283,7 @@ async fn main() -> anyhow::Result<()> {
                     duration_minutes: Some(180),
                     position: None,
                     max_participants: Some(50),
+                    participant_ids: None,
                 },
             )
             .await?;

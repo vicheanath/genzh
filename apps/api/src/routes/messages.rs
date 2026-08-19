@@ -167,6 +167,13 @@ pub async fn post(
         None
     };
 
+    let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageCreated {
+        room_id,
+        message: message.clone(),
+        reactions: Vec::new(),
+        anonymous_author: anonymous_author.clone(),
+    });
+
     Ok((
         StatusCode::CREATED,
         Json(MessageView {
@@ -184,12 +191,19 @@ pub async fn edit(
     Path(message_id): Path<MessageId>,
     ApiJson(body): ApiJson<EditMessageRequest>,
 ) -> ApiResult<Json<Message>> {
-    Ok(Json(
-        state
-            .messaging
-            .edit(message_id, caller.user_id, &body.content)
-            .await?,
-    ))
+    let updated = state
+        .messaging
+        .edit(message_id, caller.user_id, &body.content)
+        .await?;
+
+    let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageUpdated {
+        room_id: updated.room_id,
+        message: updated.clone(),
+        reactions: Vec::new(),
+        anonymous_author: None,
+    });
+
+    Ok(Json(updated))
 }
 
 /// `DELETE /api/v1/messages/{id}`
@@ -198,6 +212,13 @@ pub async fn delete(
     caller: CurrentUser,
     Path(message_id): Path<MessageId>,
 ) -> ApiResult<StatusCode> {
+    if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
+        let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageDeleted {
+            room_id: msg.room_id,
+            message_id,
+        });
+    }
+
     state.messaging.delete(message_id, caller.user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -209,12 +230,20 @@ pub async fn react(
     Path(message_id): Path<MessageId>,
     ApiJson(body): ApiJson<ReactionRequest>,
 ) -> ApiResult<Json<Vec<ReactionSummary>>> {
-    Ok(Json(
-        state
-            .messaging
-            .react(message_id, caller.user_id, &body.reaction)
-            .await?,
-    ))
+    let reactions = state
+        .messaging
+        .react(message_id, caller.user_id, &body.reaction)
+        .await?;
+
+    if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
+        let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::ReactionsUpdated {
+            room_id: msg.room_id,
+            message_id,
+            reactions: reactions.clone(),
+        });
+    }
+
+    Ok(Json(reactions))
 }
 
 /// `DELETE /api/v1/messages/{id}/reactions`
@@ -224,10 +253,18 @@ pub async fn unreact(
     Path(message_id): Path<MessageId>,
     ApiJson(body): ApiJson<ReactionRequest>,
 ) -> ApiResult<Json<Vec<ReactionSummary>>> {
-    Ok(Json(
-        state
-            .messaging
-            .unreact(message_id, caller.user_id, &body.reaction)
-            .await?,
-    ))
+    let reactions = state
+        .messaging
+        .unreact(message_id, caller.user_id, &body.reaction)
+        .await?;
+
+    if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
+        let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::ReactionsUpdated {
+            room_id: msg.room_id,
+            message_id,
+            reactions: reactions.clone(),
+        });
+    }
+
+    Ok(Json(reactions))
 }

@@ -23,6 +23,8 @@ pub struct PublicProfile {
     pub handle: String,
     /// Name to show.
     pub display_name: String,
+    /// User bio.
+    pub bio: Option<String>,
     /// Static avatar image.
     pub avatar_url: Option<String>,
     /// Animated avatar effect key.
@@ -61,6 +63,7 @@ pub async fn get(
         id: user.id,
         handle: user.handle,
         display_name: profile.display_name,
+        bio: profile.bio,
         avatar_url: profile.avatar_url,
         avatar_effect: profile.avatar_effect,
         accent_color: profile.accent_color,

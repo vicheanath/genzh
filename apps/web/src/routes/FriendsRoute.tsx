@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
@@ -9,6 +10,7 @@ import {
   BanIcon,
   CheckIcon,
   CopyIcon,
+  MessageSquareIcon,
   MoreIcon,
   SearchIcon,
   ShieldIcon,
@@ -25,6 +27,7 @@ import {
   ApiError,
   blocks as blocksApi,
   friends as friendsApi,
+  rooms as roomsApi,
   type Uuid,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -45,6 +48,7 @@ interface AddFriendFormValues {
 
 export function FriendsRoute() {
   const { getToken, user } = useAuth()
+  const navigate = useNavigate()
   const toast = useToast()
 
   const tab = useAppStore((s) => s.friendsTab)
@@ -78,6 +82,44 @@ export function FriendsRoute() {
     friends.reload()
     requests.reload()
   }, [friends, requests])
+
+  async function openDM(friendId: Uuid) {
+    const prof = lookup(friendId)
+    try {
+      const token = await getToken()
+      const targetName = prof?.display_name ?? 'Friend'
+      const handle = prof?.handle ?? ''
+
+      // Reuse existing DM if one was already established
+      try {
+        const mine = await roomsApi.mine(token)
+        const existing = mine.find(
+          (r) => r.category === 'dm' && (r.name.includes(`@${handle}`) || r.topic?.includes(`@${handle}`))
+        )
+        if (existing) {
+          toast.success(`Opening conversation with ${targetName}!`)
+          void navigate(`/rooms/${existing.id}`)
+          return
+        }
+      } catch {
+        // Fall back to creating a new one
+      }
+
+      const dmRoom = await roomsApi.createStandalone(token, {
+        name: `DM: @${handle || 'Friend'}`,
+        topic: `Direct message with ${targetName}`,
+        category: 'dm',
+        room_type: 'text',
+        visibility: 'private',
+        is_anonymous: false,
+        participant_ids: [friendId],
+      })
+      toast.success(`Opening conversation with ${targetName}!`)
+      void navigate(`/rooms/${dmRoom.id}`)
+    } catch {
+      toast.error('Could not start direct chat')
+    }
+  }
 
   async function sendRequest(data: AddFriendFormValues) {
     const id = data.userId.trim()
@@ -290,6 +332,16 @@ export function FriendsRoute() {
                       </div>
 
                       <div className={styles.actions}>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          onClick={() => void openDM(friendId)}
+                          aria-label="Direct message"
+                          title="Send Direct Message"
+                        >
+                          <MessageSquareIcon size={16} />
+                        </button>
+
                         <Menu
                           trigger={
                             <button

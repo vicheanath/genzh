@@ -60,6 +60,7 @@ export interface PublicProfile {
   id: Uuid
   handle: string
   display_name: string
+  bio?: string | null
   avatar_url: string | null
   avatar_effect: string | null
   accent_color: string | null

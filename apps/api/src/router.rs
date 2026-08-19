@@ -72,6 +72,7 @@ pub fn build(state: AppState) -> Router {
             post(routes::rooms::create_standalone_room),
         )
         .route("/rooms/discovery", get(routes::rooms::discovery))
+        .route("/rooms/mine", get(routes::rooms::list_mine))
         .route("/rooms/trending", get(routes::rooms::trending))
         .route("/rooms/live", get(routes::rooms::live))
         .route("/rooms/random", get(routes::rooms::random_room))
@@ -116,7 +117,9 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/blocks/{user_id}",
             put(routes::social::block).delete(routes::social::unblock),
-        );
+        )
+        // ---- real-time chat websocket ----
+        .route("/ws", get(routes::ws::ws_handler));
 
     Router::new()
         // Health endpoints sit outside /api/v1 so probes never depend on the
