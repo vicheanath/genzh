@@ -10,7 +10,7 @@
 //!
 //! Permissions are **never** taken from a JWT. A token establishes identity;
 //! every capability is resolved from the database at the moment it is needed
-//! (see `social-room::authorization`). The single exception is the short-lived
+//! (see `genzh-room::authorization`). The single exception is the short-lived
 //! media token, which is a *snapshot* of an already-completed authorization and
 //! is scoped to one room for a few minutes.
 

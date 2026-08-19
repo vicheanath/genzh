@@ -1,11 +1,11 @@
-//! # social-infrastructure
+//! # genzh-infrastructure
 //!
 //! Shared persistence plumbing for the control plane: the connection pool,
 //! migrations, and the one place where a raw `sqlx::Error` is translated into
 //! something the domain can reason about.
 //!
 //! Repositories themselves live in their bounded-context crates
-//! (`social-auth`, `social-community`, …) rather than here, so that the schema
+//! (`genzh-auth`, `genzh-community`, …) rather than here, so that the schema
 //! knowledge for a context stays next to its rules.
 //!
 //! ## Why every query is runtime-checked

@@ -75,19 +75,19 @@ dependencies = [
  "axum",
  "chrono",
  "dotenvy",
- "genzh-core",
+ "genzh-auth",
+ "genzh-community",
+ "genzh-domain",
+ "genzh-graph",
+ "genzh-infrastructure",
+ "genzh-media-core",
+ "genzh-messaging",
+ "genzh-room",
  "http",
  "http-body-util",
  "parking_lot",
  "serde",
  "serde_json",
- "social-auth",
- "social-community",
- "social-domain",
- "social-graph",
- "social-infrastructure",
- "social-messaging",
- "social-room",
  "sqlx",
  "thiserror 2.0.20",
  "tokio",
@@ -1052,7 +1052,77 @@ dependencies = [
 ]
 
 [[package]]
-name = "genzh-core"
+name = "genzh-auth"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "chrono",
+ "genzh-domain",
+ "genzh-infrastructure",
+ "jsonwebtoken",
+ "password-hash",
+ "rand 0.9.5",
+ "serde",
+ "sha2 0.11.0",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-community"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genzh-domain",
+ "genzh-infrastructure",
+ "serde",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-domain"
+version = "0.1.0"
+dependencies = [
+ "bitflags 2.13.1",
+ "chrono",
+ "serde",
+ "sqlx",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-graph"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genzh-domain",
+ "genzh-infrastructure",
+ "serde",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-infrastructure"
+version = "0.1.0"
+dependencies = [
+ "genzh-domain",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "genzh-media-core"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.13.1",
@@ -1066,13 +1136,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "genzh-room"
+name = "genzh-media-room"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
- "genzh-core",
- "genzh-signaling",
+ "genzh-media-core",
+ "genzh-media-signaling",
  "rand 0.9.5",
  "rtc",
  "serde",
@@ -1086,13 +1156,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "genzh-signaling"
+name = "genzh-media-signaling"
 version = "0.1.0"
 dependencies = [
- "genzh-core",
+ "genzh-media-core",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-messaging"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genzh-domain",
+ "genzh-infrastructure",
+ "genzh-room",
+ "serde",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-room"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genzh-community",
+ "genzh-domain",
+ "genzh-infrastructure",
+ "genzh-media-core",
+ "serde",
+ "sqlx",
+ "tracing",
  "uuid",
 ]
 
@@ -1597,9 +1696,9 @@ dependencies = [
  "axum",
  "dotenvy",
  "futures",
- "genzh-core",
- "genzh-room",
- "genzh-signaling",
+ "genzh-media-core",
+ "genzh-media-room",
+ "genzh-media-signaling",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -2783,105 +2882,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "social-auth"
-version = "0.1.0"
-dependencies = [
- "argon2",
- "chrono",
- "jsonwebtoken",
- "password-hash",
- "rand 0.9.5",
- "serde",
- "sha2 0.11.0",
- "social-domain",
- "social-infrastructure",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "social-community"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "social-domain",
- "social-infrastructure",
- "sqlx",
- "thiserror 2.0.20",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "social-domain"
-version = "0.1.0"
-dependencies = [
- "bitflags 2.13.1",
- "chrono",
- "serde",
- "sqlx",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "social-graph"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "social-domain",
- "social-infrastructure",
- "sqlx",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "social-infrastructure"
-version = "0.1.0"
-dependencies = [
- "social-domain",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "social-messaging"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "social-domain",
- "social-infrastructure",
- "social-room",
- "sqlx",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "social-room"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "genzh-core",
- "serde",
- "social-community",
- "social-domain",
- "social-infrastructure",
- "sqlx",
- "tracing",
- "uuid",
 ]
 
 [[package]]

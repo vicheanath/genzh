@@ -1,4 +1,4 @@
-# social-backend
+# genzh-backend
 
 Rust backend for a mobile-first social hangout platform: accounts, communities,
 rooms, permissions, chat — and realtime voice, video and screen sharing through
@@ -93,7 +93,7 @@ permission model has 25 tests that run in microseconds.
 ### Dependency direction across the boundary
 
 ```
-apps/api ──▶ social-{auth,community,room,messaging,graph} ──▶ social-domain ──▶ (sqlx)
+apps/api ──▶ genzh-{auth,community,room,messaging,graph} ──▶ genzh-domain ──▶ (sqlx)
     │
     └──▶ genzh-core ◀── genzh-room ◀── apps/media
                   ▲
@@ -102,7 +102,7 @@ apps/api ──▶ social-{auth,community,room,messaging,graph} ──▶ social
         codec registry, track kinds, room events, VAD trait
 ```
 
-`genzh-core` has no SQLx, no HTTP, and no dependency on `social-domain`.
+`genzh-core` has no SQLx, no HTTP, and no dependency on `genzh-domain`.
 The media plane therefore *cannot* reference a database model even by accident.
 
 ---
@@ -110,7 +110,7 @@ The media plane therefore *cannot* reference a database model even by accident.
 ## 2. Repository layout
 
 ```
-social-backend/
+genzh-backend/
 ├── Cargo.toml                   workspace, shared dependency versions
 ├── docker-compose.yml           postgres + api + media
 ├── Dockerfile.api

@@ -8,9 +8,9 @@ publish.workspace = true
 
 # NOTE: deliberately no sqlx and no control-plane crates.
 [dependencies]
-genzh-core.workspace = true
-genzh-room.workspace = true
-genzh-signaling.workspace = true
+genzh-media-core.workspace = true
+genzh-media-room.workspace = true
+genzh-media-signaling.workspace = true
 
 axum.workspace = true
 tower-http.workspace = true

@@ -11,30 +11,35 @@ ordinary paths (`/api/v1/rooms/6f1c…/media/join`).
 Every failure — validation, authorization, not-found, internal — has one shape:
 
 ```json
-{ "error": { "code": "ROOM_ACCESS_DENIED", "message": "You do not have permission to join this room" } }
+{
+  "error": {
+    "code": "ROOM_ACCESS_DENIED",
+    "message": "You do not have permission to join this room"
+  }
+}
 ```
 
 `code` is stable and safe to branch on. `message` is for humans and never
 contains internal detail; a database failure becomes `INTERNAL_ERROR` with a
 generic message and the real cause goes to the logs under the request id.
 
-| Code | Status | Meaning |
-|---|---|---|
-| `VALIDATION_FAILED` | 400 | A field broke a domain rule. |
-| `BAD_REQUEST` | 400 | Malformed JSON or a missing field. |
-| `UNSUPPORTED_ROOM_TYPE` | 400 | Media join on a text room. |
-| `UNKNOWN_PERMISSION` | 400 | A permission key this build does not have. |
-| `UNAUTHENTICATED` | 401 | Missing or malformed bearer token. |
-| `INVALID_CREDENTIALS` | 401 | Wrong identifier **or** wrong password — deliberately indistinguishable. |
-| `INVALID_TOKEN` / `INVALID_SESSION` | 401 | Expired or revoked. |
-| `NOT_A_MEMBER` | 403 | Not in the community that owns the resource. |
-| `ROOM_ACCESS_DENIED` | 403 | Cannot see the room. |
-| `SPEAK_DENIED` / `VIDEO_DENIED` / `SCREEN_SHARE_DENIED` | 403 | Media capability refused. |
-| `PERMISSION_DENIED_<PERMISSION>` | 403 | Any other capability refused. |
-| `NOT_FOUND` | 404 | No such entity, or not visible to you. |
-| `CONFLICT` / `ALREADY_REGISTERED` | 409 | Uniqueness violated. |
-| `RATE_LIMITED` | 429 | Slow down. |
-| `INTERNAL_ERROR` | 500 | Our fault. |
+| Code                                                    | Status | Meaning                                                                  |
+| ------------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
+| `VALIDATION_FAILED`                                     | 400    | A field broke a domain rule.                                             |
+| `BAD_REQUEST`                                           | 400    | Malformed JSON or a missing field.                                       |
+| `UNSUPPORTED_ROOM_TYPE`                                 | 400    | Media join on a text room.                                               |
+| `UNKNOWN_PERMISSION`                                    | 400    | A permission key this build does not have.                               |
+| `UNAUTHENTICATED`                                       | 401    | Missing or malformed bearer token.                                       |
+| `INVALID_CREDENTIALS`                                   | 401    | Wrong identifier **or** wrong password — deliberately indistinguishable. |
+| `INVALID_TOKEN` / `INVALID_SESSION`                     | 401    | Expired or revoked.                                                      |
+| `NOT_A_MEMBER`                                          | 403    | Not in the community that owns the resource.                             |
+| `ROOM_ACCESS_DENIED`                                    | 403    | Cannot see the room.                                                     |
+| `SPEAK_DENIED` / `VIDEO_DENIED` / `SCREEN_SHARE_DENIED` | 403    | Media capability refused.                                                |
+| `PERMISSION_DENIED_<PERMISSION>`                        | 403    | Any other capability refused.                                            |
+| `NOT_FOUND`                                             | 404    | No such entity, or not visible to you.                                   |
+| `CONFLICT` / `ALREADY_REGISTERED`                       | 409    | Uniqueness violated.                                                     |
+| `RATE_LIMITED`                                          | 429    | Slow down.                                                               |
+| `INTERNAL_ERROR`                                        | 500    | Our fault.                                                               |
 
 Every response carries `x-request-id`, echoed from the request when present.
 Quote it in a bug report and the whole request is one log query away.
@@ -46,8 +51,12 @@ Quote it in a bug report and the whole request is one log query away.
 ### `POST /auth/register`
 
 ```json
-{ "handle": "ada", "email": "ada@example.com",
-  "password": "at-least-ten-chars", "display_name": "Ada" }
+{
+  "handle": "ada",
+  "email": "ada@example.com",
+  "password": "at-least-ten-chars",
+  "display_name": "Ada"
+}
 ```
 
 Handles are lower-cased and must be 3–32 characters of `a-z0-9._`. Passwords
@@ -59,10 +68,16 @@ way.
 
 ```json
 {
-  "user": { "id": "…", "handle": "ada", "email": "ada@example.com",
-            "profile": { "display_name": "Ada", "avatar_effect": null, "…": "…" } },
-  "access_token": "eyJ…", "refresh_token": "8f3c…",
-  "expires_in": 900, "token_type": "Bearer"
+  "user": {
+    "id": "…",
+    "handle": "ada",
+    "email": "ada@example.com",
+    "profile": { "display_name": "Ada", "avatar_effect": null, "…": "…" }
+  },
+  "access_token": "eyJ…",
+  "refresh_token": "8f3c…",
+  "expires_in": 900,
+  "token_type": "Bearer"
 }
 ```
 
@@ -72,7 +87,7 @@ way.
 { "identifier": "ada", "password": "…" }
 ```
 
-`identifier` is a handle *or* an e-mail. A wrong password and an unknown account
+`identifier` is a handle _or_ an e-mail. A wrong password and an unknown account
 return byte-identical responses, and the unknown-account path spends the same
 Argon2 work, so response timing is not an account-enumeration oracle.
 
@@ -104,11 +119,11 @@ would let an attacker probe for live tokens.
 
 ## Communities
 
-| Method | Path | Requires |
-|---|---|---|
-| `POST` | `/communities` | authentication |
-| `GET` | `/communities/{id}` | membership |
-| `PATCH` | `/communities/{id}` | `manage_community` |
+| Method   | Path                | Requires                                                    |
+| -------- | ------------------- | ----------------------------------------------------------- |
+| `POST`   | `/communities`      | authentication                                              |
+| `GET`    | `/communities/{id}` | membership                                                  |
+| `PATCH`  | `/communities/{id}` | `manage_community`                                          |
 | `DELETE` | `/communities/{id}` | **owner** — `manage_community` renames, it does not destroy |
 
 `GET` returns the community plus `your_permissions`, the caller's resolved
@@ -120,27 +135,30 @@ membership, in one transaction.
 
 ## Members
 
-| Method | Path | Requires |
-|---|---|---|
-| `GET` | `/communities/{id}/members` | membership |
-| `POST` | `/communities/{id}/members` | self-join, or `manage_members` for someone else |
-| `DELETE` | `/communities/{id}/members/{user_id}` | self-leave, or `manage_members` |
-| `POST` | `/communities/{id}/members/{user_id}/roles` | `manage_roles` |
+| Method   | Path                                        | Requires                                        |
+| -------- | ------------------------------------------- | ----------------------------------------------- |
+| `GET`    | `/communities/{id}/members`                 | membership                                      |
+| `POST`   | `/communities/{id}/members`                 | self-join, or `manage_members` for someone else |
+| `DELETE` | `/communities/{id}/members/{user_id}`       | self-leave, or `manage_members`                 |
+| `POST`   | `/communities/{id}/members/{user_id}/roles` | `manage_roles`                                  |
 
 `POST /members` with `{}` adds the caller — that is what an invite link amounts
 to. Adding anybody else needs `manage_members`. The owner can never be removed.
 
 ## Roles
 
-| Method | Path | Requires |
-|---|---|---|
-| `GET` | `/communities/{id}/roles` | membership |
-| `POST` | `/communities/{id}/roles` | `manage_roles` |
+| Method  | Path                                | Requires       |
+| ------- | ----------------------------------- | -------------- |
+| `GET`   | `/communities/{id}/roles`           | membership     |
+| `POST`  | `/communities/{id}/roles`           | `manage_roles` |
 | `PATCH` | `/communities/{id}/roles/{role_id}` | `manage_roles` |
 
 ```json
-{ "name": "presenter", "color": "#7c5cff",
-  "permissions": ["view_room", "speak", "use_video", "screen_share"] }
+{
+  "name": "presenter",
+  "color": "#7c5cff",
+  "permissions": ["view_room", "speak", "use_video", "screen_share"]
+}
 ```
 
 `PATCH` with `permissions` **replaces** the whole set — the only interpretation
@@ -153,13 +171,13 @@ already hold everything there is to grant.
 
 ## Rooms
 
-| Method | Path | Requires |
-|---|---|---|
-| `GET` | `/communities/{id}/rooms` | membership — filtered to rooms you can see |
-| `POST` | `/communities/{id}/rooms` | `manage_room` |
-| `GET` | `/rooms/{id}` | `view_room` |
-| `PATCH` | `/rooms/{id}` | `manage_room` |
-| `DELETE` | `/rooms/{id}` | `manage_room` |
+| Method   | Path                      | Requires                                   |
+| -------- | ------------------------- | ------------------------------------------ |
+| `GET`    | `/communities/{id}/rooms` | membership — filtered to rooms you can see |
+| `POST`   | `/communities/{id}/rooms` | `manage_room`                              |
+| `GET`    | `/rooms/{id}`             | `view_room`                                |
+| `PATCH`  | `/rooms/{id}`             | `manage_room`                              |
+| `DELETE` | `/rooms/{id}`             | `manage_room`                              |
 
 ```json
 { "name": "lounge", "room_type": "voice", "topic": "…", "max_participants": 20 }
@@ -187,7 +205,7 @@ community → `view_room` → is a media room → fold `speak`/`use_video`/
   "media_url": "ws://127.0.0.1:8081/ws/media",
   "token": "eyJhbGciOiJIUzI1NiJ9…",
   "expires_at": "2026-08-19T16:02:21Z",
-  "ice_servers": [ { "urls": ["stun:stun.l.google.com:19302"] } ]
+  "ice_servers": [{ "urls": ["stun:stun.l.google.com:19302"] }]
 }
 ```
 
@@ -202,14 +220,14 @@ correctly.
 
 ## Messages
 
-| Method | Path | Requires |
-|---|---|---|
-| `GET` | `/rooms/{id}/messages` | `view_room` |
-| `POST` | `/rooms/{id}/messages` | `send_message` |
-| `PATCH` | `/messages/{id}` | author only |
-| `DELETE` | `/messages/{id}` | author, or `manage_room` |
-| `PUT` | `/messages/{id}/reactions` | `add_reaction` |
-| `DELETE` | `/messages/{id}/reactions` | `view_room` |
+| Method   | Path                       | Requires                 |
+| -------- | -------------------------- | ------------------------ |
+| `GET`    | `/rooms/{id}/messages`     | `view_room`              |
+| `POST`   | `/rooms/{id}/messages`     | `send_message`           |
+| `PATCH`  | `/messages/{id}`           | author only              |
+| `DELETE` | `/messages/{id}`           | author, or `manage_room` |
+| `PUT`    | `/messages/{id}/reactions` | `add_reaction`           |
+| `DELETE` | `/messages/{id}/reactions` | `view_room`              |
 
 History is keyset-paginated, newest first:
 
@@ -227,14 +245,14 @@ mouth is a different power from removing them.
 
 ## Friends and blocks
 
-| Method | Path |
-|---|---|
-| `GET` | `/friends` |
-| `GET` | `/friends/requests` |
-| `POST` | `/friends` — `{ "user_id": "…" }` |
-| `POST` | `/friends/{user_id}/respond` — `{ "accept": true }` |
-| `DELETE` | `/friends/{user_id}` |
-| `PUT` / `DELETE` | `/blocks/{user_id}` |
+| Method           | Path                                                |
+| ---------------- | --------------------------------------------------- |
+| `GET`            | `/friends`                                          |
+| `GET`            | `/friends/requests`                                 |
+| `POST`           | `/friends` — `{ "user_id": "…" }`                   |
+| `POST`           | `/friends/{user_id}/respond` — `{ "accept": true }` |
+| `DELETE`         | `/friends/{user_id}`                                |
+| `PUT` / `DELETE` | `/blocks/{user_id}`                                 |
 
 Requesting somebody who already requested you accepts, rather than creating a
 second row. A block is refused with the same error as any other rejection, so a

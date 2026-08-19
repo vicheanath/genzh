@@ -24,16 +24,16 @@ publish = false
 
 [workspace.dependencies]
 # ---- internal ----
-social-domain = { path = "crates/domain" }
-social-auth = { path = "crates/auth" }
-social-community = { path = "crates/community" }
-social-graph = { path = "crates/social" }
-social-room = { path = "crates/room" }
-social-messaging = { path = "crates/messaging" }
-genzh-core = { path = "crates/media-core" }
-genzh-room = { path = "crates/media-room" }
-genzh-signaling = { path = "crates/media-signaling" }
-social-infrastructure = { path = "crates/infrastructure" }
+genzh-domain = { path = "crates/domain" }
+genzh-auth = { path = "crates/auth" }
+genzh-community = { path = "crates/community" }
+genzh-graph = { path = "crates/social" }
+genzh-room = { path = "crates/room" }
+genzh-messaging = { path = "crates/messaging" }
+genzh-media-core = { path = "crates/media-core" }
+genzh-media-room = { path = "crates/media-room" }
+genzh-media-signaling = { path = "crates/media-signaling" }
+genzh-infrastructure = { path = "crates/infrastructure" }
 
 # ---- async / runtime ----
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }

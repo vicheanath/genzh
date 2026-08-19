@@ -1,7 +1,7 @@
 //! Persistence for accounts, profiles and sessions.
 //!
 //! Queries are runtime-checked (`query_as`, not `query_as!`) so the workspace
-//! builds without a database — see `social-infrastructure`.
+//! builds without a database — see `genzh-infrastructure`.
 
 use chrono::{DateTime, Utc};
 use genzh_domain::user::{Profile, User};

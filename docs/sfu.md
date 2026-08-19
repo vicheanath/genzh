@@ -1,17 +1,17 @@
 # How the SFU works
 
 The implementation is `crates/media-room/src/sfu.rs`, which is heavily
-commented. This document explains the *why*.
+commented. This document explains the _why_.
 
 ## Selective forwarding, and what it is not
 
 Three ways to get N people talking:
 
-| | Cost | Problem |
-|---|---|---|
-| **Mesh** (everyone to everyone) | N² uploads per client | A phone uploading 9 copies of its own audio dies. |
-| **MCU** (mix server-side) | 1 decode + 1 encode per stream | CPU per participant. A single machine handles a few dozen. |
-| **SFU** (forward) | ~0 CPU per stream | Each client decodes N−1 streams. |
+|                                 | Cost                           | Problem                                                    |
+| ------------------------------- | ------------------------------ | ---------------------------------------------------------- |
+| **Mesh** (everyone to everyone) | N² uploads per client          | A phone uploading 9 copies of its own audio dies.          |
+| **MCU** (mix server-side)       | 1 decode + 1 encode per stream | CPU per participant. A single machine handles a few dozen. |
+| **SFU** (forward)               | ~0 CPU per stream              | Each client decodes N−1 streams.                           |
 
 This is an SFU. When Alice publishes, the server forwards her packets to Bob,
 Sarah and Mike untouched:
@@ -26,7 +26,7 @@ Sarah and Mike untouched:
                             subscriber PC             subscriber PC      subscriber PC
 ```
 
-Nothing is decoded. Nothing is re-encoded. Server CPU grows with *packets*,
+Nothing is decoded. Nothing is re-encoded. Server CPU grows with _packets_,
 not with pixels — which is why adding a codec is a configuration change and why
 a 1080p room costs the server no more than a 360p one.
 
@@ -50,7 +50,7 @@ packet.header.ssrc = subscriber_ssrc;
 Alice's browser may have negotiated Opus as PT 111 while Bob's negotiated 109.
 Forwarding 111 to Bob is rejected with `ErrRTPTransceiverCodecUnsupported`.
 
-The right value is not knowable in advance — it comes out of *Bob's*
+The right value is not knowable in advance — it comes out of _Bob's_
 negotiation. The forwarding task discovers it from the subscriber's own sender
 parameters once negotiation completes, caches it, and re-resolves if a write
 ever fails (which is what a renegotiation looks like from inside the loop).
@@ -95,9 +95,9 @@ to JSON, nothing is written to a database, nothing crosses a process boundary.
 
 ## Task shape
 
-* **One task per published track** (the pump), draining the publisher.
-* **One task per subscription** (the forwarder), writing to one subscriber.
-* **One task per subscription** (the feedback relay), watching for PLIs.
+- **One task per published track** (the pump), draining the publisher.
+- **One task per subscription** (the forwarder), writing to one subscriber.
+- **One task per subscription** (the feedback relay), watching for PLIs.
 
 A room's task count grows with tracks and subscriptions, not with traffic. No
 task is spawned per packet — that would be the classic way to make an SFU fall
@@ -113,7 +113,7 @@ loses the oldest packets and is told it lagged. For video, the forwarder then
 requests a keyframe so the subscriber recovers.
 
 This is the right failure mode. The alternative, buffering, trades a momentary
-glitch for unbounded memory *and* ever-growing latency, and a realtime stream
+glitch for unbounded memory _and_ ever-growing latency, and a realtime stream
 that is five seconds behind is worse than one with a dropout.
 
 ## Keyframes
@@ -163,13 +163,13 @@ dropped itself.
 
 `crates/media-room` is layered:
 
-| Module | WebRTC? | Owns |
-|---|---|---|
-| `manager` | no | the registry of live rooms |
-| `room` | no | who is in it, who publishes what, who hears whom |
-| `participant` | no | one participant's bookkeeping, and the `SubscriberSink` boundary |
-| `track` | packets only | a published track and its fan-out |
-| `sfu` | **yes** | peer connections, forwarding tasks, RTCP relay |
+| Module        | WebRTC?      | Owns                                                             |
+| ------------- | ------------ | ---------------------------------------------------------------- |
+| `manager`     | no           | the registry of live rooms                                       |
+| `room`        | no           | who is in it, who publishes what, who hears whom                 |
+| `participant` | no           | one participant's bookkeeping, and the `SubscriberSink` boundary |
+| `track`       | packets only | a published track and its fan-out                                |
+| `sfu`         | **yes**      | peer connections, forwarding tasks, RTCP relay                   |
 
 `SubscriberSink` is the seam, and it is the only abstraction in the crate with a
 single production implementation. It earns that: it makes the entire room
@@ -204,10 +204,10 @@ after construction. That is why client-reported is the default.
 
 ## What is deliberately absent
 
-* **Transcoding.** A CPU-per-stream cost that changes the shape of the service.
+- **Transcoding.** A CPU-per-stream cost that changes the shape of the service.
   A client that cannot decode a negotiated codec does not receive that track.
-* **Mixing.** That would make this an MCU.
-* **Recording.** Belongs in a separate subscriber, not in the forwarding path.
-* **Simulcast layer selection.** Not yet — see the README's limitations. The
+- **Mixing.** That would make this an MCU.
+- **Recording.** Belongs in a separate subscriber, not in the forwarding path.
+- **Simulcast layer selection.** Not yet — see the README's limitations. The
   codec registry and per-subscription track model are where it will go, and the
   wire protocol will not need to change.

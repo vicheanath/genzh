@@ -3,7 +3,7 @@
 //! The contract between the control plane and the media plane.
 //!
 //! This crate is deliberately tiny and dependency-light: **no SQLx, no
-//! `social-domain`, no HTTP**. It exists so that `apps/api` and `apps/media`
+//! `genzh-domain`, no HTTP**. It exists so that `apps/api` and `apps/media`
 //! can agree on a handful of value types without the media server ever
 //! learning what a database row looks like.
 //!

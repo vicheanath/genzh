@@ -1,4 +1,4 @@
-//! # social-auth
+//! # genzh-auth
 //!
 //! Registration, login, sessions and the identity half of authorization.
 //!

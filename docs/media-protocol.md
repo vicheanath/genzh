@@ -11,10 +11,10 @@ binary encoding replace it later without a flag day.
 
 Each participant runs **two** `RTCPeerConnection`s, distinguished by `target`:
 
-| Target | Offerer | Carries |
-|---|---|---|
-| `publisher` | the **client** | that participant's own mic, camera, screen |
-| `subscriber` | the **server** | everybody else's tracks |
+| Target       | Offerer        | Carries                                    |
+| ------------ | -------------- | ------------------------------------------ |
+| `publisher`  | the **client** | that participant's own mic, camera, screen |
+| `subscriber` | the **server** | everybody else's tracks                    |
 
 This is the one place the protocol departs from the obvious design, and it buys
 something specific: **there is never a glare condition**.
@@ -148,15 +148,29 @@ exists for clients that cannot observe pongs.
 
 ```json
 {
-  "type": "joined", "protocol_version": 1,
-  "participant_id": "aaf7…", "room_id": "6f1c…",
+  "type": "joined",
+  "protocol_version": 1,
+  "participant_id": "aaf7…",
+  "room_id": "6f1c…",
   "participants": [
-    { "participant_id": "f73b…", "user_id": "da72…", "display_name": "Bob",
-      "tracks": [ { "track_id": "f73b…:audio", "kind": "audio",
-                    "mime_type": "audio/opus", "muted": false } ],
-      "audio_muted": false, "camera_enabled": false, "screen_sharing": false }
+    {
+      "participant_id": "f73b…",
+      "user_id": "da72…",
+      "display_name": "Bob",
+      "tracks": [
+        {
+          "track_id": "f73b…:audio",
+          "kind": "audio",
+          "mime_type": "audio/opus",
+          "muted": false
+        }
+      ],
+      "audio_muted": false,
+      "camera_enabled": false,
+      "screen_sharing": false
+    }
   ],
-  "ice_servers": [ { "urls": ["stun:…"] } ]
+  "ice_servers": [{ "urls": ["stun:…"] }]
 }
 ```
 
@@ -171,17 +185,17 @@ Flattened, so client switch statements stay flat:
 { "type": "event", "event": "speaking_started", "participant_id": "f73b…" }
 ```
 
-| Event | Payload |
-|---|---|
-| `participant_joined` | `participant` |
-| `participant_left` | `participant_id` |
-| `track_published` | `track` |
-| `track_unpublished` | `participant_id`, `track_id`, `kind` |
-| `speaking_started` / `speaking_stopped` | `participant_id` |
-| `microphone_muted` | `participant_id`, `by_moderator` |
-| `microphone_unmuted` | `participant_id` |
-| `camera_enabled` / `camera_disabled` | `participant_id` |
-| `screen_share_started` / `screen_share_stopped` | `participant_id` |
+| Event                                           | Payload                              |
+| ----------------------------------------------- | ------------------------------------ |
+| `participant_joined`                            | `participant`                        |
+| `participant_left`                              | `participant_id`                     |
+| `track_published`                               | `track`                              |
+| `track_unpublished`                             | `participant_id`, `track_id`, `kind` |
+| `speaking_started` / `speaking_stopped`         | `participant_id`                     |
+| `microphone_muted`                              | `participant_id`, `by_moderator`     |
+| `microphone_unmuted`                            | `participant_id`                     |
+| `camera_enabled` / `camera_disabled`            | `participant_id`                     |
+| `screen_share_started` / `screen_share_stopped` | `participant_id`                     |
 
 Events are **never persisted**. A speaking indicator that flips several times a
 second is worthless a minute later, and writing it would put the media plane
@@ -198,33 +212,33 @@ client permanently unaware of a stream.
 ```
 
 Non-fatal — the connection stays open. Fatal problems arrive as an `error`
-*followed by* a close frame, because a close code alone cannot distinguish
+_followed by_ a close frame, because a close code alone cannot distinguish
 "your token expired, fetch a new one" from "you may not enter this room", and
 those need different client behaviour.
 
 ## Close codes
 
-| Code | Meaning | What a client should do |
-|---|---|---|
-| `1000` | Normal | Nothing. |
-| `4000` | Protocol violation | Fix the client. |
-| `4001` | Unauthorized | Fetch a new media token. |
-| `4003` | Forbidden | Do not retry; the user cannot enter this room. |
-| `4004` | Room full | Retry later, or show a queue. |
-| `4029` | Rate limited | Back off. |
-| `4030` | Idle timeout | Reconnect. |
-| `4500` | Server error | Reconnect with backoff. |
+| Code   | Meaning            | What a client should do                        |
+| ------ | ------------------ | ---------------------------------------------- |
+| `1000` | Normal             | Nothing.                                       |
+| `4000` | Protocol violation | Fix the client.                                |
+| `4001` | Unauthorized       | Fetch a new media token.                       |
+| `4003` | Forbidden          | Do not retry; the user cannot enter this room. |
+| `4004` | Room full          | Retry later, or show a queue.                  |
+| `4029` | Rate limited       | Back off.                                      |
+| `4030` | Idle timeout       | Reconnect.                                     |
+| `4500` | Server error       | Reconnect with backoff.                        |
 
 ## Limits
 
-| Limit | Value | Why |
-|---|---|---|
-| Frame size | 64 KiB | A bundled offer with several video sections lands near 16 KiB. |
-| Message size | 128 KiB | Checked *before* parsing — `serde_json` on a 10 MB frame allocates 10 MB before reporting nonsense. |
-| Handshake timeout | 10 s | A socket that connects and says nothing is the cheapest resource-exhaustion attack there is. |
-| Idle timeout | 60 s | Generous: mobile clients suspend aggressively. |
-| Ping interval | 15 s | |
-| Messages per second | 50 | Signalling is bursty — an offer plus a dozen candidates arrive together. This stops a client spinning on `subscribe`, it does not shape normal traffic. |
-| Outbound send timeout | 5 s | A client that stops reading is disconnected rather than parking a task holding two peer connections. |
-| Tracks per participant | 3 | audio + camera + screen |
-| Participants per room | 100 | Backstop, independent of what the control plane believed. |
+| Limit                  | Value   | Why                                                                                                                                                     |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frame size             | 64 KiB  | A bundled offer with several video sections lands near 16 KiB.                                                                                          |
+| Message size           | 128 KiB | Checked _before_ parsing — `serde_json` on a 10 MB frame allocates 10 MB before reporting nonsense.                                                     |
+| Handshake timeout      | 10 s    | A socket that connects and says nothing is the cheapest resource-exhaustion attack there is.                                                            |
+| Idle timeout           | 60 s    | Generous: mobile clients suspend aggressively.                                                                                                          |
+| Ping interval          | 15 s    |                                                                                                                                                         |
+| Messages per second    | 50      | Signalling is bursty — an offer plus a dozen candidates arrive together. This stops a client spinning on `subscribe`, it does not shape normal traffic. |
+| Outbound send timeout  | 5 s     | A client that stops reading is disconnected rather than parking a task holding two peer connections.                                                    |
+| Tracks per participant | 3       | audio + camera + screen                                                                                                                                 |
+| Participants per room  | 100     | Backstop, independent of what the control plane believed.                                                                                               |

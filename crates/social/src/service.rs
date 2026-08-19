@@ -1,4 +1,4 @@
-//! The social-graph application service.
+//! The genzh-graph application service.
 
 use genzh_domain::social::{self, Friendship, FriendshipStatus};
 use genzh_domain::{DomainError, UserId};

@@ -1,4 +1,4 @@
-//! # social-room
+//! # genzh-room
 //!
 //! Rooms, room-level authorization, and the handover to the media plane.
 //!

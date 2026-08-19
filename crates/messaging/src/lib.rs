@@ -1,4 +1,4 @@
-//! # social-messaging
+//! # genzh-messaging
 //!
 //! Text messages and reactions, in every kind of room.
 //!

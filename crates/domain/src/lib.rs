@@ -1,10 +1,10 @@
-//! # social-domain
+//! # genzh-domain
 //!
 //! Pure domain model for the control plane: identities, the social graph,
 //! communities, rooms and messages.
 //!
 //! This crate owns **types and rules**, never I/O. Repositories live in the
-//! per-bounded-context crates (`social-auth`, `social-community`, …) and map
+//! per-bounded-context crates (`genzh-auth`, `genzh-community`, …) and map
 //! these types to and from PostgreSQL rows.
 //!
 //! ## Boundary note

@@ -1,5 +1,3 @@
-//! The control-plane HTTP API.
-//!
 //! Owns accounts, communities, rooms, permissions and messages — and authorises
 //! media sessions without ever carrying media. See the workspace README for how
 //! the two planes fit together.

@@ -1,4 +1,4 @@
-//! # social-graph
+//! # genzh-graph
 //!
 //! Friendships and blocks.
 //!

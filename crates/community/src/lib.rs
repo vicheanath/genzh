@@ -1,4 +1,4 @@
-//! # social-community
+//! # genzh-community
 //!
 //! Communities, membership, roles and the permission resolver.
 //!
