@@ -53,6 +53,16 @@ async fn run() -> anyhow::Result<()> {
 
     let state = MediaState::build(config)?;
 
+    // The two planes never talk to each other on the join path, so neither can
+    // detect a secret mismatch on its own. Printing a fingerprint on both means
+    // "do these agree?" is answered by comparing two log lines instead of by
+    // watching every join fail with an unexplained rejection.
+    tracing::info!(
+        secret_fingerprint = %state.verifier.fingerprint(),
+        token_issuer = %state.config.token_issuer,
+        "verifying media tokens — this fingerprint must match the API's"
+    );
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready))

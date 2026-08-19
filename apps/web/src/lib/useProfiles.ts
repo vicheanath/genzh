@@ -12,6 +12,18 @@ import { useAuth } from '@/lib/auth'
  */
 const cache = new Map<Uuid, PublicProfile>()
 
+/**
+ * Overwrite one cached profile.
+ *
+ * Editing your own profile updates `useAuth().user`, but the transcript draws
+ * authors from this cache — so without this your own name and avatar stay stale
+ * on your own messages until a reload. The edit already knows the new values;
+ * this hands them over rather than making every screen refetch.
+ */
+export function primeProfile(profile: PublicProfile): void {
+  cache.set(profile.id, profile)
+}
+
 export function useProfiles(ids: Uuid[]) {
   const { getToken } = useAuth()
   const [, force] = useState(0)

@@ -1,0 +1,32 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.125rem var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.neutral { background: var(--color-hover); color: var(--color-text-muted); }
+.accent  { background: var(--color-accent-subtle); color: var(--color-accent-text); }
+.success { background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
+.danger  { background: var(--color-danger-subtle); color: var(--color-danger); }
+.mint    { background: var(--color-mint-subtle); color: var(--color-mint); }
+
+.dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  /* A "live" badge that never moves reads as a static label. */
+  animation: pulse 2s var(--ease-out) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}

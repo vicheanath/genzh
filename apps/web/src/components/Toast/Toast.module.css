@@ -1,0 +1,168 @@
+/*
+ * The stacking maths is Base UI's: --toast-index, --toast-height and the swipe
+ * offsets are set on each root, and the transform below turns them into a
+ * fanned stack that expands on hover. Restating them by hand is what makes the
+ * pile look deliberate rather than like three overlapping cards.
+ */
+
+.viewport {
+  position: fixed;
+  z-index: 60;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  left: auto;
+  top: auto;
+  width: calc(100vw - var(--space-4) * 2);
+  margin: 0 auto;
+}
+
+@media (min-width: 520px) {
+  .viewport {
+    bottom: var(--space-5);
+    right: var(--space-5);
+    width: 21rem;
+  }
+}
+
+/* On a phone the bottom edge belongs to the nav bar, so toasts sit above it. */
+@media (max-width: 900px) {
+  .viewport { bottom: calc(var(--mobile-nav-height) + var(--space-3)); }
+}
+
+.toast {
+  --gap: 0.65rem;
+  --peek: 0.6rem;
+  --scale: calc(max(0, 1 - (var(--toast-index) * 0.08)));
+  --shrink: calc(1 - var(--scale));
+  --height: var(--toast-frontmost-height, var(--toast-height));
+  --offset-y: calc(
+    var(--toast-offset-y) * -1 + (var(--toast-index) * var(--gap) * -1) +
+      var(--toast-swipe-movement-y)
+  );
+
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  left: auto;
+  width: 100%;
+  height: var(--height);
+  z-index: calc(1000 - var(--toast-index));
+  transform-origin: bottom center;
+
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  user-select: none;
+
+  transform: translateX(var(--toast-swipe-movement-x))
+    translateY(
+      calc(
+        var(--toast-swipe-movement-y) - (var(--toast-index) * var(--peek)) -
+          (var(--shrink) * var(--height))
+      )
+    )
+    scale(var(--scale));
+
+  transition:
+    transform var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out),
+    height 150ms var(--ease-out);
+}
+
+/* An invisible strip under each toast keeps the pointer inside the stack while
+   crossing the gap, so hovering does not flicker the expansion off. */
+.toast::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  height: calc(var(--gap) + 1px);
+}
+
+.toast[data-expanded] {
+  height: var(--toast-height);
+  transform: translateX(var(--toast-swipe-movement-x)) translateY(var(--offset-y));
+}
+
+.toast[data-starting-style] { transform: translateY(140%); }
+.toast[data-limited] { opacity: 0; }
+.toast[data-ending-style] { opacity: 0; }
+
+.toast[data-ending-style]:not([data-limited]):not([data-swipe-direction]) {
+  transform: translateY(140%);
+}
+
+.toast[data-ending-style][data-swipe-direction='right'] {
+  transform: translateX(calc(var(--toast-swipe-movement-x) + 140%))
+    translateY(var(--offset-y));
+}
+
+.toast[data-ending-style][data-swipe-direction='down'] {
+  transform: translateY(calc(var(--toast-swipe-movement-y) + 140%));
+}
+
+.content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  overflow: hidden;
+  transition: opacity 250ms var(--ease-out);
+}
+
+/* Only the frontmost toast's text is legible; the ones behind are a stack edge. */
+.content[data-behind] { opacity: 0; }
+.content[data-expanded] { opacity: 1; }
+
+.icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1rem;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  color: #fff;
+}
+
+.toast[data-type='error'] .icon { background: var(--color-danger); }
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.description {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+}
+
+.close:hover { background: var(--color-hover); color: var(--color-text); }

@@ -1,20 +1,40 @@
+/* The wrapper owns the size and is the positioning context for the presence
+   dot; the root owns the shape and the ring. Splitting them is what lets the
+   speaking ring animate without the dot moving with it. */
+.wrapper {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 .root {
   position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
   border-radius: var(--radius-full);
-  background: var(--color-accent-subtle);
-  color: var(--color-accent);
-  font-weight: 600;
   overflow: hidden;
   user-select: none;
 }
 
-.sm { width: 1.75rem; height: 1.75rem; font-size: var(--text-xs); }
-.md { width: 2.25rem; height: 2.25rem; font-size: var(--text-sm); }
-.lg { width: 3rem;    height: 3rem;    font-size: var(--text-base); }
+.fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--avatar-hue, var(--color-accent));
+  color: #fff;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.xs { width: 1.375rem; height: 1.375rem; font-size: 0.5625rem; }
+.sm { width: 1.875rem; height: 1.875rem; font-size: var(--text-2xs); }
+.md { width: 2.375rem; height: 2.375rem; font-size: var(--text-xs); }
+.lg { width: 3.25rem;  height: 3.25rem;  font-size: var(--text-base); }
+.xl { width: 5rem;     height: 5rem;     font-size: var(--text-xl); }
 
 .image {
   width: 100%;
@@ -26,4 +46,10 @@
    change the element's size and cannot reflow the participant list. */
 .speaking {
   box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-success);
+  animation: speak 1.6s var(--ease-out) infinite;
+}
+
+@keyframes speak {
+  0%, 100% { box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-success); }
+  50%      { box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 6px var(--color-success); }
 }

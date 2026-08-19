@@ -103,6 +103,14 @@ export interface RoomWithPermissions extends Room {
   your_permissions: Permission[]
 }
 
+/** Reaction counts on one message, as the calling user sees them. */
+export interface ReactionSummary {
+  reaction: string
+  count: number
+  /** Whether the calling user is one of the reactors. */
+  me: boolean
+}
+
 export interface Message {
   id: Uuid
   room_id: Uuid
@@ -110,11 +118,37 @@ export interface Message {
   content: string
   edited_at: Timestamp | null
   created_at: Timestamp
+  reactions: ReactionSummary[]
 }
 
 export interface MessagePage {
   messages: Message[]
   next_before: Timestamp | null
+}
+
+export type FriendshipStatus = 'pending' | 'accepted' | 'declined'
+
+/**
+ * A friendship or friend request.
+ *
+ * One row per unordered pair; `requester_id` is what distinguishes a request
+ * you sent from one you received.
+ */
+export interface Friendship {
+  requester_id: Uuid
+  addressee_id: Uuid
+  status: FriendshipStatus
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+/** Every field optional: the API patches only what is present. */
+export interface UpdateProfileInput {
+  display_name?: string
+  bio?: string
+  avatar_url?: string
+  avatar_effect?: string
+  accent_color?: string
 }
 
 export interface IceServer {

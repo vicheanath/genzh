@@ -9,18 +9,31 @@
  *   1. an explicit choice stamps [data-theme] on <html>
  *   2. no choice + OS dark  → prefers-color-scheme
  *   3. no choice + OS light → the :root defaults below
+ *
+ * The palette is defined twice — once as light, once as dark — and nothing
+ * else in the app knows which one is active.
  */
 
 :root {
-  /* surfaces */
+  /* ── surfaces ────────────────────────────────────────────────────────────
+     Four levels, and they are ordered: sunken sits behind the page, bg is the
+     page, surface is a panel on it, raised is a popup above that. A component
+     picks the level it belongs to rather than a colour. */
+  --color-sunken: #f1f2f7;
   --color-bg: #fbfbfd;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
   --color-overlay: rgb(15 18 25 / 0.45);
 
+  /* A wash used for hover on transparent things — tinted rather than grey, so
+     hovering feels connected to the accent instead of dirty. */
+  --color-hover: rgb(79 70 229 / 0.07);
+  --color-active: rgb(79 70 229 / 0.12);
+
   /* text */
   --color-text: #14171f;
   --color-text-muted: #5b6172;
+  --color-text-subtle: #878da0;
   --color-text-inverted: #ffffff;
 
   /* lines */
@@ -28,25 +41,44 @@
   --color-border-strong: #c9ccd8;
 
   /* accent */
-  --color-accent: #4f46e5;
-  --color-accent-hover: #4338ca;
-  --color-accent-active: #3730a3;
-  --color-accent-subtle: #eef2ff;
-  --color-accent-ring: rgb(79 70 229 / 0.35);
+  --color-accent: #5b53e8;
+  --color-accent-hover: #4a41dd;
+  --color-accent-active: #3d34c4;
+  --color-accent-subtle: #eef0ff;
+  --color-accent-text: #4a41dd;
+  --color-accent-ring: rgb(91 83 232 / 0.35);
+  --color-accent-contrast: #ffffff;
+
+  /* A second hue, used only where two accents must be told apart —
+     the voice panel against the composer, a live badge against a link. */
+  --color-mint: #0ea5a5;
+  --color-mint-subtle: #e4f7f6;
 
   /* status */
   --color-danger: #dc2626;
+  --color-danger-subtle: #fee6e6;
   --color-success: #16a34a;
+  --color-warning: #d97706;
+
+  /* presence — the dot on an avatar */
+  --color-online: #22c55e;
+  --color-idle: #eab308;
+  --color-busy: #ef4444;
+  --color-offline: #9aa0b0;
 
   /* type */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
+  --font-sans:
+    'Inter var', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  --text-2xs: 0.6875rem;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
-  --text-base: 1rem;
+  --text-base: 0.9375rem;
   --text-lg: 1.125rem;
-  --text-xl: 1.5rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
 
   /* space — a 4px scale */
   --space-1: 0.25rem;
@@ -58,32 +90,48 @@
   --space-8: 3rem;
 
   /* shape */
-  --radius-sm: 0.25rem;
+  --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
   --radius-full: 9999px;
 
   /* elevation */
   --shadow-sm: 0 1px 2px rgb(15 18 25 / 0.06);
   --shadow-md: 0 4px 12px rgb(15 18 25 / 0.08);
   --shadow-lg: 0 12px 32px rgb(15 18 25 / 0.14);
+  --shadow-xl: 0 24px 56px rgb(15 18 25 / 0.18);
 
   /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Slight overshoot, for things that pop in: reaction chips, toasts. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --duration-fast: 120ms;
   --duration-base: 180ms;
+  --duration-slow: 320ms;
+
+  /* layout — read by more than one stylesheet, so they live here */
+  --rail-width: 4.5rem;
+  --sidebar-width: 16rem;
+  --mobile-nav-height: 3.75rem;
 }
 
-/* OS dark, unless the user explicitly chose light. */
+/* The dark palette, defined once and applied from two places below. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
+    --color-sunken: #07080c;
     --color-bg: #0c0e14;
     --color-surface: #14171f;
     --color-surface-raised: #1b1f2a;
     --color-overlay: rgb(0 0 0 / 0.6);
 
+    --color-hover: rgb(255 255 255 / 0.06);
+    --color-active: rgb(255 255 255 / 0.1);
+
     --color-text: #eceef4;
     --color-text-muted: #969cad;
+    --color-text-subtle: #6f7688;
     --color-text-inverted: #14171f;
 
     --color-border: #262b38;
@@ -92,27 +140,45 @@
     --color-accent: #7c73f0;
     --color-accent-hover: #8f88f3;
     --color-accent-active: #a29cf6;
-    --color-accent-subtle: #1d1b3a;
+    --color-accent-subtle: #1e1c3d;
+    --color-accent-text: #a9a3f7;
     --color-accent-ring: rgb(124 115 240 / 0.4);
+    --color-accent-contrast: #ffffff;
+
+    --color-mint: #2dd4bf;
+    --color-mint-subtle: #0f2e2c;
 
     --color-danger: #f87171;
+    --color-danger-subtle: #3a1a1a;
     --color-success: #4ade80;
+    --color-warning: #fbbf24;
+
+    --color-online: #4ade80;
+    --color-idle: #facc15;
+    --color-busy: #f87171;
+    --color-offline: #6f7688;
 
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
     --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+    --shadow-xl: 0 24px 56px rgb(0 0 0 / 0.65);
   }
 }
 
 /* An explicit dark choice wins in both directions. */
 :root[data-theme='dark'] {
+  --color-sunken: #07080c;
   --color-bg: #0c0e14;
   --color-surface: #14171f;
   --color-surface-raised: #1b1f2a;
   --color-overlay: rgb(0 0 0 / 0.6);
 
+  --color-hover: rgb(255 255 255 / 0.06);
+  --color-active: rgb(255 255 255 / 0.1);
+
   --color-text: #eceef4;
   --color-text-muted: #969cad;
+  --color-text-subtle: #6f7688;
   --color-text-inverted: #14171f;
 
   --color-border: #262b38;
@@ -121,13 +187,26 @@
   --color-accent: #7c73f0;
   --color-accent-hover: #8f88f3;
   --color-accent-active: #a29cf6;
-  --color-accent-subtle: #1d1b3a;
+  --color-accent-subtle: #1e1c3d;
+  --color-accent-text: #a9a3f7;
   --color-accent-ring: rgb(124 115 240 / 0.4);
+  --color-accent-contrast: #ffffff;
+
+  --color-mint: #2dd4bf;
+  --color-mint-subtle: #0f2e2c;
 
   --color-danger: #f87171;
+  --color-danger-subtle: #3a1a1a;
   --color-success: #4ade80;
+  --color-warning: #fbbf24;
+
+  --color-online: #4ade80;
+  --color-idle: #facc15;
+  --color-busy: #f87171;
+  --color-offline: #6f7688;
 
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+  --shadow-xl: 0 24px 56px rgb(0 0 0 / 0.65);
 }

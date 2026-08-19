@@ -8,9 +8,19 @@ use thiserror::Error;
 /// Anything that can end or reject a signalling connection.
 #[derive(Debug, Error)]
 pub enum MediaError {
-    /// The token was missing, malformed, expired or wrongly signed.
+    /// The token was structurally rejected — bad signature, wrong issuer or
+    /// audience, malformed, or a claims version this build does not read.
+    ///
+    /// Not retryable: another token from the same API would fail identically.
     #[error("unauthorized")]
     Unauthorized,
+
+    /// The token was genuine but has expired.
+    ///
+    /// Retryable, and the client already knows it — the API told it
+    /// `expires_at` when it minted the token.
+    #[error("media token expired")]
+    TokenExpired,
 
     /// The token is valid but does not authorise this room.
     #[error("forbidden")]
@@ -48,7 +58,8 @@ impl MediaError {
     /// "your token is not good here", not which check failed.
     pub fn close_code(&self) -> SignalCloseCode {
         match self {
-            MediaError::Unauthorized | MediaError::Token(_) => SignalCloseCode::Unauthorized,
+            MediaError::TokenExpired => SignalCloseCode::Unauthorized,
+            MediaError::Unauthorized | MediaError::Token(_) => SignalCloseCode::TokenRejected,
             MediaError::Forbidden => SignalCloseCode::Forbidden,
             MediaError::Protocol(error) => error.close_code(),
             MediaError::Room(MediaRoomError::RoomFull) => SignalCloseCode::RoomFull,
@@ -61,6 +72,7 @@ impl MediaError {
     /// A stable code for the `error` signalling message.
     pub fn code(&self) -> &'static str {
         match self {
+            MediaError::TokenExpired => "TOKEN_EXPIRED",
             MediaError::Unauthorized | MediaError::Token(_) => "UNAUTHORIZED",
             MediaError::Forbidden => "FORBIDDEN",
             MediaError::Protocol(_) => "PROTOCOL_ERROR",
@@ -75,6 +87,9 @@ impl MediaError {
     pub fn client_message(&self) -> String {
         match self {
             MediaError::Room(error) => error.client_message(),
+            MediaError::TokenExpired => {
+                "Your media token expired before you connected".to_owned()
+            }
             MediaError::Unauthorized | MediaError::Token(_) => {
                 "Your media token is not valid".to_owned()
             }

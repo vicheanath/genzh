@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from '@/lib/auth'
 
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
+import { FriendsRoute } from './routes/FriendsRoute'
 import { HomeRoute } from './routes/HomeRoute'
 import { RoomRoute } from './routes/RoomRoute'
 import { SignInRoute } from './routes/SignInRoute'
@@ -43,6 +44,7 @@ function Router() {
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<HomeRoute />} />
+        <Route path="/friends" element={<FriendsRoute />} />
         <Route path="/c/:communityId" element={<CommunityRoute />} />
         <Route path="/c/:communityId/r/:roomId" element={<RoomRoute />} />
       </Route>

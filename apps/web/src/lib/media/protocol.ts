@@ -100,6 +100,7 @@ export const CloseCode = {
   Normal: 1000,
   ProtocolViolation: 4000,
   Unauthorized: 4001,
+  TokenRejected: 4002,
   Forbidden: 4003,
   RoomFull: 4004,
   RateLimited: 4029,
@@ -110,15 +111,20 @@ export const CloseCode = {
 /**
  * Should the client try again after this close code?
  *
- * `Forbidden` and `ProtocolViolation` will fail identically on a retry — the
- * user cannot enter the room, or the client is wrong — so retrying them is
- * just noise. Everything else is worth one more attempt with a fresh token.
+ * `Forbidden`, `ProtocolViolation` and `TokenRejected` will fail identically on
+ * a retry — the user cannot enter the room, the client is wrong, or the two
+ * servers disagree about their shared secret — so retrying them is just noise.
+ *
+ * `Unauthorized` is deliberately *not* in that list: it means the token
+ * expired, and every reconnect mints a fresh one, so retrying genuinely fixes
+ * it. That is the whole reason the server distinguishes 4001 from 4002.
  */
 export function isRetryableClose(code: number): boolean {
   return (
     code !== CloseCode.Normal &&
     code !== CloseCode.Forbidden &&
     code !== CloseCode.ProtocolViolation &&
+    code !== CloseCode.TokenRejected &&
     code !== CloseCode.RoomFull
   )
 }

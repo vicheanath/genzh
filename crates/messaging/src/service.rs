@@ -1,7 +1,9 @@
 //! The messaging application service.
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
-use genzh_domain::message::{self, Message, ReactionTally};
+use genzh_domain::message::{self, Message, ReactionSummary};
 use genzh_domain::{DomainError, MessageId, Permission, RoomId, UserId, now};
 use genzh_infrastructure::{DbPool, ServiceError, ServiceResult};
 use genzh_room::RoomService;
@@ -63,6 +65,24 @@ impl MessagingService {
             .await?)
     }
 
+    /// Reaction summaries for a page of messages the caller can already see.
+    ///
+    /// Kept separate from [`Self::history`] rather than folded into it so the
+    /// page query stays exactly what it was — one keyset scan — and a caller
+    /// that does not render reactions pays nothing for them.
+    pub async fn reactions_for(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+        message_ids: &[MessageId],
+    ) -> ServiceResult<HashMap<MessageId, Vec<ReactionSummary>>> {
+        self.rooms.visible_access(room_id, user_id).await?;
+        Ok(self
+            .messages
+            .reaction_summaries_for(message_ids, user_id)
+            .await?)
+    }
+
     /// Edit a message.
     ///
     /// Authors only. `manage_room` lets a moderator delete, not rewrite —
@@ -117,7 +137,7 @@ impl MessagingService {
         message_id: MessageId,
         user_id: UserId,
         reaction: &str,
-    ) -> ServiceResult<Vec<ReactionTally>> {
+    ) -> ServiceResult<Vec<ReactionSummary>> {
         let existing = self
             .messages
             .find(message_id)
@@ -131,7 +151,7 @@ impl MessagingService {
         self.messages
             .add_reaction(message_id, user_id, &reaction)
             .await?;
-        Ok(self.messages.reaction_tallies(message_id).await?)
+        Ok(self.messages.reaction_summaries(message_id, user_id).await?)
     }
 
     /// Remove a reaction.
@@ -140,7 +160,7 @@ impl MessagingService {
         message_id: MessageId,
         user_id: UserId,
         reaction: &str,
-    ) -> ServiceResult<Vec<ReactionTally>> {
+    ) -> ServiceResult<Vec<ReactionSummary>> {
         let existing = self
             .messages
             .find(message_id)
@@ -159,6 +179,6 @@ impl MessagingService {
         {
             return Err(ServiceError::Domain(DomainError::NotFound("reaction")));
         }
-        Ok(self.messages.reaction_tallies(message_id).await?)
+        Ok(self.messages.reaction_summaries(message_id, user_id).await?)
     }
 }

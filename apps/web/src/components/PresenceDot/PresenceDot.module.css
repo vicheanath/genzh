@@ -1,0 +1,18 @@
+.dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 35%;
+  height: 35%;
+  min-width: 0.5rem;
+  min-height: 0.5rem;
+  border-radius: var(--radius-full);
+  /* The ring is the page ground, not a border colour: it punches the dot out of
+     the avatar so the two never blend at small sizes. */
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+.online  { background: var(--color-online); }
+.idle    { background: var(--color-idle); }
+.busy    { background: var(--color-busy); }
+.offline { background: var(--color-offline); }

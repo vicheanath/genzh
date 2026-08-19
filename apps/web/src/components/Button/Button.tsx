@@ -5,13 +5,16 @@ import { cx } from '@/lib/cx'
 
 import styles from './Button.module.css'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'subtle' | 'danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 export interface ButtonProps
   extends Omit<ComponentPropsWithoutRef<typeof BaseButton>, 'className'> {
   variant?: ButtonVariant
   size?: ButtonSize
+  /** Square, for a button whose entire content is one icon. Needs `aria-label`. */
+  iconOnly?: boolean
+  round?: boolean
   className?: string
 }
 
@@ -25,13 +28,22 @@ export interface ButtonProps
 export function Button({
   variant = 'primary',
   size = 'md',
+  iconOnly,
+  round,
   className,
   ...props
 }: ButtonProps) {
   return (
     <BaseButton
       {...props}
-      className={cx(styles.button, styles[variant], styles[size], className)}
+      className={cx(
+        styles.button,
+        styles[variant],
+        styles[size],
+        iconOnly && styles.iconOnly,
+        round && styles.round,
+        className,
+      )}
     />
   )
 }

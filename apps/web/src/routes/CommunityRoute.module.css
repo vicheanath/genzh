@@ -1,27 +1,154 @@
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The banner's two stops come from one hue seed, so every community reads as a
+   different place without anyone uploading a header image. */
+.banner {
+  height: 8rem;
+  background: linear-gradient(
+    115deg,
+    oklch(0.62 0.17 calc(var(--seed) * 1deg)),
+    oklch(0.6 0.14 calc((var(--seed) + 55) * 1deg))
+  );
+}
+
 .page {
-  padding: var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  max-width: 40rem;
+  max-width: 52rem;
+  padding: 0 var(--space-6) var(--space-8);
 }
 
-.header { display: flex; align-items: center; gap: var(--space-3); }
-.title { font-size: var(--text-xl); font-weight: 650; }
-.meta { font-size: var(--text-sm); color: var(--color-text-muted); }
+/* ── header ─────────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  margin-top: -2.5rem;
+}
+
+.icon {
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 4px var(--color-bg);
+}
+
+.headerText { min-width: 0; padding-bottom: var(--space-1); }
+
+.title {
+  font-size: var(--text-2xl);
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.badges {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── sections ───────────────────────────────────────────────────────────── */
+
+.section { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.sectionTitle {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-subtle);
+}
+
+.hint { font-size: var(--text-xs); color: var(--color-text-subtle); }
 
 .invite {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.inviteId {
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
   overflow-x: auto;
+  white-space: nowrap;
+  /* The id is one long token; without this it is unselectable on a phone. */
+  scrollbar-width: none;
 }
+
+.inviteId::-webkit-scrollbar { height: 0; }
+
+/* ── room cards ─────────────────────────────────────────────────────────── */
+
+.rooms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-2);
+}
+
+.roomCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.roomCard:hover { border-color: var(--color-accent); background: var(--color-hover); }
+
+.roomIcon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+.roomBody { flex: 1; min-width: 0; }
+
+.roomName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roomTopic {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── the create form ────────────────────────────────────────────────────── */
 
 .form {
   display: flex;
@@ -29,10 +156,30 @@
   gap: var(--space-3);
   padding: var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--color-surface);
 }
 
-.formTitle { font-size: var(--text-sm); font-weight: 600; }
-.row { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; }
-.grow { flex: 1; min-width: 12rem; }
+.formTitle { font-size: var(--text-sm); font-weight: 650; }
+
+.row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.grow { flex: 1; min-width: 11rem; }
+
+.membersSection {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+@media (max-width: 900px) {
+  .banner { height: 6rem; }
+  .page { padding-inline: var(--space-4); }
+  .header { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .title { font-size: var(--text-xl); }
+}

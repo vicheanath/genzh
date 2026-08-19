@@ -526,6 +526,11 @@ function closeReason(code: number): string {
   switch (code) {
     case CloseCode.Unauthorized:
       return 'Your session expired. Please try again.'
+    case CloseCode.TokenRejected:
+      // Retrying cannot fix this, so the message points at the cause instead of
+      // inviting the user to try again: the API and the media server were
+      // started with different MEDIA_TOKEN_SECRET values.
+      return 'The voice server rejected this session. It may be misconfigured — try again later.'
     case CloseCode.Forbidden:
       return 'You do not have permission to join this room.'
     case CloseCode.RoomFull:

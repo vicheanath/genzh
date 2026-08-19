@@ -1,35 +1,68 @@
-import { NavLink, Outlet, useParams } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
-import { EmptyState } from '@/components/Callout'
-import { Select } from '@/components/Select'
-import { LoadingPanel } from '@/components/Spinner'
+import {
+  CheckIcon,
+  HashIcon,
+  HomeIcon,
+  MenuIcon,
+  MicIcon,
+  MonitorIcon,
+  MoonIcon,
+  PlusIcon,
+  SettingsIcon,
+  SignOutIcon,
+  SparkleIcon,
+  SunIcon,
+  UsersIcon,
+  VideoIcon,
+} from '@/components/Icons'
+import { Menu, MenuItem, MenuSeparator } from '@/components/Menu'
+import { Sheet } from '@/components/Sheet'
+import { Skeleton } from '@/components/Skeleton'
 import { Tooltip } from '@/components/Tooltip'
-import { communities as communitiesApi, rooms as roomsApi } from '@/lib/api'
+import {
+  communities as communitiesApi,
+  rooms as roomsApi,
+  type Community,
+  type Room,
+  type RoomType,
+} from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAsync } from '@/lib/useAsync'
+import { useIsMobile } from '@/lib/useMediaQuery'
 import { useTheme, type Theme } from '@/lib/useTheme'
+
+import { ProfileDialog } from './ProfileDialog'
 
 import styles from './AppShell.module.css'
 
-const THEMES = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-] as const satisfies ReadonlyArray<{ value: Theme; label: string }>
-
 /**
- * The signed-in frame: community list, room list, and the routed content.
+ * The signed-in frame: a community rail, a room sidebar, and the routed screen.
  *
- * The sidebar reloads its room list whenever the selected community changes,
- * which is the only cross-route data dependency in the app.
+ * Navigation is fetched once here rather than per screen, because every screen
+ * shows it. The two lists are the app's only cross-route data dependency, and
+ * child routes refresh them through {@link ShellContext} after creating
+ * something.
+ *
+ * On a phone the rail and sidebar move into a drawer and the whole thing gets a
+ * bottom tab bar — the same components, mounted somewhere else, rather than a
+ * second navigation written twice.
  */
 export function AppShell() {
-  const { user, logout, getToken } = useAuth()
-  const { theme, setTheme } = useTheme()
   const { communityId } = useParams<{ communityId?: string }>()
+  const { getToken } = useAuth()
+  const isMobile = useIsMobile()
+  const location = useLocation()
+
+  // The drawer remembers *where* it was opened rather than merely that it is
+  // open, so any navigation closes it without an effect watching the location.
+  const [openedAt, setOpenedAt] = useState<string | null>(null)
+  const drawerOpen = openedAt === location.pathname
+  const setDrawerOpen = (open: boolean) => setOpenedAt(open ? location.pathname : null)
 
   const communities = useAsync(
     async () => communitiesApi.list(await getToken()),
@@ -41,130 +74,349 @@ export function AppShell() {
     return roomsApi.list(await getToken(), communityId)
   }, [getToken, communityId])
 
+  const navigation = (
+    <>
+      <CommunityRail communities={communities.data} loading={communities.loading} />
+      <ChannelSidebar
+        communityId={communityId}
+        community={communities.data?.find((item) => item.id === communityId)}
+        rooms={rooms.data}
+        loading={rooms.loading}
+      />
+    </>
+  )
+
   return (
     <div className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarHeader}>
-          <span className={styles.brand}>genzh</span>
-          <Select
-            aria-label="Theme"
-            value={theme}
-            onValueChange={setTheme}
-            options={THEMES}
-            className={styles.themeSelect}
-          />
-        </div>
+      {!isMobile && <div className={styles.navigation}>{navigation}</div>}
 
-        <nav className={styles.nav}>
-          <div className={styles.navHeading}>Communities</div>
-
-          {communities.loading && <LoadingPanel />}
-          {!communities.loading && communities.data?.length === 0 && (
-            <EmptyState>No communities yet.</EmptyState>
-          )}
-          {communities.data?.map((community) => (
-            <NavLink
-              key={community.id}
-              to={`/c/${community.id}`}
-              className={({ isActive }) =>
-                cx(styles.navItem, isActive && styles.navItemActive)
-              }
-            >
-              <Avatar name={community.name} src={community.icon_url} size="sm" />
-              {community.name}
-            </NavLink>
-          ))}
-
-          {communityId && (
-            <>
-              <div className={styles.navHeading}>Rooms</div>
-              {rooms.loading && <LoadingPanel />}
-              {!rooms.loading && rooms.data?.length === 0 && (
-                <EmptyState>No rooms yet.</EmptyState>
-              )}
-              {rooms.data?.map((room) => (
-                <NavLink
-                  key={room.id}
-                  to={`/c/${communityId}/r/${room.id}`}
-                  className={({ isActive }) =>
-                    cx(styles.navItem, isActive && styles.navItemActive)
-                  }
-                >
-                  <RoomIcon type={room.room_type} />
-                  {room.name}
-                </NavLink>
-              ))}
-            </>
-          )}
-        </nav>
-
-        <div className={styles.footer}>
-          <Avatar
-            name={user?.profile.display_name ?? '?'}
-            src={user?.profile.avatar_url}
-            size="sm"
-          />
-          <div className={styles.identity}>
-            <div className={styles.name}>{user?.profile.display_name}</div>
-            <div className={styles.handle}>@{user?.handle}</div>
-          </div>
-          <Tooltip content="Sign out">
-            <Button variant="ghost" size="sm" onClick={() => void logout()} aria-label="Sign out">
-              <SignOutIcon />
-            </Button>
-          </Tooltip>
-        </div>
-      </aside>
+      {isMobile && (
+        <Sheet open={drawerOpen} onOpenChange={setDrawerOpen} title="Navigation">
+          <div className={styles.drawerBody}>{navigation}</div>
+        </Sheet>
+      )}
 
       <main className={styles.content}>
-        <Outlet context={{ reloadCommunities: communities.reload, reloadRooms: rooms.reload }} />
+        {isMobile && (
+          <MobileTopBar
+            title={
+              communities.data?.find((item) => item.id === communityId)?.name ?? 'genzh'
+            }
+            onOpenDrawer={() => setDrawerOpen(true)}
+          />
+        )}
+
+        <div className={styles.outlet}>
+          <Outlet
+            context={
+              {
+                reloadCommunities: communities.reload,
+                reloadRooms: rooms.reload,
+              } satisfies ShellContext
+            }
+          />
+        </div>
       </main>
+
+      {isMobile && <MobileNav />}
     </div>
   )
 }
 
-/** Context handed to child routes so they can refresh the sidebar after
+/** Context handed to child routes so they can refresh navigation after
  *  creating a community or a room. */
 export interface ShellContext {
   reloadCommunities: () => void
   reloadRooms: () => void
 }
 
-function RoomIcon({ type }: { type: string }) {
-  if (type === 'text') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-        <path
-          d="M2 4.5A2.5 2.5 0 0 1 4.5 2h7A2.5 2.5 0 0 1 14 4.5v4A2.5 2.5 0 0 1 11.5 11H6l-3.2 2.6A.5.5 0 0 1 2 13.2V4.5Z"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinejoin="round"
-        />
-      </svg>
-    )
-  }
+// ── the rail ───────────────────────────────────────────────────────────────
+
+/**
+ * The community strip.
+ *
+ * Icons only, because it is a switcher and not a directory: at a glance you are
+ * picking a place you already know, and the names are one hover away.
+ */
+function CommunityRail({
+  communities,
+  loading,
+}: {
+  communities: Community[] | null
+  loading: boolean
+}) {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M8 2.5a2 2 0 0 0-2 2v3a2 2 0 1 0 4 0v-3a2 2 0 0 0-2-2ZM4 7.5a4 4 0 0 0 8 0M8 11.5v2"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-    </svg>
+    <nav className={styles.rail} aria-label="Communities">
+      <Tooltip content="Home" side="right">
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) => cx(styles.railItem, isActive && styles.railItemActive)}
+          aria-label="Home"
+        >
+          <span className={styles.railPill} aria-hidden />
+          <span className={styles.railGlyph}>
+            <HomeIcon size={20} />
+          </span>
+        </NavLink>
+      </Tooltip>
+
+      <Tooltip content="Friends" side="right">
+        <NavLink
+          to="/friends"
+          className={({ isActive }) => cx(styles.railItem, isActive && styles.railItemActive)}
+          aria-label="Friends"
+        >
+          <span className={styles.railPill} aria-hidden />
+          <span className={styles.railGlyph}>
+            <UsersIcon size={20} />
+          </span>
+        </NavLink>
+      </Tooltip>
+
+      <div className={styles.railDivider} />
+
+      {loading &&
+        Array.from({ length: 3 }, (_, index) => (
+          <Skeleton key={index} circle width="2.75rem" height="2.75rem" />
+        ))}
+
+      {communities?.map((community) => (
+        <Tooltip key={community.id} content={community.name} side="right">
+          <NavLink
+            to={`/c/${community.id}`}
+            className={({ isActive }) => cx(styles.railItem, isActive && styles.railItemActive)}
+            aria-label={community.name}
+          >
+            <span className={styles.railPill} aria-hidden />
+            <Avatar name={community.name} src={community.icon_url} size="md" />
+          </NavLink>
+        </Tooltip>
+      ))}
+
+      <Tooltip content="Add a community" side="right">
+        <NavLink to="/" end className={cx(styles.railItem, styles.railAdd)} aria-label="Add a community">
+          <span className={styles.railGlyph}>
+            <PlusIcon size={20} />
+          </span>
+        </NavLink>
+      </Tooltip>
+    </nav>
   )
 }
 
-function SignOutIcon() {
+// ── the sidebar ────────────────────────────────────────────────────────────
+
+const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
+  text: HashIcon,
+  voice: MicIcon,
+  video: VideoIcon,
+  activity: SparkleIcon,
+}
+
+/** The rooms inside the selected community, plus the signed-in user's bar. */
+function ChannelSidebar({
+  communityId,
+  community,
+  rooms,
+  loading,
+}: {
+  communityId?: string
+  community?: Community
+  rooms: Room[] | null
+  loading: boolean
+}) {
+  // Voice rooms sit apart from text ones: joining one is a commitment (a
+  // microphone opens), and mixing the two lists invites a misclick.
+  const text = rooms?.filter((room) => room.room_type === 'text') ?? []
+  const live = rooms?.filter((room) => room.room_type !== 'text') ?? []
+
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M6 14H3.5A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2H6M10.5 11 14 8l-3.5-3M14 8H6"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <div className={styles.sidebar}>
+      <header className={styles.sidebarHeader}>
+        <span className={styles.sidebarTitle}>{community?.name ?? 'genzh'}</span>
+        {community && (
+          <NavLink
+            to={`/c/${community.id}`}
+            end
+            className={styles.sidebarSettings}
+            aria-label="Community settings"
+          >
+            <SettingsIcon size={15} />
+          </NavLink>
+        )}
+      </header>
+
+      <nav className={styles.nav} aria-label="Rooms">
+        {!communityId && (
+          <p className={styles.sidebarHint}>
+            Pick a community from the rail, or create one from Home.
+          </p>
+        )}
+
+        {communityId && loading && (
+          <div className={styles.navSkeleton}>
+            {Array.from({ length: 5 }, (_, index) => (
+              <Skeleton key={index} height="1.9rem" />
+            ))}
+          </div>
+        )}
+
+        {communityId && !loading && (
+          <>
+            <RoomGroup label="Text" rooms={text} communityId={communityId} />
+            <RoomGroup label="Voice & video" rooms={live} communityId={communityId} />
+            {rooms?.length === 0 && (
+              <p className={styles.sidebarHint}>
+                No rooms yet. Create the first one from the community page.
+              </p>
+            )}
+          </>
+        )}
+      </nav>
+
+      <UserBar />
+    </div>
+  )
+}
+
+function RoomGroup({
+  label,
+  rooms,
+  communityId,
+}: {
+  label: string
+  rooms: Room[]
+  communityId: string
+}) {
+  if (rooms.length === 0) return null
+
+  return (
+    <section className={styles.group}>
+      <h2 className={styles.groupHeading}>{label}</h2>
+      {rooms.map((room) => {
+        const Icon = ROOM_ICONS[room.room_type] ?? HashIcon
+        return (
+          <NavLink
+            key={room.id}
+            to={`/c/${communityId}/r/${room.id}`}
+            className={({ isActive }) => cx(styles.navItem, isActive && styles.navItemActive)}
+          >
+            <Icon size={17} className={styles.navIcon} />
+            <span className={styles.navLabel}>{room.name}</span>
+          </NavLink>
+        )
+      })}
+    </section>
+  )
+}
+
+// ── the user bar ───────────────────────────────────────────────────────────
+
+const THEME_ITEMS: ReadonlyArray<{ value: Theme; label: string; icon: typeof SunIcon }> = [
+  { value: 'system', label: 'System', icon: MonitorIcon },
+  { value: 'light', label: 'Light', icon: SunIcon },
+  { value: 'dark', label: 'Dark', icon: MoonIcon },
+]
+
+function UserBar() {
+  const { user, logout } = useAuth()
+  const { theme, setTheme } = useTheme()
+  const [editing, setEditing] = useState(false)
+
+  return (
+    <>
+      <div className={styles.userBar}>
+        <Avatar
+          name={user?.profile.display_name ?? '?'}
+          src={user?.profile.avatar_url}
+          color={user?.profile.accent_color}
+          size="sm"
+          presence="online"
+        />
+        <div className={styles.identity}>
+          <div className={styles.identityName}>{user?.profile.display_name}</div>
+          <div className={styles.identityHandle}>@{user?.handle}</div>
+        </div>
+
+        <Menu
+          side="top"
+          align="end"
+          trigger={
+            <Button variant="ghost" size="sm" iconOnly aria-label="Account menu">
+              <SettingsIcon size={16} />
+            </Button>
+          }
+        >
+          <MenuItem icon={<SettingsIcon size={15} />} onClick={() => setEditing(true)}>
+            Edit profile
+          </MenuItem>
+
+          <MenuSeparator />
+
+          {THEME_ITEMS.map(({ value, label, icon: Icon }) => (
+            <MenuItem
+              key={value}
+              icon={theme === value ? <CheckIcon size={15} /> : <Icon size={15} />}
+              // `closeOnClick={false}` keeps the menu open while cycling
+              // themes, so the effect of each choice is visible immediately.
+              closeOnClick={false}
+              onClick={() => setTheme(value)}
+            >
+              {label}
+            </MenuItem>
+          ))}
+
+          <MenuSeparator />
+
+          <MenuItem tone="danger" icon={<SignOutIcon size={15} />} onClick={() => void logout()}>
+            Sign out
+          </MenuItem>
+        </Menu>
+      </div>
+
+      <ProfileDialog open={editing} onOpenChange={setEditing} />
+    </>
+  )
+}
+
+// ── mobile chrome ──────────────────────────────────────────────────────────
+
+function MobileTopBar({
+  title,
+  onOpenDrawer,
+}: {
+  title: string
+  onOpenDrawer: () => void
+}) {
+  return (
+    <header className={styles.topBar}>
+      <Button variant="ghost" size="sm" iconOnly onClick={onOpenDrawer} aria-label="Open navigation">
+        <MenuIcon size={20} />
+      </Button>
+      <span className={styles.topBarTitle}>{title}</span>
+    </header>
+  )
+}
+
+function MobileNav() {
+  return (
+    <nav className={styles.mobileNav} aria-label="Main">
+      <NavLink
+        to="/"
+        end
+        className={({ isActive }) => cx(styles.mobileNavItem, isActive && styles.mobileNavItemActive)}
+      >
+        <HomeIcon size={20} />
+        Home
+      </NavLink>
+      <NavLink
+        to="/friends"
+        className={({ isActive }) => cx(styles.mobileNavItem, isActive && styles.mobileNavItemActive)}
+      >
+        <UsersIcon size={20} />
+        Friends
+      </NavLink>
+    </nav>
   )
 }

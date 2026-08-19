@@ -284,8 +284,16 @@ pub enum SignalCloseCode {
     Normal = 1000,
     /// Message was not valid protocol.
     ProtocolViolation = 4000,
-    /// Token missing, malformed, expired or wrongly signed.
+    /// Token expired. Retryable: the client fetches a fresh one and reconnects.
     Unauthorized = 4001,
+    /// Token structurally rejected — bad signature, wrong issuer, wrong
+    /// audience, wrong claims version.
+    ///
+    /// Distinct from [`SignalCloseCode::Unauthorized`] because retrying cannot
+    /// help: the next token from the same API is signed the same way. In
+    /// practice this almost always means the two planes were started with
+    /// different `MEDIA_TOKEN_SECRET` values.
+    TokenRejected = 4002,
     /// Token is valid but does not authorise this room.
     Forbidden = 4003,
     /// Room is full.
@@ -310,7 +318,8 @@ impl SignalCloseCode {
         match self {
             SignalCloseCode::Normal => "bye",
             SignalCloseCode::ProtocolViolation => "protocol violation",
-            SignalCloseCode::Unauthorized => "unauthorized",
+            SignalCloseCode::Unauthorized => "token expired",
+            SignalCloseCode::TokenRejected => "token rejected",
             SignalCloseCode::Forbidden => "forbidden",
             SignalCloseCode::RoomFull => "room full",
             SignalCloseCode::RateLimited => "rate limited",
@@ -565,6 +574,7 @@ mod tests {
         for code in [
             SignalCloseCode::ProtocolViolation,
             SignalCloseCode::Unauthorized,
+            SignalCloseCode::TokenRejected,
             SignalCloseCode::Forbidden,
             SignalCloseCode::RoomFull,
             SignalCloseCode::RateLimited,

@@ -6,35 +6,52 @@
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  font-weight: 550;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
+  user-select: none;
   transition:
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
+
+/* A press that moves is a press that registers, on a touchscreen where there is
+   no hover state to confirm the target. */
+.button:active:not([data-disabled]) { transform: scale(0.97); }
 
 /* Base UI sets data-disabled on the root; styling the attribute rather than
    :disabled means it also works when `focusableWhenDisabled` keeps the element
    focusable and therefore not natively disabled. */
 .button[data-disabled] {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.45;
+  transform: none;
 }
 
 /* ── sizes ── */
-.sm { height: 2rem;    padding-inline: var(--space-3); }
+.sm { height: 2rem;     padding-inline: var(--space-3); }
 .md { height: 2.375rem; padding-inline: var(--space-4); }
 .lg { height: 2.75rem;  padding-inline: var(--space-5); font-size: var(--text-base); }
+
+/* Square, for a button whose whole content is one glyph. */
+.iconOnly { padding-inline: 0; aspect-ratio: 1; }
+.iconOnly.sm { width: 2rem; }
+.iconOnly.md { width: 2.375rem; }
+.iconOnly.lg { width: 2.75rem; }
+
+.round { border-radius: var(--radius-full); }
 
 /* ── variants ── */
 .primary {
   background: var(--color-accent);
-  color: var(--color-text-inverted);
+  color: var(--color-accent-contrast);
+  box-shadow: var(--shadow-sm);
 }
-.primary:hover:not([data-disabled]) { background: var(--color-accent-hover); }
+.primary:hover:not([data-disabled])  { background: var(--color-accent-hover); }
 .primary:active:not([data-disabled]) { background: var(--color-accent-active); }
 
 .secondary {
@@ -43,19 +60,31 @@
   color: var(--color-text);
   box-shadow: var(--shadow-sm);
 }
-.secondary:hover:not([data-disabled]) { background: var(--color-accent-subtle); }
+.secondary:hover:not([data-disabled]) {
+  background: var(--color-hover);
+  border-color: var(--color-text-subtle);
+}
 
 .ghost {
   background: transparent;
   color: var(--color-text-muted);
 }
 .ghost:hover:not([data-disabled]) {
-  background: var(--color-accent-subtle);
+  background: var(--color-hover);
   color: var(--color-text);
+}
+
+.subtle {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+.subtle:hover:not([data-disabled]) {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
 .danger {
   background: var(--color-danger);
   color: #fff;
+  box-shadow: var(--shadow-sm);
 }
 .danger:hover:not([data-disabled]) { filter: brightness(1.08); }

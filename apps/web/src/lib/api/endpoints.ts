@@ -5,14 +5,18 @@ import type {
   CommunityMember,
   CommunityWithPermissions,
   CurrentUser,
+  Friendship,
   MediaJoinResponse,
   MessagePage,
   Message,
+  Profile,
   PublicProfile,
+  ReactionSummary,
   Room,
   RoomType,
   RoomWithPermissions,
   TokenPair,
+  UpdateProfileInput,
   Uuid,
 } from './types'
 
@@ -47,6 +51,9 @@ export const auth = {
     request<void>('/api/v1/auth/logout', { method: 'POST', body: { refresh_token } }),
 
   me: (token: string) => request<CurrentUser>('/api/v1/me', { token }),
+
+  updateProfile: (token: string, input: UpdateProfileInput) =>
+    request<Profile>('/api/v1/me', { method: 'PATCH', body: input, token }),
 }
 
 // ── users ─────────────────────────────────────────────────────────────────
@@ -80,6 +87,23 @@ export const communities = {
 
   members: (token: string, id: Uuid) =>
     request<CommunityMember[]>(`/api/v1/communities/${id}/members`, { token }),
+
+  update: (
+    token: string,
+    id: Uuid,
+    input: { name?: string; description?: string; icon_url?: string },
+  ) =>
+    request<CommunityWithPermissions>(`/api/v1/communities/${id}`, {
+      method: 'PATCH',
+      body: input,
+      token,
+    }),
+
+  leave: (token: string, id: Uuid, userId: Uuid) =>
+    request<void>(`/api/v1/communities/${id}/members/${userId}`, {
+      method: 'DELETE',
+      token,
+    }),
 }
 
 // ── rooms ─────────────────────────────────────────────────────────────────
@@ -118,6 +142,68 @@ export const messages = {
       body: { content },
       token,
     }),
+
+  edit: (token: string, messageId: Uuid, content: string) =>
+    request<Message>(`/api/v1/messages/${messageId}`, {
+      method: 'PATCH',
+      body: { content },
+      token,
+    }),
+
+  remove: (token: string, messageId: Uuid) =>
+    request<void>(`/api/v1/messages/${messageId}`, { method: 'DELETE', token }),
+
+  // Both reaction calls return the message's *whole* new tally rather than a
+  // delta, so the client never has to reconstruct a count it can be told.
+  react: (token: string, messageId: Uuid, reaction: string) =>
+    request<ReactionSummary[]>(`/api/v1/messages/${messageId}/reactions`, {
+      method: 'PUT',
+      body: { reaction },
+      token,
+    }),
+
+  unreact: (token: string, messageId: Uuid, reaction: string) =>
+    request<ReactionSummary[]>(`/api/v1/messages/${messageId}/reactions`, {
+      method: 'DELETE',
+      body: { reaction },
+      token,
+    }),
+}
+
+// ── social ────────────────────────────────────────────────────────────────
+
+export const friends = {
+  /** Accepted friends, as ids. Resolve them through `useProfiles`. */
+  list: (token: string) => request<Uuid[]>('/api/v1/friends', { token }),
+
+  /** Requests awaiting this user's answer. */
+  pending: (token: string) =>
+    request<Friendship[]>('/api/v1/friends/requests', { token }),
+
+  request: (token: string, userId: Uuid) =>
+    request<Friendship>('/api/v1/friends', {
+      method: 'POST',
+      body: { user_id: userId },
+      token,
+    }),
+
+  respond: (token: string, requesterId: Uuid, accept: boolean) =>
+    request<Friendship>(`/api/v1/friends/${requesterId}/respond`, {
+      method: 'POST',
+      body: { accept },
+      token,
+    }),
+
+  remove: (token: string, userId: Uuid) =>
+    request<void>(`/api/v1/friends/${userId}`, { method: 'DELETE', token }),
+}
+
+export const blocks = {
+  block: (token: string, userId: Uuid) =>
+    request<void>(`/api/v1/blocks/${userId}`, { method: 'PUT', token }),
+
+  unblock: (token: string, userId: Uuid) =>
+    request<void>(`/api/v1/blocks/${userId}`, { method: 'DELETE', token }),
 }
 
 // ── media ─────────────────────────────────────────────────────────────────

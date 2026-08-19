@@ -1,9 +1,12 @@
 //! Persistence for messages and reactions.
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
-use genzh_domain::message::{Message, MessageReaction, ReactionTally};
+use genzh_domain::message::{Message, MessageReaction, ReactionSummary};
 use genzh_domain::{MessageId, RoomId, UserId};
 use genzh_infrastructure::{DbPool, RepositoryError, RepositoryResult};
+use uuid::Uuid;
 
 /// One page of history.
 #[derive(Debug, Clone)]
@@ -171,18 +174,77 @@ impl MessageRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    /// Reaction counts for one message.
-    pub async fn reaction_tallies(
+    /// Reaction counts for one message, as `viewer` sees them.
+    pub async fn reaction_summaries(
         &self,
         message_id: MessageId,
-    ) -> RepositoryResult<Vec<ReactionTally>> {
+        viewer: UserId,
+    ) -> RepositoryResult<Vec<ReactionSummary>> {
         sqlx::query_as(
-            "SELECT reaction, COUNT(*) AS count FROM message_reactions
-             WHERE message_id = $1 GROUP BY reaction ORDER BY count DESC, reaction ASC",
+            "SELECT reaction, COUNT(*) AS count, bool_or(user_id = $2) AS me
+             FROM message_reactions
+             WHERE message_id = $1
+             GROUP BY reaction
+             ORDER BY count DESC, reaction ASC",
         )
         .bind(message_id)
+        .bind(viewer)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::from)
     }
+
+    /// Reaction counts for a whole page of messages, in one query.
+    ///
+    /// A page of fifty messages must not become fifty aggregate queries, so the
+    /// grouping happens in the database and the rows are bucketed by message on
+    /// the way out. Messages with no reactions simply have no key.
+    pub async fn reaction_summaries_for(
+        &self,
+        message_ids: &[MessageId],
+        viewer: UserId,
+    ) -> RepositoryResult<HashMap<MessageId, Vec<ReactionSummary>>> {
+        if message_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Bound as `Vec<Uuid>` rather than `Vec<MessageId>`: the newtype is
+        // transparent for a scalar, but the array element type is what the
+        // driver has to name here.
+        let ids: Vec<Uuid> = message_ids.iter().map(MessageId::as_uuid).collect();
+
+        let rows: Vec<GroupedReaction> = sqlx::query_as(
+            "SELECT message_id, reaction, COUNT(*) AS count, bool_or(user_id = $2) AS me
+             FROM message_reactions
+             WHERE message_id = ANY($1)
+             GROUP BY message_id, reaction
+             ORDER BY count DESC, reaction ASC",
+        )
+        .bind(&ids)
+        .bind(viewer)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut grouped: HashMap<MessageId, Vec<ReactionSummary>> = HashMap::new();
+        for row in rows {
+            grouped
+                .entry(MessageId(row.message_id))
+                .or_default()
+                .push(ReactionSummary {
+                    reaction: row.reaction,
+                    count: row.count,
+                    me: row.me,
+                });
+        }
+        Ok(grouped)
+    }
+}
+
+/// One `GROUP BY message_id, reaction` row, before bucketing.
+#[derive(Debug, sqlx::FromRow)]
+struct GroupedReaction {
+    message_id: Uuid,
+    reaction: String,
+    count: i64,
+    me: bool,
 }

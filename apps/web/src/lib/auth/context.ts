@@ -1,6 +1,6 @@
 import { createContext, use } from 'react'
 
-import type { CurrentUser } from '@/lib/api'
+import type { CurrentUser, Profile } from '@/lib/api'
 
 export interface AuthValue {
   user: CurrentUser | null
@@ -20,6 +20,13 @@ export interface AuthValue {
    * token directly, so refresh happens in exactly one place.
    */
   getToken: () => Promise<string>
+  /**
+   * Replace the cached account after a profile edit.
+   *
+   * The provider owns `user`, so a screen that changes a display name has to
+   * hand the new one back rather than refetching and hoping the two agree.
+   */
+  applyProfile: (profile: Profile) => void
 }
 
 /**

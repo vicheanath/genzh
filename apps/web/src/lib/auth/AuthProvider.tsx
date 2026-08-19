@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 
-import { ApiError, auth as authApi, type CurrentUser } from '@/lib/api'
+import { ApiError, auth as authApi, type CurrentUser, type Profile } from '@/lib/api'
 
 import { AuthContext, type AuthValue } from './context'
 
@@ -117,9 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [signOutLocally])
 
+  const applyProfile = useCallback((profile: Profile) => {
+    setUser((current) => (current ? { ...current, profile } : current))
+  }, [])
+
   const value = useMemo<AuthValue>(
-    () => ({ user, loading, register, login, logout, getToken }),
-    [user, loading, register, login, logout, getToken],
+    () => ({ user, loading, register, login, logout, getToken, applyProfile }),
+    [user, loading, register, login, logout, getToken, applyProfile],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

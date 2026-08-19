@@ -31,6 +31,7 @@
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::error::{MediaCoreError, MediaCoreResult};
@@ -129,6 +130,20 @@ pub struct MediaToken {
     pub expires_at: DateTime<Utc>,
 }
 
+/// A short, non-reversible fingerprint of a shared secret.
+///
+/// The API and the media server cannot check that they agree about
+/// `MEDIA_TOKEN_SECRET` — they never talk to each other on the join path, which
+/// is the whole design. But each can print *this* at startup, and two log lines
+/// then answer "do these two processes share a secret?" in a second.
+///
+/// It is a truncated SHA-256: enough to compare two deployments, useless for
+/// recovering the key. Never log the secret itself.
+pub fn secret_fingerprint(secret: &[u8]) -> String {
+    let digest = Sha256::digest(secret);
+    digest.iter().take(4).map(|byte| format!("{byte:02x}")).collect()
+}
+
 /// Mints and verifies media tokens.
 ///
 /// Both planes construct one of these from the same secret: the API only ever
@@ -187,6 +202,11 @@ impl MediaTokenSigner {
         self.ttl.num_seconds()
     }
 
+    /// The configured issuer, for startup diagnostics.
+    pub fn issuer(&self) -> &str {
+        &self.issuer
+    }
+
     /// Mint a token for an authorised join.
     pub fn issue(&self, grant: &MediaGrant) -> MediaCoreResult<MediaToken> {
         self.issue_at(grant, Utc::now())
@@ -226,8 +246,14 @@ impl MediaTokenSigner {
     /// the token to the room being joined — see
     /// [`MediaTokenClaims::require_room`].
     pub fn verify(&self, token: &str) -> MediaCoreResult<MediaTokenClaims> {
-        let data = decode::<MediaTokenClaims>(token, &self.decoding, &self.validation)
-            .map_err(MediaCoreError::InvalidToken)?;
+        let data = decode::<MediaTokenClaims>(token, &self.decoding, &self.validation).map_err(
+            |error| match error.kind() {
+                // Expiry is the one rejection a client can act on by itself, so
+                // it is the one rejection that gets its own variant.
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => MediaCoreError::ExpiredToken,
+                _ => MediaCoreError::InvalidToken(error),
+            },
+        )?;
 
         if data.claims.v != MEDIA_TOKEN_VERSION {
             return Err(MediaCoreError::TokenMismatch("claims version"));

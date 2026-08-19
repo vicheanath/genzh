@@ -77,6 +77,19 @@ impl AppState {
             &config.jwt_issuer,
             config.media_token_ttl_seconds,
         ));
+
+        // The media server prints the same fingerprint for the secret it
+        // verifies with. If the two lines disagree, every join will be rejected
+        // — and this is the only place either process can say so, because they
+        // never exchange the key.
+        tracing::info!(
+            secret_fingerprint = %genzh_media_core::token::secret_fingerprint(
+                config.media_token_secret.as_bytes()
+            ),
+            token_issuer = %config.jwt_issuer,
+            token_ttl_seconds = signer.ttl_seconds(),
+            "signing media tokens — this fingerprint must match the media server's"
+        );
         let servers = Arc::new(StaticMediaServers::from_env_value(
             &config.media_server_urls,
         ));

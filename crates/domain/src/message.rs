@@ -54,6 +54,21 @@ pub struct ReactionTally {
     pub count: i64,
 }
 
+/// Reaction counts as one viewer sees them.
+///
+/// The `me` flag is what lets a client render "you reacted" without a second
+/// request per message: the aggregate and the viewer's own membership in it
+/// are the same question, answered once.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ReactionSummary {
+    /// Emoji or custom reaction key.
+    pub reaction: String,
+    /// How many users reacted with it.
+    pub count: i64,
+    /// Whether the viewer is one of them.
+    pub me: bool,
+}
+
 /// Validate and trim a message body.
 pub fn validate_message_content(raw: &str) -> DomainResult<String> {
     let content = raw.trim().to_owned();

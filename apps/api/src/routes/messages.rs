@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
-use genzh_domain::message::{Message, ReactionTally};
+use genzh_domain::message::{Message, ReactionSummary};
 use genzh_domain::{MessageId, RoomId};
 use serde::{Deserialize, Serialize};
 
@@ -45,11 +45,25 @@ pub struct HistoryQuery {
     pub limit: Option<i64>,
 }
 
+/// A message plus everything a client needs to render it.
+///
+/// `#[serde(flatten)]` keeps the message's own fields at the top level, so this
+/// is the message shape clients already know with `reactions` added — not a new
+/// envelope they have to unwrap.
+#[derive(Debug, Serialize)]
+pub struct MessageView {
+    /// The message itself.
+    #[serde(flatten)]
+    pub message: Message,
+    /// Reaction tallies, including whether the caller is in each one.
+    pub reactions: Vec<ReactionSummary>,
+}
+
 /// A page of history.
 #[derive(Debug, Serialize)]
 pub struct HistoryResponse {
     /// Messages, newest first.
-    pub messages: Vec<Message>,
+    pub messages: Vec<MessageView>,
     /// Cursor to pass as `before` for the next page.
     pub next_before: Option<DateTime<Utc>>,
 }
@@ -65,8 +79,22 @@ pub async fn list(
         .messaging
         .history(room_id, caller.user_id, query.before, query.limit)
         .await?;
+
+    let ids: Vec<_> = page.messages.iter().map(|message| message.id).collect();
+    let mut reactions = state
+        .messaging
+        .reactions_for(room_id, caller.user_id, &ids)
+        .await?;
+
     Ok(Json(HistoryResponse {
-        messages: page.messages,
+        messages: page
+            .messages
+            .into_iter()
+            .map(|message| MessageView {
+                reactions: reactions.remove(&message.id).unwrap_or_default(),
+                message,
+            })
+            .collect(),
         next_before: page.next_before,
     }))
 }
@@ -77,12 +105,20 @@ pub async fn post(
     caller: CurrentUser,
     Path(room_id): Path<RoomId>,
     ApiJson(body): ApiJson<PostMessageRequest>,
-) -> ApiResult<(StatusCode, Json<Message>)> {
+) -> ApiResult<(StatusCode, Json<MessageView>)> {
     let message = state
         .messaging
         .post(room_id, caller.user_id, &body.content)
         .await?;
-    Ok((StatusCode::CREATED, Json(message)))
+    // A brand new message has no reactions, but returning the same shape as
+    // history means the client has one message type rather than two.
+    Ok((
+        StatusCode::CREATED,
+        Json(MessageView {
+            message,
+            reactions: Vec::new(),
+        }),
+    ))
 }
 
 /// `PATCH /api/v1/messages/{id}`
@@ -116,7 +152,7 @@ pub async fn react(
     caller: CurrentUser,
     Path(message_id): Path<MessageId>,
     ApiJson(body): ApiJson<ReactionRequest>,
-) -> ApiResult<Json<Vec<ReactionTally>>> {
+) -> ApiResult<Json<Vec<ReactionSummary>>> {
     Ok(Json(
         state
             .messaging
@@ -131,7 +167,7 @@ pub async fn unreact(
     caller: CurrentUser,
     Path(message_id): Path<MessageId>,
     ApiJson(body): ApiJson<ReactionRequest>,
-) -> ApiResult<Json<Vec<ReactionTally>>> {
+) -> ApiResult<Json<Vec<ReactionSummary>>> {
     Ok(Json(
         state
             .messaging

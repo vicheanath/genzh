@@ -263,6 +263,34 @@ Keyset rather than `OFFSET`, because offsets get slower as a room gets busier
 and skip or repeat rows when new messages arrive mid-scroll — which is exactly
 what happens in a live chat.
 
+Every message carries its reaction tallies inline, and `me` says whether the
+**calling** user is in each one:
+
+```json
+{
+  "id": "6f1c…",
+  "room_id": "9a3d…",
+  "author_id": "c02e…",
+  "content": "already in — try hovering this one",
+  "edited_at": null,
+  "created_at": "2026-08-19T16:02:44Z",
+  "reactions": [
+    { "reaction": "🎉", "count": 3, "me": true },
+    { "reaction": "👀", "count": 1, "me": false }
+  ]
+}
+```
+
+Inline rather than a second endpoint: a client that renders reactions needs them
+for every message it just fetched, so a separate call would be an N+1 by
+construction. One `GROUP BY` covers the whole page, and `POST` returns the same
+shape with an empty `reactions` so clients have one message type rather than
+two.
+
+`PUT` and `DELETE /messages/{id}/reactions` both take `{ "reaction": "🎉" }` and
+return that message's complete new tally — not a delta — so a client never has
+to reconstruct a count it can simply be told. Reacting twice is idempotent.
+
 Moderators can delete a message but not edit one: putting words in someone's
 mouth is a different power from removing them.
 
