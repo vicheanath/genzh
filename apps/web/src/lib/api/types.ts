@@ -151,6 +151,48 @@ export interface UpdateProfileInput {
   accent_color?: string
 }
 
+export interface Role {
+  id: Uuid
+  community_id: Uuid
+  name: string
+  color: string | null
+  position: number
+  is_default: boolean
+  created_at: Timestamp
+}
+
+export interface RoleWithPermissions {
+  id: Uuid
+  community_id: Uuid
+  name: string
+  color: string | null
+  position: number
+  is_default: boolean
+  created_at: Timestamp
+  permissions: number
+}
+
+export interface CreateRoleInput {
+  name: string
+  color?: string
+  position?: number
+  permissions?: Permission[]
+}
+
+export interface UpdateRoleInput {
+  name?: string
+  color?: string
+  position?: number
+  permissions?: Permission[]
+}
+
+export interface UpdateRoomInput {
+  name?: string
+  topic?: string
+  position?: number
+  max_participants?: number
+}
+
 export interface IceServer {
   urls: string[]
   username?: string
@@ -165,3 +207,4 @@ export interface MediaJoinResponse {
   expires_at: Timestamp
   ice_servers: IceServer[]
 }
+

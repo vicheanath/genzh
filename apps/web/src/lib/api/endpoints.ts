@@ -12,6 +12,7 @@ import type {
   Profile,
   PublicProfile,
   ReactionSummary,
+  RoleWithPermissions,
   Room,
   RoomType,
   RoomWithPermissions,
@@ -71,7 +72,7 @@ export const communities = {
   get: (token: string, id: Uuid) =>
     request<CommunityWithPermissions>(`/api/v1/communities/${id}`, { token }),
 
-  create: (token: string, input: { name: string; description?: string }) =>
+  create: (token: string, input: { name: string; description?: string; icon_url?: string }) =>
     request<CommunityWithPermissions>('/api/v1/communities', {
       method: 'POST',
       body: input,
@@ -85,15 +86,15 @@ export const communities = {
       token,
     }),
 
-  members: (token: string, id: Uuid) =>
-    request<CommunityMember[]>(`/api/v1/communities/${id}/members`, { token }),
+  members: (token: string, id: Uuid, limit = 100) =>
+    request<CommunityMember[]>(`/api/v1/communities/${id}/members?limit=${limit}`, { token }),
 
   update: (
     token: string,
     id: Uuid,
     input: { name?: string; description?: string; icon_url?: string },
   ) =>
-    request<CommunityWithPermissions>(`/api/v1/communities/${id}`, {
+    request<Community>(`/api/v1/communities/${id}`, {
       method: 'PATCH',
       body: input,
       token,
@@ -102,6 +103,45 @@ export const communities = {
   leave: (token: string, id: Uuid, userId: Uuid) =>
     request<void>(`/api/v1/communities/${id}/members/${userId}`, {
       method: 'DELETE',
+      token,
+    }),
+
+  delete: (token: string, id: Uuid) =>
+    request<void>(`/api/v1/communities/${id}`, {
+      method: 'DELETE',
+      token,
+    }),
+
+  roles: (token: string, id: Uuid) =>
+    request<RoleWithPermissions[]>(`/api/v1/communities/${id}/roles`, { token }),
+
+  createRole: (
+    token: string,
+    id: Uuid,
+    input: { name: string; color?: string; position?: number; permissions?: string[] },
+  ) =>
+    request<RoleWithPermissions>(`/api/v1/communities/${id}/roles`, {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+
+  updateRole: (
+    token: string,
+    id: Uuid,
+    roleId: Uuid,
+    input: { name?: string; color?: string; position?: number; permissions?: string[] },
+  ) =>
+    request<RoleWithPermissions>(`/api/v1/communities/${id}/roles/${roleId}`, {
+      method: 'PATCH',
+      body: input,
+      token,
+    }),
+
+  assignRole: (token: string, id: Uuid, userId: Uuid, roleId: Uuid) =>
+    request<void>(`/api/v1/communities/${id}/members/${userId}/roles`, {
+      method: 'POST',
+      body: { role_id: roleId },
       token,
     }),
 }
@@ -118,11 +158,39 @@ export const rooms = {
   create: (
     token: string,
     communityId: Uuid,
-    input: { name: string; room_type: RoomType; topic?: string },
+    input: {
+      name: string
+      room_type: RoomType
+      topic?: string
+      position?: number
+      max_participants?: number
+    },
   ) =>
     request<Room>(`/api/v1/communities/${communityId}/rooms`, {
       method: 'POST',
       body: input,
+      token,
+    }),
+
+  update: (
+    token: string,
+    id: Uuid,
+    input: {
+      name?: string
+      topic?: string
+      position?: number
+      max_participants?: number
+    },
+  ) =>
+    request<Room>(`/api/v1/rooms/${id}`, {
+      method: 'PATCH',
+      body: input,
+      token,
+    }),
+
+  delete: (token: string, id: Uuid) =>
+    request<void>(`/api/v1/rooms/${id}`, {
+      method: 'DELETE',
       token,
     }),
 }

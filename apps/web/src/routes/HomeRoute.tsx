@@ -4,7 +4,7 @@ import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { HashIcon, PlusIcon, UserPlusIcon } from '@/components/Icons'
+import { CompassIcon, HashIcon, PlusIcon, UserPlusIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
@@ -91,6 +91,24 @@ export function HomeRoute() {
         </header>
 
         {error && <Callout tone="danger">{error}</Callout>}
+
+        <section style={{ background: 'linear-gradient(135deg, var(--color-accent-subtle), var(--color-mint-subtle))', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4) var(--space-5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
+          <div>
+            <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--color-text)' }}>
+              <CompassIcon size={18} />
+              Explore Public Communities
+            </h3>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)' }}>
+              Discover active servers, gaming groups, and learning spaces.
+            </p>
+          </div>
+          <Link to="/explore">
+            <Button size="sm">
+              <CompassIcon size={15} />
+              Browse Communities
+            </Button>
+          </Link>
+        </section>
 
         <section>
           <h2 className={styles.sectionTitle}>Your communities</h2>

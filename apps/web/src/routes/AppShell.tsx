@@ -5,12 +5,16 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import {
   CheckIcon,
+  CompassIcon,
   HashIcon,
+  HeadphonesIcon,
   HomeIcon,
   MenuIcon,
   MicIcon,
+  MicOffIcon,
   MonitorIcon,
   MoonIcon,
+  PhoneOffIcon,
   PlusIcon,
   SettingsIcon,
   SignOutIcon,
@@ -32,31 +36,37 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
+import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { useTheme, type Theme } from '@/lib/useTheme'
 
+import { AddCommunityDialog } from './AddCommunityDialog'
 import { ProfileDialog } from './ProfileDialog'
+import { UserSettingsModal } from './UserSettingsModal'
 
 import styles from './AppShell.module.css'
 
 /**
  * The signed-in frame: a community rail, a room sidebar, and the routed screen.
- *
- * Navigation is fetched once here rather than per screen, because every screen
- * shows it. The two lists are the app's only cross-route data dependency, and
- * child routes refresh them through {@link ShellContext} after creating
- * something.
- *
- * On a phone the rail and sidebar move into a drawer and the whole thing gets a
- * bottom tab bar — the same components, mounted somewhere else, rather than a
- * second navigation written twice.
  */
 export function AppShell() {
   const { communityId } = useParams<{ communityId?: string }>()
   const { getToken } = useAuth()
   const isMobile = useIsMobile()
   const location = useLocation()
+
+  const addCommunityOpen = useAppStore((s) => s.addCommunityOpen)
+  const openAddCommunity = useAppStore((s) => s.openAddCommunity)
+  const closeAddCommunity = useAppStore((s) => s.closeAddCommunity)
+
+  const userSettingsOpen = useAppStore((s) => s.userSettingsOpen)
+  const openUserSettings = useAppStore((s) => s.openUserSettings)
+  const closeUserSettings = useAppStore((s) => s.closeUserSettings)
+
+  const profileUserId = useAppStore((s) => s.profileUserId)
+  const profileOpen = useAppStore((s) => s.profileOpen)
+  const closeProfile = useAppStore((s) => s.closeProfile)
 
   // The drawer remembers *where* it was opened rather than merely that it is
   // open, so any navigation closes it without an effect watching the location.
@@ -76,12 +86,17 @@ export function AppShell() {
 
   const navigation = (
     <>
-      <CommunityRail communities={communities.data} loading={communities.loading} />
+      <CommunityRail
+        communities={communities.data}
+        loading={communities.loading}
+        onAddClick={() => openAddCommunity()}
+      />
       <ChannelSidebar
         communityId={communityId}
         community={communities.data?.find((item) => item.id === communityId)}
         rooms={rooms.data}
         loading={rooms.loading}
+        onOpenSettings={() => openUserSettings()}
       />
     </>
   )
@@ -118,7 +133,30 @@ export function AppShell() {
         </div>
       </main>
 
-      {isMobile && <MobileNav />}
+      {isMobile && <MobileNav onOpenAdd={() => openAddCommunity()} />}
+
+      <AddCommunityDialog
+        open={addCommunityOpen}
+        onClose={closeAddCommunity}
+        onCreated={() => {
+          communities.reload()
+        }}
+      />
+
+      <UserSettingsModal
+        open={userSettingsOpen}
+        onClose={closeUserSettings}
+      />
+
+      {profileUserId && (
+        <ProfileDialog
+          open={profileOpen}
+          onOpenChange={(open) => {
+            if (!open) closeProfile()
+          }}
+          targetUserId={profileUserId}
+        />
+      )}
     </div>
   )
 }
@@ -132,18 +170,14 @@ export interface ShellContext {
 
 // ── the rail ───────────────────────────────────────────────────────────────
 
-/**
- * The community strip.
- *
- * Icons only, because it is a switcher and not a directory: at a glance you are
- * picking a place you already know, and the names are one hover away.
- */
 function CommunityRail({
   communities,
   loading,
+  onAddClick,
 }: {
   communities: Community[] | null
   loading: boolean
+  onAddClick: () => void
 }) {
   return (
     <nav className={styles.rail} aria-label="Communities">
@@ -174,6 +208,19 @@ function CommunityRail({
         </NavLink>
       </Tooltip>
 
+      <Tooltip content="Explore Communities" side="right">
+        <NavLink
+          to="/explore"
+          className={({ isActive }) => cx(styles.railItem, isActive && styles.railItemActive)}
+          aria-label="Explore Communities"
+        >
+          <span className={styles.railPill} aria-hidden />
+          <span className={styles.railGlyph}>
+            <CompassIcon size={20} />
+          </span>
+        </NavLink>
+      </Tooltip>
+
       <div className={styles.railDivider} />
 
       {loading &&
@@ -194,12 +241,17 @@ function CommunityRail({
         </Tooltip>
       ))}
 
-      <Tooltip content="Add a community" side="right">
-        <NavLink to="/" end className={cx(styles.railItem, styles.railAdd)} aria-label="Add a community">
+      <Tooltip content="Add a Server" side="right">
+        <button
+          type="button"
+          className={cx(styles.railItem, styles.railAdd)}
+          onClick={onAddClick}
+          aria-label="Add a Server"
+        >
           <span className={styles.railGlyph}>
             <PlusIcon size={20} />
           </span>
-        </NavLink>
+        </button>
       </Tooltip>
     </nav>
   )
@@ -214,17 +266,18 @@ const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
   activity: SparkleIcon,
 }
 
-/** The rooms inside the selected community, plus the signed-in user's bar. */
 function ChannelSidebar({
   communityId,
   community,
   rooms,
   loading,
+  onOpenSettings,
 }: {
   communityId?: string
   community?: Community
   rooms: Room[] | null
   loading: boolean
+  onOpenSettings: () => void
 }) {
   // Voice rooms sit apart from text ones: joining one is a commitment (a
   // microphone opens), and mixing the two lists invites a misclick.
@@ -250,7 +303,7 @@ function ChannelSidebar({
       <nav className={styles.nav} aria-label="Rooms">
         {!communityId && (
           <p className={styles.sidebarHint}>
-            Pick a community from the rail, or create one from Home.
+            Pick a community from the rail, or explore public communities.
           </p>
         )}
 
@@ -264,8 +317,8 @@ function ChannelSidebar({
 
         {communityId && !loading && (
           <>
-            <RoomGroup label="Text" rooms={text} communityId={communityId} />
-            <RoomGroup label="Voice & video" rooms={live} communityId={communityId} />
+            <RoomGroup label="Text Channels" rooms={text} communityId={communityId} />
+            <RoomGroup label="Voice & Video" rooms={live} communityId={communityId} />
             {rooms?.length === 0 && (
               <p className={styles.sidebarHint}>
                 No rooms yet. Create the first one from the community page.
@@ -275,7 +328,7 @@ function ChannelSidebar({
         )}
       </nav>
 
-      <UserBar />
+      <UserBar onOpenSettings={onOpenSettings} />
     </div>
   )
 }
@@ -319,64 +372,93 @@ const THEME_ITEMS: ReadonlyArray<{ value: Theme; label: string; icon: typeof Sun
   { value: 'dark', label: 'Dark', icon: MoonIcon },
 ]
 
-function UserBar() {
+function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { user, logout } = useAuth()
   const { theme, setTheme } = useTheme()
-  const [editing, setEditing] = useState(false)
+  const isMuted = useAppStore((s) => s.isMuted)
+  const isDeafened = useAppStore((s) => s.isDeafened)
+  const toggleMute = useAppStore((s) => s.toggleMute)
+  const toggleDeafen = useAppStore((s) => s.toggleDeafen)
 
   return (
-    <>
-      <div className={styles.userBar}>
-        <Avatar
-          name={user?.profile.display_name ?? '?'}
-          src={user?.profile.avatar_url}
-          color={user?.profile.accent_color}
-          size="sm"
-          presence="online"
-        />
-        <div className={styles.identity}>
-          <div className={styles.identityName}>{user?.profile.display_name}</div>
-          <div className={styles.identityHandle}>@{user?.handle}</div>
-        </div>
-
-        <Menu
-          side="top"
-          align="end"
-          trigger={
-            <Button variant="ghost" size="sm" iconOnly aria-label="Account menu">
-              <SettingsIcon size={16} />
-            </Button>
-          }
-        >
-          <MenuItem icon={<SettingsIcon size={15} />} onClick={() => setEditing(true)}>
-            Edit profile
-          </MenuItem>
-
-          <MenuSeparator />
-
-          {THEME_ITEMS.map(({ value, label, icon: Icon }) => (
-            <MenuItem
-              key={value}
-              icon={theme === value ? <CheckIcon size={15} /> : <Icon size={15} />}
-              // `closeOnClick={false}` keeps the menu open while cycling
-              // themes, so the effect of each choice is visible immediately.
-              closeOnClick={false}
-              onClick={() => setTheme(value)}
-            >
-              {label}
-            </MenuItem>
-          ))}
-
-          <MenuSeparator />
-
-          <MenuItem tone="danger" icon={<SignOutIcon size={15} />} onClick={() => void logout()}>
-            Sign out
-          </MenuItem>
-        </Menu>
+    <div className={styles.userBar}>
+      <Avatar
+        name={user?.profile.display_name ?? '?'}
+        src={user?.profile.avatar_url}
+        color={user?.profile.accent_color}
+        size="sm"
+        presence="online"
+      />
+      <div className={styles.identity}>
+        <div className={styles.identityName}>{user?.profile.display_name}</div>
+        <div className={styles.identityHandle}>@{user?.handle}</div>
       </div>
 
-      <ProfileDialog open={editing} onOpenChange={setEditing} />
-    </>
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
+        onClick={toggleMute}
+        aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+        style={isMuted ? { color: 'var(--color-danger, #ed4245)' } : undefined}
+      >
+        {isMuted ? <MicOffIcon size={16} /> : <MicIcon size={16} />}
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
+        onClick={toggleDeafen}
+        aria-label={isDeafened ? 'Undeafen audio' : 'Deafen audio'}
+        style={isDeafened ? { color: 'var(--color-danger, #ed4245)' } : undefined}
+      >
+        {isDeafened ? <PhoneOffIcon size={16} /> : <HeadphonesIcon size={16} />}
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
+        onClick={onOpenSettings}
+        aria-label="User Settings"
+      >
+        <SettingsIcon size={16} />
+      </Button>
+
+      <Menu
+        side="top"
+        align="end"
+        trigger={
+          <Button variant="ghost" size="sm" iconOnly aria-label="Account menu">
+            <MenuIcon size={16} />
+          </Button>
+        }
+      >
+        <MenuItem icon={<SettingsIcon size={15} />} onClick={onOpenSettings}>
+          User Settings
+        </MenuItem>
+
+        <MenuSeparator />
+
+        {THEME_ITEMS.map(({ value, label, icon: Icon }) => (
+          <MenuItem
+            key={value}
+            icon={theme === value ? <CheckIcon size={15} /> : <Icon size={15} />}
+            closeOnClick={false}
+            onClick={() => setTheme(value)}
+          >
+            {label}
+          </MenuItem>
+        ))}
+
+        <MenuSeparator />
+
+        <MenuItem tone="danger" icon={<SignOutIcon size={15} />} onClick={() => void logout()}>
+          Sign out
+        </MenuItem>
+      </Menu>
+    </div>
   )
 }
 
@@ -399,7 +481,7 @@ function MobileTopBar({
   )
 }
 
-function MobileNav() {
+function MobileNav({ onOpenAdd }: { onOpenAdd: () => void }) {
   return (
     <nav className={styles.mobileNav} aria-label="Main">
       <NavLink
@@ -417,6 +499,21 @@ function MobileNav() {
         <UsersIcon size={20} />
         Friends
       </NavLink>
+      <NavLink
+        to="/explore"
+        className={({ isActive }) => cx(styles.mobileNavItem, isActive && styles.mobileNavItemActive)}
+      >
+        <CompassIcon size={20} />
+        Explore
+      </NavLink>
+      <button
+        type="button"
+        className={styles.mobileNavItem}
+        onClick={onOpenAdd}
+      >
+        <PlusIcon size={20} />
+        Add Server
+      </button>
     </nav>
   )
 }

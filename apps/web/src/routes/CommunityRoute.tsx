@@ -5,7 +5,7 @@ import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { CopyIcon, HashIcon, MicIcon, SparkleIcon, VideoIcon } from '@/components/Icons'
+import { CopyIcon, HashIcon, MicIcon, SettingsIcon, SparkleIcon, VideoIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
 import { LoadingPanel, Spinner } from '@/components/Spinner'
@@ -22,6 +22,7 @@ import { can } from '@/lib/permissions'
 import { useIsMobile } from '@/lib/useMediaQuery'
 
 import type { ShellContext } from './AppShell'
+import { CommunitySettingsModal } from './CommunitySettingsModal'
 import { MemberList } from './MemberList'
 
 import styles from './CommunityRoute.module.css'
@@ -42,10 +43,12 @@ const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
 export function CommunityRoute() {
   const { communityId = '' } = useParams<{ communityId: string }>()
   const { getToken } = useAuth()
-  const { reloadRooms } = useOutletContext<ShellContext>()
+  const { reloadRooms, reloadCommunities } = useOutletContext<ShellContext>()
   const navigate = useNavigate()
   const toast = useToast()
   const isMobile = useIsMobile()
+
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const community = useAsync(
     async () => communitiesApi.get(await getToken(), communityId),
@@ -63,6 +66,9 @@ export function CommunityRoute() {
   const [busy, setBusy] = useState(false)
 
   const canManageRooms = can(community.data?.your_permissions ?? [], 'manage_room')
+  const canManageCommunity =
+    can(community.data?.your_permissions ?? [], 'manage_community') ||
+    can(community.data?.your_permissions ?? [], 'administrator')
 
   async function createRoom(event: FormEvent) {
     event.preventDefault()
@@ -120,14 +126,19 @@ export function CommunityRoute() {
             className={styles.icon}
           />
           <div className={styles.headerText}>
-            <h1 className={styles.title}>{community.data.name}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h1 className={styles.title}>{community.data.name}</h1>
+              {canManageCommunity && (
+                <Button size="sm" variant="secondary" onClick={() => setSettingsOpen(true)}>
+                  <SettingsIcon size={15} />
+                  Server Settings
+                </Button>
+              )}
+            </div>
             {community.data.description && (
               <p className={styles.description}>{community.data.description}</p>
             )}
             <div className={styles.badges}>
-              {/* An administrator's set comes back as just `["administrator"]`,
-                  so a raw count would read "1 permission" for the owner — the
-                  badge says what they are instead. */}
               {community.data.your_permissions.includes('administrator') ? (
                 <Badge tone="mint">administrator</Badge>
               ) : (
@@ -231,6 +242,20 @@ export function CommunityRoute() {
           </section>
         )}
       </div>
+
+      <CommunitySettingsModal
+        open={settingsOpen}
+        community={community.data}
+        onClose={() => setSettingsOpen(false)}
+        onCommunityUpdated={() => {
+          community.reload()
+          reloadCommunities()
+        }}
+        onCommunityDeleted={() => {
+          reloadCommunities()
+          void navigate('/')
+        }}
+      />
     </div>
   )
 }

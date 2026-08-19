@@ -1,10 +1,13 @@
+import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { LoadingPanel } from '@/components/Spinner'
 import { AuthProvider, useAuth } from '@/lib/auth'
+import { queryClient } from '@/lib/queryClient'
 
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
+import { ExploreRoute } from './routes/ExploreRoute'
 import { FriendsRoute } from './routes/FriendsRoute'
 import { HomeRoute } from './routes/HomeRoute'
 import { RoomRoute } from './routes/RoomRoute'
@@ -12,11 +15,13 @@ import { SignInRoute } from './routes/SignInRoute'
 
 export function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Router />
-      </BrowserRouter>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Router />
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   )
 }
 
@@ -45,6 +50,7 @@ function Router() {
       <Route element={<AppShell />}>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/friends" element={<FriendsRoute />} />
+        <Route path="/explore" element={<ExploreRoute />} />
         <Route path="/c/:communityId" element={<CommunityRoute />} />
         <Route path="/c/:communityId/r/:roomId" element={<RoomRoute />} />
       </Route>

@@ -1,13 +1,23 @@
-import { useCallback, useState, type FormEvent } from 'react'
+import { useCallback, useState } from 'react'
+import { useForm } from 'react-hook-form'
 
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { CheckIcon, UserPlusIcon, UsersIcon, XIcon } from '@/components/Icons'
-import { Input } from '@/components/Input'
+import {
+  BanIcon,
+  CheckIcon,
+  CopyIcon,
+  MoreIcon,
+  SearchIcon,
+  ShieldIcon,
+  TrashIcon,
+  UserPlusIcon,
+  UsersIcon,
+  XIcon,
+} from '@/components/Icons'
 import { Menu, MenuItem } from '@/components/Menu'
-import { MoreIcon, ShieldIcon, TrashIcon } from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
@@ -18,50 +28,70 @@ import {
   type Uuid,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+import { cx } from '@/lib/cx'
+import { useAppStore } from '@/lib/store'
 import { formatRelative } from '@/lib/time'
+import { useAsync } from '@/lib/useAsync'
 import { useProfiles } from '@/lib/useProfiles'
 
+import { ProfileDialog } from './ProfileDialog'
 import styles from './FriendsRoute.module.css'
 
-/**
- * Friends and friend requests.
- *
- * The API deals in ids on both lists, so names come from the shared profile
- * cache — the same one the transcript and the member list fill.
- */
+export type FriendTab = 'online' | 'all' | 'pending' | 'blocked' | 'add'
+
+interface AddFriendFormValues {
+  userId: string
+}
+
 export function FriendsRoute() {
   const { getToken, user } = useAuth()
   const toast = useToast()
 
+  const tab = useAppStore((s) => s.friendsTab)
+  const setTab = useAppStore((s) => s.setFriendsTab)
+
+  const [search, setSearch] = useState('')
+  const [selectedUserId, setSelectedUserId] = useState<Uuid | null>(null)
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false)
+
   const friends = useAsync(async () => friendsApi.list(await getToken()), [getToken])
   const requests = useAsync(async () => friendsApi.pending(await getToken()), [getToken])
 
-  const [userId, setUserId] = useState('')
+  // Track blocked users locally for the blocked tab
+  const [blockedUsers, setBlockedUsers] = useState<Uuid[]>([])
+
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const lookup = useProfiles([
+  const addFriendForm = useForm<AddFriendFormValues>({
+    defaultValues: { userId: '' },
+  })
+
+  const allIds = [
     ...(friends.data ?? []),
-    ...(requests.data ?? []).map((request) => request.requester_id),
-  ])
+    ...(requests.data ?? []).map((r) => r.requester_id),
+    ...blockedUsers,
+  ]
+  const lookup = useProfiles(allIds)
 
   const refresh = useCallback(() => {
     friends.reload()
     requests.reload()
   }, [friends, requests])
 
-  async function sendRequest(event: FormEvent) {
-    event.preventDefault()
+  async function sendRequest(data: AddFriendFormValues) {
+    const id = data.userId.trim()
+    if (!id) return
     setError(null)
     setBusy(true)
     try {
-      await friendsApi.request(await getToken(), userId.trim())
-      setUserId('')
-      toast.success('Request sent')
+      await friendsApi.request(await getToken(), id)
+      addFriendForm.reset()
+      toast.success('Friend request sent!')
       refresh()
+      setTab('pending')
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not send the request')
+      setError(cause instanceof ApiError ? cause.message : 'Could not send request')
     } finally {
       setBusy(false)
     }
@@ -70,213 +100,401 @@ export function FriendsRoute() {
   async function respond(requesterId: Uuid, accept: boolean) {
     try {
       await friendsApi.respond(await getToken(), requesterId, accept)
-      toast.success(accept ? 'Friend added' : 'Request declined')
+      toast.success(accept ? 'Friend request accepted!' : 'Friend request declined')
       refresh()
     } catch (cause) {
-      toast.error(
-        'Could not respond',
-        cause instanceof ApiError ? cause.message : undefined,
-      )
+      toast.error('Could not respond to request', cause instanceof ApiError ? cause.message : undefined)
     }
   }
 
-  async function remove(otherId: Uuid) {
+  async function removeFriend(friendId: Uuid) {
+    if (!window.confirm('Are you sure you want to remove this friend?')) return
     try {
-      await friendsApi.remove(await getToken(), otherId)
+      await friendsApi.remove(await getToken(), friendId)
       toast.success('Friend removed')
       refresh()
     } catch (cause) {
-      toast.error('Could not remove', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not remove friend', cause instanceof ApiError ? cause.message : undefined)
     }
   }
 
-  async function block(otherId: Uuid) {
+  async function blockUser(otherId: Uuid) {
     try {
       await blocksApi.block(await getToken(), otherId)
-      toast.success('Blocked', 'They can no longer reach you.')
+      if (!blockedUsers.includes(otherId)) {
+        setBlockedUsers((prev) => [...prev, otherId])
+      }
+      toast.success('User blocked', 'They can no longer message or interact with you.')
       refresh()
     } catch (cause) {
-      toast.error('Could not block', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not block user', cause instanceof ApiError ? cause.message : undefined)
     }
+  }
+
+  async function unblockUser(otherId: Uuid) {
+    try {
+      await blocksApi.unblock(await getToken(), otherId)
+      setBlockedUsers((prev) => prev.filter((id) => id !== otherId))
+      toast.success('User unblocked')
+      refresh()
+    } catch (cause) {
+      toast.error('Could not unblock user', cause instanceof ApiError ? cause.message : undefined)
+    }
+  }
+
+  function copyMyId() {
+    if (!user) return
+    void navigator.clipboard
+      ?.writeText(user.id)
+      .then(() => toast.success('Your User ID copied to clipboard!'))
+      .catch(() => toast.error('Could not copy User ID'))
   }
 
   const pendingCount = requests.data?.length ?? 0
 
+  const filteredFriends = (friends.data ?? []).filter((friendId) => {
+    const prof = lookup(friendId)
+    if (!search) return true
+    const query = search.toLowerCase()
+    return (
+      prof?.display_name.toLowerCase().includes(query) ||
+      prof?.handle.toLowerCase().includes(query) ||
+      friendId.toLowerCase().includes(query)
+    )
+  })
+
   return (
     <div className={styles.scroll}>
+      {/* Discord Top Tab Bar */}
+      <div className={styles.topBar}>
+        <div className={styles.titleArea}>
+          <UsersIcon size={20} />
+          <span>Friends</span>
+        </div>
+
+        <div className={styles.tabs}>
+          <button
+            type="button"
+            className={cx(styles.tab, tab === 'online' && styles.tabActive)}
+            onClick={() => setTab('online')}
+          >
+            Online
+          </button>
+          <button
+            type="button"
+            className={cx(styles.tab, tab === 'all' && styles.tabActive)}
+            onClick={() => setTab('all')}
+          >
+            All
+            {friends.data && <Badge>{friends.data.length}</Badge>}
+          </button>
+          <button
+            type="button"
+            className={cx(styles.tab, tab === 'pending' && styles.tabActive)}
+            onClick={() => setTab('pending')}
+          >
+            Pending
+            {pendingCount > 0 && <Badge tone="accent">{pendingCount}</Badge>}
+          </button>
+          <button
+            type="button"
+            className={cx(styles.tab, tab === 'blocked' && styles.tabActive)}
+            onClick={() => setTab('blocked')}
+          >
+            Blocked
+            {blockedUsers.length > 0 && <Badge>{blockedUsers.length}</Badge>}
+          </button>
+          <button
+            type="button"
+            className={cx(styles.tab, styles.tabAddFriend, tab === 'add' && styles.tabActive)}
+            onClick={() => setTab('add')}
+          >
+            <UserPlusIcon size={16} />
+            Add Friend
+          </button>
+        </div>
+      </div>
+
       <div className={styles.page}>
-        <header>
-          <h1 className={styles.title}>Friends</h1>
-          <p className={styles.lede}>
-            People you can find across every community you share.
-          </p>
-        </header>
+        {tab !== 'add' && (
+          <div className={styles.searchWrap}>
+            <SearchIcon size={16} className={styles.searchIcon} />
+            <input
+              type="text"
+              className={styles.searchInput}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search friends..."
+            />
+          </div>
+        )}
 
-        {error && <Callout tone="danger">{error}</Callout>}
-
-        {/* Requests lead when there are any: they are the only thing on this
-            screen waiting on the reader. */}
-        {pendingCount > 0 && (
+        {/* ALL & ONLINE FRIENDS */}
+        {(tab === 'all' || tab === 'online') && (
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>
-              Requests
-              <Badge tone="accent">{pendingCount}</Badge>
-            </h2>
+            <div className={styles.sectionTitle}>
+              {tab === 'online' ? 'Online Friends' : 'All Friends'} — {filteredFriends.length}
+            </div>
 
-            <div className={styles.list}>
-              {requests.data?.map((request) => {
-                const profile = lookup(request.requester_id)
-                return (
-                  <div key={request.requester_id} className={styles.row}>
-                    <Avatar
-                      name={profile?.display_name ?? '?'}
-                      src={profile?.avatar_url}
-                      color={profile?.accent_color}
-                      size="md"
-                    />
-                    <div className={styles.identity}>
-                      <div className={styles.name}>
-                        {profile?.display_name ?? 'Loading…'}
+            {friends.loading && (
+              <div className={styles.list}>
+                {Array.from({ length: 3 }, (_, i) => (
+                  <div key={i} className={styles.row}>
+                    <Skeleton circle width="2.4rem" height="2.4rem" />
+                    <Skeleton width="45%" height="1rem" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!friends.loading && filteredFriends.length === 0 && (
+              <div className={styles.empty}>
+                <UsersIcon size={32} />
+                <p>
+                  {search
+                    ? `No friends matched "${search}".`
+                    : "You don't have any friends added yet."}
+                </p>
+                {!search && (
+                  <Button size="sm" onClick={() => setTab('add')}>
+                    <UserPlusIcon size={16} />
+                    Add Friend
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {filteredFriends.length > 0 && (
+              <div className={styles.list}>
+                {filteredFriends.map((friendId) => {
+                  const prof = lookup(friendId)
+                  return (
+                    <div key={friendId} className={styles.row}>
+                      <Avatar
+                        name={prof?.display_name ?? '?'}
+                        src={prof?.avatar_url}
+                        color={prof?.accent_color}
+                        size="md"
+                        presence={tab === 'online' ? 'online' : 'offline'}
+                      />
+                      <div
+                        className={styles.identity}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => {
+                          setSelectedUserId(friendId)
+                          setProfileDialogOpen(true)
+                        }}
+                      >
+                        <div className={styles.name}>{prof?.display_name ?? 'Loading…'}</div>
+                        <div className={styles.meta}>@{prof?.handle ?? friendId.slice(0, 8)}</div>
                       </div>
-                      <div className={styles.meta}>
-                        {profile && `@${profile.handle} · `}
-                        asked {formatRelative(request.created_at)}
+
+                      <div className={styles.actions}>
+                        <Menu
+                          trigger={
+                            <button
+                              type="button"
+                              className={styles.actionButton}
+                              aria-label="More options"
+                            >
+                              <MoreIcon size={16} />
+                            </button>
+                          }
+                        >
+                          <MenuItem
+                            icon={<TrashIcon size={15} />}
+                            onClick={() => void removeFriend(friendId)}
+                          >
+                            Remove Friend
+                          </MenuItem>
+                          <MenuItem
+                            tone="danger"
+                            icon={<ShieldIcon size={15} />}
+                            onClick={() => void blockUser(friendId)}
+                          >
+                            Block User
+                          </MenuItem>
+                        </Menu>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => void respond(request.requester_id, true)}
-                    >
-                      <CheckIcon size={15} />
-                      Accept
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      iconOnly
-                      onClick={() => void respond(request.requester_id, false)}
-                      aria-label="Decline request"
-                    >
-                      <XIcon size={16} />
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            )}
           </section>
         )}
 
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>
-            All friends
-            {friends.data && <Badge>{friends.data.length}</Badge>}
-          </h2>
+        {/* PENDING REQUESTS */}
+        {tab === 'pending' && (
+          <section className={styles.section}>
+            <div className={styles.sectionTitle}>Pending Friend Requests — {pendingCount}</div>
 
-          {friends.loading && (
-            <div className={styles.list}>
-              {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className={styles.row}>
-                  <Skeleton circle width="2.375rem" height="2.375rem" />
-                  <Skeleton width="40%" height="0.9rem" />
-                </div>
-              ))}
-            </div>
-          )}
+            {requests.loading && (
+              <div className={styles.list}>
+                {Array.from({ length: 2 }, (_, i) => (
+                  <div key={i} className={styles.row}>
+                    <Skeleton circle width="2.4rem" height="2.4rem" />
+                    <Skeleton width="40%" height="1rem" />
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {friends.error && <Callout tone="danger">{friends.error}</Callout>}
+            {!requests.loading && pendingCount === 0 && (
+              <div className={styles.empty}>
+                <p>There are no pending friend requests waiting for you.</p>
+              </div>
+            )}
 
-          {!friends.loading && friends.data?.length === 0 && (
-            <div className={styles.empty}>
-              <span className={styles.emptyMark} aria-hidden>
-                <UsersIcon size={22} />
-              </span>
-              <p>
-                No friends yet. Add someone with their user id — you will find it on
-                their profile.
+            {requests.data && requests.data.length > 0 && (
+              <div className={styles.list}>
+                {requests.data.map((req) => {
+                  const prof = lookup(req.requester_id)
+                  return (
+                    <div key={req.requester_id} className={styles.row}>
+                      <Avatar
+                        name={prof?.display_name ?? '?'}
+                        src={prof?.avatar_url}
+                        color={prof?.accent_color}
+                        size="md"
+                      />
+                      <div className={styles.identity}>
+                        <div className={styles.name}>{prof?.display_name ?? 'Loading…'}</div>
+                        <div className={styles.meta}>
+                          Incoming Friend Request · asked {formatRelative(req.created_at)}
+                        </div>
+                      </div>
+
+                      <div className={styles.actions}>
+                        <Button
+                          size="sm"
+                          onClick={() => void respond(req.requester_id, true)}
+                        >
+                          <CheckIcon size={15} />
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void respond(req.requester_id, false)}
+                          aria-label="Decline request"
+                        >
+                          <XIcon size={15} />
+                          Decline
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* BLOCKED TAB */}
+        {tab === 'blocked' && (
+          <section className={styles.section}>
+            <div className={styles.sectionTitle}>Blocked Users — {blockedUsers.length}</div>
+
+            {blockedUsers.length === 0 && (
+              <div className={styles.empty}>
+                <BanIcon size={32} />
+                <p>You haven't blocked any users.</p>
+              </div>
+            )}
+
+            {blockedUsers.length > 0 && (
+              <div className={styles.list}>
+                {blockedUsers.map((blockedId) => {
+                  const prof = lookup(blockedId)
+                  return (
+                    <div key={blockedId} className={styles.row}>
+                      <Avatar
+                        name={prof?.display_name ?? '?'}
+                        src={prof?.avatar_url}
+                        color={prof?.accent_color}
+                        size="md"
+                      />
+                      <div className={styles.identity}>
+                        <div className={styles.name}>{prof?.display_name ?? blockedId}</div>
+                        <div className={styles.meta}>@{prof?.handle ?? blockedId.slice(0, 8)}</div>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void unblockUser(blockedId)}
+                      >
+                        Unblock
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ADD FRIEND TAB */}
+        {tab === 'add' && (
+          <div className={styles.addCard}>
+            <div className={styles.addHeader}>
+              <h2 className={styles.addTitle}>ADD FRIEND</h2>
+              <p className={styles.addDescription}>
+                You can add friends using their unique genzh User ID.
               </p>
             </div>
-          )}
 
-          {friends.data && friends.data.length > 0 && (
-            <div className={styles.list}>
-              {friends.data.map((friendId) => {
-                const profile = lookup(friendId)
-                return (
-                  <div key={friendId} className={styles.row}>
-                    <Avatar
-                      name={profile?.display_name ?? '?'}
-                      src={profile?.avatar_url}
-                      color={profile?.accent_color}
-                      size="md"
-                      presence="offline"
-                    />
-                    <div className={styles.identity}>
-                      <div className={styles.name}>
-                        {profile?.display_name ?? 'Loading…'}
-                      </div>
-                      {profile && <div className={styles.meta}>@{profile.handle}</div>}
-                    </div>
+            {error && <Callout tone="danger">{error}</Callout>}
 
-                    <Menu
-                      trigger={
-                        <Button variant="ghost" size="sm" iconOnly aria-label="Friend actions">
-                          <MoreIcon size={16} />
-                        </Button>
-                      }
-                    >
-                      <MenuItem
-                        icon={<TrashIcon size={15} />}
-                        onClick={() => void remove(friendId)}
-                      >
-                        Remove friend
-                      </MenuItem>
-                      <MenuItem
-                        tone="danger"
-                        icon={<ShieldIcon size={15} />}
-                        onClick={() => void block(friendId)}
-                      >
-                        Block
-                      </MenuItem>
-                    </Menu>
+            <form onSubmit={addFriendForm.handleSubmit(sendRequest)}>
+              <div className={styles.addInputWrap}>
+                <input
+                  type="text"
+                  className={styles.addInput}
+                  {...addFriendForm.register('userId', { required: true })}
+                  placeholder="Paste user ID (e.g. 6f1c7d2e-...)"
+                  spellCheck={false}
+                  required
+                />
+                <Button
+                  type="submit"
+                  disabled={busy}
+                  style={{ background: '#23a55a', color: '#ffffff' }}
+                >
+                  {busy && <Spinner />}
+                  Send Friend Request
+                </Button>
+              </div>
+            </form>
+
+            {user && (
+              <div className={styles.myIdCard}>
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                    Your User ID
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </section>
-
-        <form className={styles.form} onSubmit={sendRequest}>
-          <div className={styles.formHead}>
-            <span className={styles.formMark} aria-hidden>
-              <UserPlusIcon size={16} />
-            </span>
-            <div>
-              <div className={styles.formTitle}>Add a friend</div>
-              <p className={styles.formHint}>Paste their user id to send a request.</p>
-            </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '0.9rem', fontWeight: 600 }}>
+                    {user.id}
+                  </div>
+                </div>
+                <Button size="sm" variant="secondary" onClick={copyMyId}>
+                  <CopyIcon size={14} />
+                  Copy My ID
+                </Button>
+              </div>
+            )}
           </div>
-          <div className={styles.formRow}>
-            <Input
-              className={styles.grow}
-              label="User id"
-              value={userId}
-              onChange={(event) => setUserId(event.target.value)}
-              placeholder="6f1c…"
-              spellCheck={false}
-              required
-            />
-            <Button type="submit" disabled={busy || !userId.trim()}>
-              {busy && <Spinner />}
-              Send
-            </Button>
-          </div>
-          {user && (
-            <p className={styles.formHint}>
-              Yours is <code className={styles.code}>{user.id}</code>
-            </p>
-          )}
-        </form>
+        )}
       </div>
+
+      {selectedUserId && (
+        <ProfileDialog
+          open={profileDialogOpen}
+          onOpenChange={setProfileDialogOpen}
+          targetUserId={selectedUserId}
+        />
+      )}
     </div>
   )
 }

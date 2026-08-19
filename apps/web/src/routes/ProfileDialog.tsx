@@ -4,59 +4,199 @@ import { useState, type FormEvent } from 'react'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import {
+  CopyIcon,
+  ShieldIcon,
+  UserPlusIcon,
+} from '@/components/Icons'
 import { Input } from '@/components/Input'
+import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
-import { ApiError, auth as authApi, type CurrentUser } from '@/lib/api'
+import {
+  ApiError,
+  auth as authApi,
+  blocks as blocksApi,
+  friends as friendsApi,
+  users as usersApi,
+  type CurrentUser,
+  type Uuid,
+} from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { useAsync } from '@/lib/useAsync'
 import { primeProfile } from '@/lib/useProfiles'
 
 import styles from './ProfileDialog.module.css'
 
-/** Accent choices, as OKLCH so the swatches stay evenly bright across hues. */
 const ACCENTS = [
-  'oklch(0.62 0.19 275)',
-  'oklch(0.65 0.2 330)',
-  'oklch(0.64 0.17 20)',
-  'oklch(0.7 0.16 60)',
-  'oklch(0.7 0.15 145)',
-  'oklch(0.68 0.13 200)',
+  '#5865f2',
+  '#57f287',
+  '#fee75c',
+  '#eb459e',
+  '#ed4245',
+  '#3ba55d',
+  '#a855f7',
+  '#06b6d4',
 ]
 
-/**
- * Edit the signed-in user's profile.
- *
- * Everything previews live against the current values, because the one thing a
- * profile editor must answer — "what will other people see?" — is not
- * answerable from a form full of text fields.
- */
-export function ProfileDialog({
-  open,
-  onOpenChange,
-}: {
+interface ProfileDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-}) {
+  targetUserId?: Uuid
+}
+
+export function ProfileDialog({ open, onOpenChange, targetUserId }: ProfileDialogProps) {
   const { user } = useAuth()
+  const isViewingSelf = !targetUserId || targetUserId === user?.id
 
   return (
     <BaseDialog.Root open={open} onOpenChange={onOpenChange}>
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className={styles.backdrop} />
         <BaseDialog.Popup className={styles.popup}>
-          <BaseDialog.Title className={styles.title}>Edit profile</BaseDialog.Title>
-          <BaseDialog.Description className={styles.description}>
-            This is what everyone else in your communities sees.
-          </BaseDialog.Description>
-
-          {/* Keyed on `open` so each opening mounts a fresh form seeded from the
-              saved profile — cancelling an edit cannot leave it behind. */}
-          {user && (
-            <ProfileForm key={String(open)} user={user} onDone={() => onOpenChange(false)} />
+          {isViewingSelf ? (
+            <>
+              <BaseDialog.Title className={styles.title}>Edit profile</BaseDialog.Title>
+              <BaseDialog.Description className={styles.description}>
+                This is what everyone else in your communities sees.
+              </BaseDialog.Description>
+              {user && (
+                <ProfileForm key={String(open)} user={user} onDone={() => onOpenChange(false)} />
+              )}
+            </>
+          ) : (
+            <PublicProfileCard
+              key={targetUserId}
+              userId={targetUserId}
+              onClose={() => onOpenChange(false)}
+            />
           )}
         </BaseDialog.Popup>
       </BaseDialog.Portal>
     </BaseDialog.Root>
+  )
+}
+
+function PublicProfileCard({
+  userId,
+  onClose,
+}: {
+  userId: Uuid
+  onClose: () => void
+}) {
+  const { getToken } = useAuth()
+  const toast = useToast()
+
+  const publicProfile = useAsync(
+    async () => usersApi.get(await getToken(), userId),
+    [getToken, userId],
+  )
+
+  const [busy, setBusy] = useState(false)
+
+  async function handleSendFriendRequest() {
+    setBusy(true)
+    try {
+      await friendsApi.request(await getToken(), userId)
+      toast.success('Friend request sent!')
+    } catch (cause) {
+      toast.error('Could not send request', cause instanceof ApiError ? cause.message : undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleBlockUser() {
+    setBusy(true)
+    try {
+      await blocksApi.block(await getToken(), userId)
+      toast.success('User blocked', 'They can no longer message or interact with you.')
+      onClose()
+    } catch (cause) {
+      toast.error('Could not block user', cause instanceof ApiError ? cause.message : undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function copyId() {
+    void navigator.clipboard
+      ?.writeText(userId)
+      .then(() => toast.success('User ID copied!'))
+      .catch(() => toast.error('Could not copy User ID'))
+  }
+
+  if (publicProfile.loading) {
+    return (
+      <div style={{ padding: '1rem' }}>
+        <Skeleton height="70px" />
+        <div style={{ marginTop: '-1.5rem' }}>
+          <Skeleton circle width="3rem" height="3rem" />
+        </div>
+        <div style={{ marginTop: '1rem' }}>
+          <Skeleton width="50%" height="1.2rem" />
+        </div>
+      </div>
+    )
+  }
+
+  const profile = publicProfile.data
+
+  return (
+    <div>
+      <div
+        className={styles.preview}
+        style={{ '--preview-accent': profile?.accent_color ?? '#5865f2' } as React.CSSProperties}
+      >
+        <div className={styles.previewBanner} />
+        <Avatar
+          name={profile?.display_name ?? '?'}
+          src={profile?.avatar_url}
+          color={profile?.accent_color}
+          size="xl"
+          presence="online"
+          className={styles.previewAvatar}
+        />
+        <div className={styles.previewText}>
+          <div className={styles.previewName}>{profile?.display_name ?? 'User Profile'}</div>
+          <div className={styles.previewHandle}>@{profile?.handle}</div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+            {userId}
+          </span>
+          <Button size="sm" variant="secondary" onClick={copyId}>
+            <CopyIcon size={14} />
+            Copy ID
+          </Button>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <Button
+            size="sm"
+            onClick={() => void handleSendFriendRequest()}
+            disabled={busy}
+            style={{ flex: 1 }}
+          >
+            {busy && <Spinner />}
+            <UserPlusIcon size={15} />
+            Add Friend
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => void handleBlockUser()}
+            disabled={busy}
+          >
+            <ShieldIcon size={15} />
+            Block
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -83,8 +223,6 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
         ...(accent ? { accent_color: accent } : {}),
       })
       applyProfile(profile)
-      // Keep the shared author cache in step, so your own messages in the
-      // transcript pick the change up without a reload.
       primeProfile({
         id: user.id,
         handle: user.handle,
@@ -104,7 +242,6 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
 
   return (
     <>
-      {/* The preview is the point of the dialog, so it leads. */}
       <div
         className={styles.preview}
         style={{ '--preview-accent': accent ?? undefined } as React.CSSProperties}
@@ -162,8 +299,6 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
                 type="button"
                 className={styles.swatch}
                 style={{ background: value }}
-                // The colour is the whole content, so the label has to carry
-                // the meaning instead.
                 aria-label={`Accent ${index + 1}`}
                 aria-pressed={accent === value}
                 data-selected={accent === value || undefined}

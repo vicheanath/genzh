@@ -46,13 +46,10 @@ import {
 } from '@/lib/time'
 import { useProfiles } from '@/lib/useProfiles'
 
+import { ProfileDialog } from './ProfileDialog'
 import styles from './Chat.module.css'
 
-/** How often chat history is re-fetched.
- *
- *  Messages have no realtime transport yet — the signalling socket carries
- *  media events only — so this polls. It is the one place in the app that does,
- *  and the interval is deliberately visible rather than buried. */
+/** How often chat history is re-fetched. */
 const MESSAGE_POLL_MS = 5000
 
 /** Offered in the hover bar without opening the picker. */
@@ -88,6 +85,9 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
 
   const [atBottom, setAtBottom] = useState(true)
   const [unseen, setUnseen] = useState(0)
+
+  const [profileUserId, setProfileUserId] = useState<Uuid | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
 
   const listRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
@@ -373,6 +373,10 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
                 onToggleReaction={toggleReaction}
                 onEdit={editMessage}
                 onDelete={deleteMessage}
+                onOpenProfile={(id) => {
+                  setProfileUserId(id)
+                  setProfileOpen(true)
+                }}
               />
             </div>
           )
@@ -404,6 +408,14 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
         <Composer roomName={room.name} onSend={send} />
       ) : (
         <p className={styles.readOnly}>You do not have permission to post in this room.</p>
+      )}
+
+      {profileUserId && (
+        <ProfileDialog
+          open={profileOpen}
+          onOpenChange={setProfileOpen}
+          targetUserId={profileUserId}
+        />
       )}
     </>
   )
@@ -497,6 +509,7 @@ interface MessageRowProps {
   onToggleReaction: (id: Uuid, emoji: string, active: boolean) => void
   onEdit: (id: Uuid, content: string) => void
   onDelete: (id: Uuid) => void
+  onOpenProfile?: (id: Uuid) => void
 }
 
 function MessageRow({
@@ -509,6 +522,7 @@ function MessageRow({
   onToggleReaction,
   onEdit,
   onDelete,
+  onOpenProfile,
 }: MessageRowProps) {
   const toast = useToast()
   const [editing, setEditing] = useState(false)
@@ -531,19 +545,30 @@ function MessageRow({
           {formatClock(message.created_at)}
         </time>
       ) : (
-        <Avatar
-          name={name}
-          src={author?.avatar_url}
-          color={author?.accent_color}
-          size="md"
-          className={styles.messageAvatar}
-        />
+        <div
+          style={{ cursor: 'pointer' }}
+          onClick={() => onOpenProfile?.(message.author_id)}
+        >
+          <Avatar
+            name={name}
+            src={author?.avatar_url}
+            color={author?.accent_color}
+            size="md"
+            className={styles.messageAvatar}
+          />
+        </div>
       )}
 
       <div className={styles.messageBody}>
         {!grouped && (
           <div className={styles.messageHeader}>
-            <span className={styles.author}>{name}</span>
+            <span
+              className={styles.author}
+              style={{ cursor: 'pointer' }}
+              onClick={() => onOpenProfile?.(message.author_id)}
+            >
+              {name}
+            </span>
             {isOwn && <span className={styles.youTag}>you</span>}
             <time
               className={styles.time}
