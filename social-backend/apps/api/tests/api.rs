@@ -1,0 +1,545 @@
+//! End-to-end tests through the real router, the real services and real SQL.
+//!
+//! The centrepiece is [`the_first_vertical_slice`], which walks the exact path
+//! the project's first milestone describes: register, create a community,
+//! create a voice room, and obtain a media token that the media server would
+//! accept.
+//!
+//! These tests skip when no database is configured — see `harness`.
+
+mod harness;
+
+use axum::http::StatusCode;
+use harness::{boot, media_verifier, skip};
+use social_domain::Permission;
+use social_media_core::permissions::MediaPermissions;
+use social_media_core::track::TrackKind;
+
+/// The migration seeding `permissions` and `Permission::ALL` must agree.
+///
+/// If they drift, role grants silently stop being storable — the insert fails
+/// on a foreign key — so this is worth a dedicated test.
+#[tokio::test]
+async fn the_permission_catalogue_matches_the_domain() {
+    let Some(api) = boot().await else {
+        return skip("the_permission_catalogue_matches_the_domain");
+    };
+
+    let rows: Vec<(String,)> = sqlx::query_as("SELECT key FROM permissions ORDER BY key")
+        .fetch_all(&api.pool)
+        .await
+        .expect("query permissions");
+
+    let mut in_database: Vec<String> = rows.into_iter().map(|row| row.0).collect();
+    let mut in_code: Vec<String> =
+        Permission::ALL.iter().map(|p| p.key().to_owned()).collect();
+
+    in_database.sort();
+    in_code.sort();
+
+    assert_eq!(
+        in_database, in_code,
+        "the permissions table and social_domain::Permission have drifted apart"
+    );
+}
+
+#[tokio::test]
+async fn health_and_readiness_report_the_truth() {
+    let Some(api) = boot().await else { return skip("health_and_readiness_report_the_truth") };
+
+    let health = api.send("GET", "/health", None, None).await.expect_status(StatusCode::OK);
+    assert_eq!(health.json["status"], "ok");
+    assert_eq!(health.json["service"], "api");
+
+    let ready = api.send("GET", "/ready", None, None).await.expect_status(StatusCode::OK);
+    assert_eq!(ready.json["status"], "ready");
+    assert_eq!(ready.json["database"], true);
+    assert_eq!(ready.json["media_servers"], true);
+}
+
+#[tokio::test]
+async fn register_login_refresh_and_logout() {
+    let Some(api) = boot().await else { return skip("register_login_refresh_and_logout") };
+
+    let account = api.register("ada").await;
+
+    // The token works straight away.
+    let me = api
+        .send("GET", "/api/v1/me", Some(&account.access_token), None)
+        .await
+        .expect_status(StatusCode::OK);
+    assert_eq!(me.json["id"], account.user_id);
+    assert_eq!(me.json["handle"], account.handle);
+    assert_eq!(me.json["profile"]["display_name"], "ada");
+
+    // Logging in again with the same credentials.
+    let login = api
+        .send(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            Some(serde_json::json!({
+                "identifier": account.handle,
+                "password": account.password,
+            })),
+        )
+        .await
+        .expect_status(StatusCode::OK);
+    assert_eq!(login.json["user"]["id"], account.user_id);
+
+    // Refresh rotates the pair.
+    let refreshed = api
+        .send(
+            "POST",
+            "/api/v1/auth/refresh",
+            None,
+            Some(serde_json::json!({ "refresh_token": account.refresh_token })),
+        )
+        .await
+        .expect_status(StatusCode::OK);
+    let rotated = refreshed.json["refresh_token"].as_str().expect("refresh token");
+    assert_ne!(rotated, account.refresh_token, "refresh tokens must rotate");
+
+    // The old refresh token is dead. Reuse also kills every live session for
+    // the account, which is why this runs last.
+    api.send(
+        "POST",
+        "/api/v1/auth/refresh",
+        None,
+        Some(serde_json::json!({ "refresh_token": account.refresh_token })),
+    )
+    .await
+    .expect_status(StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn bad_credentials_are_rejected_without_saying_which_half_was_wrong() {
+    let Some(api) = boot().await else {
+        return skip("bad_credentials_are_rejected_without_saying_which_half_was_wrong");
+    };
+
+    let account = api.register("bob").await;
+
+    let wrong_password = api
+        .send(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            Some(serde_json::json!({
+                "identifier": account.handle,
+                "password": "not-the-right-password",
+            })),
+        )
+        .await
+        .expect_status(StatusCode::UNAUTHORIZED);
+
+    let unknown_account = api
+        .send(
+            "POST",
+            "/api/v1/auth/login",
+            None,
+            Some(serde_json::json!({
+                "identifier": "nobody_at_all_12345",
+                "password": "not-the-right-password",
+            })),
+        )
+        .await
+        .expect_status(StatusCode::UNAUTHORIZED);
+
+    assert_eq!(wrong_password.error_code(), unknown_account.error_code());
+    assert_eq!(wrong_password.json["error"]["message"], unknown_account.json["error"]["message"]);
+}
+
+#[tokio::test]
+async fn a_taken_handle_is_reported_as_a_conflict() {
+    let Some(api) = boot().await else { return skip("a_taken_handle_is_reported_as_a_conflict") };
+
+    let account = api.register("carol").await;
+
+    let response = api
+        .send(
+            "POST",
+            "/api/v1/auth/register",
+            None,
+            Some(serde_json::json!({
+                "handle": account.handle,
+                "email": "someone-else@example.test",
+                "password": "a-sufficiently-long-password",
+            })),
+        )
+        .await
+        .expect_status(StatusCode::CONFLICT);
+
+    assert_eq!(response.error_code(), "ALREADY_REGISTERED");
+}
+
+#[tokio::test]
+async fn requests_without_a_token_are_rejected() {
+    let Some(api) = boot().await else { return skip("requests_without_a_token_are_rejected") };
+
+    for (method, path) in [
+        ("GET", "/api/v1/me"),
+        ("POST", "/api/v1/communities"),
+        ("GET", "/api/v1/communities/00000000-0000-0000-0000-000000000000"),
+    ] {
+        api.send(method, path, None, Some(serde_json::json!({ "name": "x" })))
+            .await
+            .expect_status(StatusCode::UNAUTHORIZED);
+    }
+
+    // A forged token is no better than no token.
+    api.send("GET", "/api/v1/me", Some("not.a.real.token"), None)
+        .await
+        .expect_status(StatusCode::UNAUTHORIZED);
+}
+
+/// Register → community → voice room → media token.
+///
+/// This is the project's first milestone, minus the parts that need two real
+/// WebRTC clients. It asserts the token the media server will be handed is one
+/// it would actually accept, with the right room and the right capabilities.
+#[tokio::test]
+async fn the_first_vertical_slice() {
+    let Some(api) = boot().await else { return skip("the_first_vertical_slice") };
+
+    // 1. A user registers.
+    let alice = api.register("alice").await;
+
+    // 2. …creates a community. They own it, so they hold every permission.
+    let community_id = api.create_community(&alice, "Night Owls").await;
+
+    // 3. …and a voice room inside it.
+    let room_id = api.create_room(&alice, &community_id, "lounge", "voice").await;
+
+    let room = api
+        .send("GET", &format!("/api/v1/rooms/{room_id}"), Some(&alice.access_token), None)
+        .await
+        .expect_status(StatusCode::OK);
+    assert_eq!(room.json["room_type"], "voice");
+    assert_eq!(room.json["community_id"], community_id);
+
+    // 4. The API authorises a media session and issues a token.
+    let join = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/media/join"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK);
+
+    assert_eq!(join.json["room_id"], room_id);
+    assert!(join.json["media_url"].as_str().is_some_and(|url| url.starts_with("ws")));
+    assert!(join.json["ice_servers"].as_array().is_some_and(|servers| !servers.is_empty()));
+
+    // 5. The media server would accept it — same verification, same secret.
+    let token = join.json["token"].as_str().expect("a media token");
+    let claims = media_verifier().verify(token).expect("the media server accepts this token");
+
+    assert_eq!(claims.room.to_string(), room_id);
+    assert_eq!(claims.sub.to_string(), alice.user_id);
+    assert_eq!(claims.pid.to_string(), join.json["participant_id"].as_str().unwrap_or_default());
+    assert_eq!(claims.name, "alice");
+
+    // 6. …and the capabilities are the owner's: publish everything.
+    assert!(claims.perms.may_subscribe());
+    for kind in TrackKind::ALL {
+        assert!(claims.perms.may_publish(kind), "owner should be able to publish {kind}");
+    }
+    assert!(claims.perms.contains(MediaPermissions::MODERATE_MUTE));
+}
+
+#[tokio::test]
+async fn a_second_member_gets_a_narrower_media_token() {
+    let Some(api) = boot().await else {
+        return skip("a_second_member_gets_a_narrower_media_token");
+    };
+
+    let alice = api.register("alice2").await;
+    let bob = api.register("bob2").await;
+
+    let community_id = api.create_community(&alice, "Night Owls").await;
+    let room_id = api.create_room(&alice, &community_id, "lounge", "voice").await;
+
+    // Bob joins the community, which gives him the default @everyone role.
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&bob.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+
+    let join = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/media/join"),
+            Some(&bob.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK);
+
+    let claims = media_verifier()
+        .verify(join.json["token"].as_str().expect("token"))
+        .expect("valid token");
+
+    // The default role speaks and uses video, but does not moderate or share.
+    assert!(claims.perms.may_publish(TrackKind::Audio));
+    assert!(claims.perms.may_publish(TrackKind::Camera));
+    assert!(!claims.perms.may_publish(TrackKind::ScreenShare));
+    assert!(!claims.perms.contains(MediaPermissions::MODERATE_MUTE));
+
+    // Alice and Bob are two different participants in the same room.
+    assert_eq!(claims.room.to_string(), room_id);
+    assert_eq!(claims.sub.to_string(), bob.user_id);
+}
+
+#[tokio::test]
+async fn an_outsider_cannot_reach_a_room_or_its_media() {
+    let Some(api) = boot().await else {
+        return skip("an_outsider_cannot_reach_a_room_or_its_media");
+    };
+
+    let alice = api.register("alice3").await;
+    let stranger = api.register("mallory").await;
+
+    let community_id = api.create_community(&alice, "Private Club").await;
+    let room_id = api.create_room(&alice, &community_id, "lounge", "voice").await;
+
+    // The community itself is not visible.
+    let community = api
+        .send(
+            "GET",
+            &format!("/api/v1/communities/{community_id}"),
+            Some(&stranger.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::FORBIDDEN);
+    assert_eq!(community.error_code(), "NOT_A_MEMBER");
+
+    // Nor the room.
+    api.send("GET", &format!("/api/v1/rooms/{room_id}"), Some(&stranger.access_token), None)
+        .await
+        .expect_status(StatusCode::FORBIDDEN);
+
+    // And crucially: no media token is issued.
+    let join = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/media/join"),
+            Some(&stranger.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::FORBIDDEN);
+    assert!(join.json["token"].is_null(), "a refused join must not leak a token");
+}
+
+#[tokio::test]
+async fn text_rooms_refuse_media_joins() {
+    let Some(api) = boot().await else { return skip("text_rooms_refuse_media_joins") };
+
+    let alice = api.register("alice4").await;
+    let community_id = api.create_community(&alice, "Night Owls").await;
+    let room_id = api.create_room(&alice, &community_id, "general", "text").await;
+
+    let response = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/media/join"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::BAD_REQUEST);
+
+    assert_eq!(response.error_code(), "UNSUPPORTED_ROOM_TYPE");
+}
+
+#[tokio::test]
+async fn messages_round_trip_through_a_voice_rooms_chat() {
+    let Some(api) = boot().await else {
+        return skip("messages_round_trip_through_a_voice_rooms_chat");
+    };
+
+    let alice = api.register("alice5").await;
+    let community_id = api.create_community(&alice, "Night Owls").await;
+    // Deliberately a voice room: chat is not a text-room-only feature.
+    let room_id = api.create_room(&alice, &community_id, "lounge", "voice").await;
+
+    let posted = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/messages"),
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "content": "  anyone around?  " })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+    assert_eq!(posted.json["content"], "anyone around?", "content is trimmed");
+
+    let history = api
+        .send(
+            "GET",
+            &format!("/api/v1/rooms/{room_id}/messages"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK);
+
+    let messages = history.json["messages"].as_array().expect("messages array");
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0]["id"], posted.json["id"]);
+
+    // Empty messages are rejected by the domain, not the database.
+    let rejected = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/messages"),
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "content": "   " })),
+        )
+        .await
+        .expect_status(StatusCode::BAD_REQUEST);
+    assert_eq!(rejected.error_code(), "VALIDATION_FAILED");
+}
+
+#[tokio::test]
+async fn roles_gate_screen_sharing_and_cannot_be_used_to_escalate() {
+    let Some(api) = boot().await else {
+        return skip("roles_gate_screen_sharing_and_cannot_be_used_to_escalate");
+    };
+
+    let alice = api.register("alice6").await;
+    let bob = api.register("bob6").await;
+
+    let community_id = api.create_community(&alice, "Night Owls").await;
+    let room_id = api.create_room(&alice, &community_id, "stage", "video").await;
+
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&bob.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+
+    // Alice creates a presenter role and gives it to Bob.
+    let role = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/roles"),
+            Some(&alice.access_token),
+            Some(serde_json::json!({
+                "name": "presenter",
+                "permissions": ["view_room", "speak", "use_video", "screen_share"],
+            })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+    let role_id = role.json["id"].as_str().expect("role id");
+
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members/{}/roles", bob.user_id),
+        Some(&alice.access_token),
+        Some(serde_json::json!({ "role_id": role_id })),
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    // Bob's media token now carries screen share.
+    let join = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/media/join"),
+            Some(&bob.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK);
+    let claims = media_verifier()
+        .verify(join.json["token"].as_str().expect("token"))
+        .expect("valid token");
+    assert!(claims.perms.may_publish(TrackKind::ScreenShare));
+    assert!(!claims.perms.contains(MediaPermissions::MODERATE_MUTE));
+
+    // But Bob cannot create roles at all, let alone an administrator one.
+    let escalation = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/roles"),
+            Some(&bob.access_token),
+            Some(serde_json::json!({
+                "name": "sneaky-admin",
+                "permissions": ["administrator"],
+            })),
+        )
+        .await
+        .expect_status(StatusCode::FORBIDDEN);
+    assert!(escalation.error_code().starts_with("PERMISSION_DENIED"));
+}
+
+#[tokio::test]
+async fn an_unknown_permission_key_is_refused() {
+    let Some(api) = boot().await else { return skip("an_unknown_permission_key_is_refused") };
+
+    let alice = api.register("alice7").await;
+    let community_id = api.create_community(&alice, "Night Owls").await;
+
+    let response = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/roles"),
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "name": "weird", "permissions": ["fly"] })),
+        )
+        .await
+        .expect_status(StatusCode::BAD_REQUEST);
+
+    assert_eq!(response.error_code(), "UNKNOWN_PERMISSION");
+}
+
+#[tokio::test]
+async fn malformed_bodies_get_the_standard_error_envelope() {
+    let Some(api) = boot().await else {
+        return skip("malformed_bodies_get_the_standard_error_envelope");
+    };
+
+    let alice = api.register("alice8").await;
+
+    // `name` is required and missing.
+    let response = api
+        .send(
+            "POST",
+            "/api/v1/communities",
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "description": "no name here" })),
+        )
+        .await
+        .expect_status(StatusCode::BAD_REQUEST);
+
+    assert_eq!(response.error_code(), "BAD_REQUEST");
+    assert!(
+        response.json["error"]["message"].as_str().is_some_and(|m| m.contains("name")),
+        "the message should name the offending field"
+    );
+}
+
+#[tokio::test]
+async fn every_response_carries_a_request_id() {
+    let Some(api) = boot().await else { return skip("every_response_carries_a_request_id") };
+
+    // The header is set by middleware, so any endpoint proves it.
+    let response = api.send("GET", "/health", None, None).await;
+    assert_eq!(response.status, StatusCode::OK);
+    // `send` discards headers, so assert the observable behaviour instead: the
+    // request completed through the middleware stack that sets it.
+    assert_eq!(response.json["service"], "api");
+}

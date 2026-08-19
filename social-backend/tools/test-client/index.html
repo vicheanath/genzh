@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice room test client</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 1.5rem;
+         max-width: 60rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  p.lede { margin: 0 0 1.25rem; opacity: .75; }
+  fieldset { border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+             border-radius: .5rem; margin: 0 0 1rem; padding: .75rem 1rem 1rem; }
+  legend { font-weight: 600; padding: 0 .35rem; }
+  label { display: inline-block; min-width: 8rem; }
+  input { font: inherit; padding: .3rem .45rem; border-radius: .3rem;
+          border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+          background: transparent; color: inherit; min-width: 18rem; }
+  button { font: inherit; padding: .4rem .9rem; border-radius: .4rem; cursor: pointer;
+           border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+           background: color-mix(in srgb, currentColor 8%, transparent); color: inherit; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { margin: .35rem 0; }
+  .pill { display: inline-block; padding: .1rem .5rem; border-radius: 1rem; font-size: .8rem;
+          border: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
+  #log { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;
+         background: color-mix(in srgb, currentColor 6%, transparent); border-radius: .5rem;
+         padding: .75rem; max-height: 22rem; overflow: auto; }
+  #peers > div { padding: .35rem 0; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  .ok { color: #158a4a; } .bad { color: #c0392b; } .dim { opacity: .6; }
+</style>
+</head>
+<body>
+<h1>Voice room test client</h1>
+<p class="lede">
+  Drives the whole stack: registers an account, creates a community and a voice room,
+  asks the API for a media token, then joins the SFU and publishes audio.
+  Open it in two tabs to hear one tab in the other.
+</p>
+
+<fieldset>
+  <legend>Connection</legend>
+  <div class="row"><label for="api">API base</label>
+    <input id="api" value="http://127.0.0.1:8080"></div>
+  <div class="row"><label for="handle">Handle</label>
+    <input id="handle" placeholder="auto-generated if blank"></div>
+  <div class="row"><label for="room">Room</label>
+    <input id="room" placeholder="blank = create one; else paste community-id/room-id"></div>
+  <div class="row"><label for="source">Audio source</label>
+    <select id="source" style="font:inherit;padding:.3rem">
+      <option value="tone">440 Hz tone (no microphone permission needed)</option>
+      <option value="mic">Microphone</option>
+    </select></div>
+  <div class="row" style="margin-top:.75rem">
+    <button id="go">Join and publish</button>
+    <button id="mute" disabled>Mute</button>
+    <button id="leave" disabled>Leave</button>
+    <span id="status" class="pill dim">idle</span>
+  </div>
+  <div class="row dim" id="ids"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Participants</legend>
+  <div id="peers" class="dim">nobody yet</div>
+</fieldset>
+
+<fieldset>
+  <legend>Log</legend>
+  <div id="log"></div>
+</fieldset>
+
+<script type="module">
+// ─────────────────────────────────────────────────────────────────────────────
+// Two peer connections, one socket.
+//
+//   publisher PC   this tab offers  → our microphone goes up
+//   subscriber PC  the server offers → everyone else's audio comes down
+//
+// One offerer per connection means there is never a glare condition, which is
+// why the protocol tags every SDP and candidate with a `target`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+const logEl = $('log');
+
+function log(message, cls = '') {
+  const at = new Date().toISOString().slice(11, 23);
+  logEl.insertAdjacentHTML('beforeend',
+    `<span class="${cls}">${at}  ${message}</span>\n`);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text, cls = 'dim') {
+  $('status').textContent = text;
+  $('status').className = `pill ${cls}`;
+}
+
+const session = {
+  socket: null, publisher: null, subscriber: null,
+  localTrack: null, audioContext: null, participants: new Map(), muted: false,
+};
+
+async function api(base, path, { token, body, method = 'POST' } = {}) {
+  const response = await fetch(base + path, {
+    method,
+    headers: {
+      ...(body ? { 'content-type': 'application/json' } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  const json = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(`${path} → ${response.status} ${json?.error?.code ?? ''} ${json?.error?.message ?? ''}`);
+  }
+  return json;
+}
+
+/// A 440 Hz tone as a real MediaStreamTrack.
+///
+/// This is what lets the test run headless: the track is genuine Opus-encodable
+/// audio, but no microphone — and therefore no permission prompt — is involved.
+function toneTrack() {
+  const context = new AudioContext();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const destination = context.createMediaStreamDestination();
+  oscillator.frequency.value = 440;
+  gain.gain.value = 0.25;
+  oscillator.connect(gain).connect(destination);
+  oscillator.start();
+  session.audioContext = context;
+  return destination.stream.getAudioTracks()[0];
+}
+
+async function localAudio() {
+  if ($('source').value === 'mic') {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return stream.getAudioTracks()[0];
+  }
+  return toneTrack();
+}
+
+function send(message) {
+  if (session.socket?.readyState === WebSocket.OPEN) {
+    session.socket.send(JSON.stringify(message));
+  }
+}
+
+function renderPeers() {
+  const peers = $('peers');
+  if (session.participants.size === 0) {
+    peers.className = 'dim';
+    peers.textContent = 'nobody else here yet';
+    return;
+  }
+  peers.className = '';
+  peers.innerHTML = [...session.participants.values()].map((p) =>
+    `<div><strong>${p.name}</strong> <span class="dim">${p.id.slice(0, 8)}</span>
+     ${p.speaking ? '<span class="pill ok">speaking</span>' : ''}
+     ${p.muted ? '<span class="pill dim">muted</span>' : ''}</div>`).join('');
+}
+
+$('go').addEventListener('click', async () => {
+  $('go').disabled = true;
+  try {
+    await run();
+  } catch (error) {
+    log(`✗ ${error.message}`, 'bad');
+    setStatus('failed', 'bad');
+    $('go').disabled = false;
+  }
+});
+
+async function run() {
+  const base = $('api').value.replace(/\/$/, '');
+  const handle = $('handle').value.trim() ||
+    `tester_${Math.random().toString(36).slice(2, 10)}`;
+  const password = 'a-sufficiently-long-password';
+
+  setStatus('registering', 'dim');
+  let auth;
+  try {
+    auth = await api(base, '/api/v1/auth/register', {
+      body: { handle, email: `${handle}@example.test`, password, display_name: handle },
+    });
+    log(`registered ${handle}`);
+  } catch {
+    auth = await api(base, '/api/v1/auth/login', { body: { identifier: handle, password } });
+    log(`logged in as ${handle}`);
+  }
+  const token = auth.access_token;
+
+  // Either join the room that was pasted in, or create a fresh one.
+  let roomId = $('room').value.trim();
+  if (!roomId) {
+    const community = await api(base, '/api/v1/communities', {
+      token, body: { name: `${handle}'s hangout` },
+    });
+    const room = await api(base, `/api/v1/communities/${community.id}/rooms`, {
+      token, body: { name: 'lounge', room_type: 'voice' },
+    });
+    roomId = room.id;
+    log(`created community ${community.id.slice(0, 8)} and voice room ${roomId.slice(0, 8)}`);
+    log(`→ paste this into the other tab: ${community.id}/${roomId}`, 'ok');
+  } else if (roomId.includes('/')) {
+    // `community-id/room-id`. Joining someone else's room means becoming a
+    // member of their community first — the API lets an account add *itself*,
+    // which is what an invite link amounts to.
+    const [communityId, id] = roomId.split('/');
+    roomId = id;
+    await api(base, `/api/v1/communities/${communityId}/members`, { token, body: {} })
+      .then(() => log('joined the community'))
+      .catch((error) => log(`already a member (${error.message.slice(0, 60)})`, 'dim'));
+  }
+
+  setStatus('authorising media', 'dim');
+  const media = await api(base, `/api/v1/rooms/${roomId}/media/join`, { token });
+  log(`media token issued for participant ${media.participant_id.slice(0, 8)}`);
+  log(`media server: ${media.media_url}`);
+  $('ids').textContent =
+    `room ${roomId} · participant ${media.participant_id} · token expires ${media.expires_at}`;
+
+  session.localTrack = await localAudio();
+  log(`local audio track ready (${$('source').value})`);
+
+  await connect(media, roomId);
+}
+
+async function connect(media, roomId) {
+  setStatus('connecting', 'dim');
+  const iceServers = (media.ice_servers ?? []).map((s) => ({
+    urls: s.urls, username: s.username, credential: s.credential,
+  }));
+
+  const socket = new WebSocket(media.media_url);
+  session.socket = socket;
+
+  socket.addEventListener('open', () => {
+    log('signalling socket open');
+    send({ type: 'join', room_id: roomId, token: media.token });
+  });
+
+  socket.addEventListener('close', (event) => {
+    log(`socket closed: ${event.code} ${event.reason}`, event.code === 1000 ? 'dim' : 'bad');
+    setStatus('disconnected', 'dim');
+    $('mute').disabled = $('leave').disabled = true;
+  });
+
+  socket.addEventListener('message', async (event) => {
+    const message = JSON.parse(event.data);
+    try {
+      await handle(message, iceServers);
+    } catch (error) {
+      log(`✗ handling ${message.type}: ${error.message}`, 'bad');
+    }
+  });
+}
+
+async function handle(message, iceServers) {
+  switch (message.type) {
+    case 'joined': {
+      log(`joined (protocol v${message.protocol_version}); ${message.participants.length} already here`, 'ok');
+      for (const p of message.participants) {
+        session.participants.set(p.participant_id,
+          { id: p.participant_id, name: p.display_name, muted: p.audio_muted, speaking: false });
+      }
+      renderPeers();
+      await negotiate(iceServers);
+      setStatus('connected', 'ok');
+      $('mute').disabled = $('leave').disabled = false;
+      break;
+    }
+
+    case 'answer':
+      // Our publisher offer was accepted.
+      await session.publisher.setRemoteDescription({ type: 'answer', sdp: message.sdp });
+      log('publisher negotiated — audio is going up');
+      break;
+
+    case 'offer': {
+      // The server has tracks for us. It offers; we answer.
+      await session.subscriber.setRemoteDescription({ type: 'offer', sdp: message.sdp });
+      const answer = await session.subscriber.createAnswer();
+      await session.subscriber.setLocalDescription(answer);
+      send({ type: 'answer', target: 'subscriber', sdp: answer.sdp });
+      log('subscriber renegotiated — audio is coming down');
+      break;
+    }
+
+    case 'ice_candidate': {
+      const pc = message.target === 'publisher' ? session.publisher : session.subscriber;
+      await pc.addIceCandidate({
+        candidate: message.candidate,
+        sdpMid: message.sdp_mid ?? null,
+        sdpMLineIndex: message.sdp_mline_index ?? null,
+      });
+      break;
+    }
+
+    case 'event':
+      handleRoomEvent(message);
+      break;
+
+    case 'error':
+      log(`server error ${message.code}: ${message.message}`, 'bad');
+      break;
+
+    case 'pong':
+      break;
+
+    default:
+      log(`unhandled message: ${message.type}`, 'dim');
+  }
+}
+
+function handleRoomEvent(message) {
+  const id = message.participant_id ?? message.participant?.participant_id;
+  switch (message.event) {
+    case 'participant_joined':
+      session.participants.set(id, {
+        id, name: message.participant.display_name,
+        muted: message.participant.audio_muted, speaking: false,
+      });
+      log(`${message.participant.display_name} joined`, 'ok');
+      break;
+    case 'participant_left':
+      log(`${session.participants.get(id)?.name ?? id.slice(0, 8)} left`, 'dim');
+      session.participants.delete(id);
+      break;
+    case 'track_published':
+      log(`track published: ${message.track.kind} by ${message.track.participant_id.slice(0, 8)}`);
+      // Audio is auto-subscribed by the server; video and screen share are not.
+      if (message.track.kind !== 'audio') {
+        send({ type: 'subscribe', participant_id: message.track.participant_id,
+               track_id: message.track.track_id });
+      }
+      break;
+    case 'speaking_started':
+    case 'speaking_stopped': {
+      const peer = session.participants.get(id);
+      if (peer) { peer.speaking = message.event === 'speaking_started'; }
+      break;
+    }
+    case 'microphone_muted':
+    case 'microphone_unmuted': {
+      const peer = session.participants.get(id);
+      if (peer) { peer.muted = message.event === 'microphone_muted'; }
+      break;
+    }
+    default:
+      break;
+  }
+  renderPeers();
+}
+
+async function negotiate(iceServers) {
+  // ---- subscriber: created first so the server's offer always lands ----
+  session.subscriber = new RTCPeerConnection({ iceServers });
+  session.subscriber.addEventListener('icecandidate', (event) => {
+    if (event.candidate) {
+      send({ type: 'ice_candidate', target: 'subscriber',
+             candidate: event.candidate.candidate,
+             sdp_mid: event.candidate.sdpMid,
+             sdp_mline_index: event.candidate.sdpMLineIndex });
+    }
+  });
+  session.subscriber.addEventListener('track', (event) => {
+    log(`◀ receiving remote ${event.track.kind}`, 'ok');
+    const audio = document.createElement('audio');
+    audio.autoplay = true;
+    audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+    audio.dataset.trackId = event.track.id;
+    document.body.appendChild(audio);
+  });
+  session.subscriber.addEventListener('connectionstatechange', () => {
+    log(`subscriber connection: ${session.subscriber.connectionState}`, 'dim');
+  });
+
+  // ---- publisher: we offer ----
+  session.publisher = new RTCPeerConnection({ iceServers });
+  session.publisher.addEventListener('icecandidate', (event) => {
+    if (event.candidate) {
+      send({ type: 'ice_candidate', target: 'publisher',
+             candidate: event.candidate.candidate,
+             sdp_mid: event.candidate.sdpMid,
+             sdp_mline_index: event.candidate.sdpMLineIndex });
+    }
+  });
+  session.publisher.addEventListener('connectionstatechange', () => {
+    log(`publisher connection: ${session.publisher.connectionState}`,
+        session.publisher.connectionState === 'connected' ? 'ok' : 'dim');
+  });
+
+  // SDP cannot say whether a video track is a camera or a screen capture, and
+  // for audio it cannot say which capture device it is. The server correlates
+  // this declaration with the msid in the offer.
+  send({ type: 'publish_intent', kind: 'audio', client_track_id: session.localTrack.id });
+
+  session.publisher.addTrack(session.localTrack, new MediaStream([session.localTrack]));
+  const offer = await session.publisher.createOffer();
+  await session.publisher.setLocalDescription(offer);
+  send({ type: 'offer', target: 'publisher', sdp: offer.sdp });
+
+  // Joining muted is the default; announce that we are live.
+  send({ type: 'mute', muted: false });
+}
+
+$('mute').addEventListener('click', () => {
+  session.muted = !session.muted;
+  if (session.localTrack) { session.localTrack.enabled = !session.muted; }
+  send({ type: 'mute', muted: session.muted });
+  $('mute').textContent = session.muted ? 'Unmute' : 'Mute';
+  log(session.muted ? 'muted' : 'unmuted', 'dim');
+});
+
+$('leave').addEventListener('click', () => {
+  send({ type: 'leave' });
+  session.socket?.close();
+  session.publisher?.close();
+  session.subscriber?.close();
+  session.audioContext?.close();
+  setStatus('left', 'dim');
+});
+
+// ---- a tiny stats readout, so "is audio actually flowing" has an answer ----
+setInterval(async () => {
+  if (!session.subscriber && !session.publisher) return;
+  let sent = 0, received = 0;
+  for (const [pc, bucket] of [[session.publisher, 'out'], [session.subscriber, 'in']]) {
+    if (!pc) continue;
+    const stats = await pc.getStats();
+    stats.forEach((report) => {
+      if (bucket === 'out' && report.type === 'outbound-rtp') sent += report.packetsSent ?? 0;
+      if (bucket === 'in' && report.type === 'inbound-rtp') received += report.packetsReceived ?? 0;
+    });
+  }
+  if (sent || received) {
+    setStatus(`RTP ↑${sent} ↓${received}`, received > 0 ? 'ok' : 'dim');
+  }
+}, 2000);
+
+window.__session = session; // handy from the console
+</script>
+</body>
+</html>
