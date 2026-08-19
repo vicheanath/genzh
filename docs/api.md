@@ -133,6 +133,29 @@ Creating a community also creates its `@everyone` role (granting `view_room`,
 `send_message`, `add_reaction`, `speak`, `use_video`) and the owner's
 membership, in one transaction.
 
+`GET /communities` is the first call a client makes after signing in. It returns
+the whole list rather than paginating: a user belongs to tens of communities,
+not thousands.
+
+## Users
+
+### `GET /users/{id}`
+
+The public half of an account, for resolving message authors and room
+participants:
+
+```json
+{
+  "id": "…", "handle": "ada", "display_name": "Ada",
+  "avatar_url": null, "avatar_effect": null, "accent_color": null
+}
+```
+
+Authentication is required — profile lookup is not an anonymous enumeration
+endpoint — but no relationship is: anyone signed in can resolve a handle they
+have already been shown. Deliberately **no e-mail and no account state**, which
+is what makes it safe to hand to anyone sharing a room with the user.
+
 ## Members
 
 | Method   | Path                                        | Requires                                        |

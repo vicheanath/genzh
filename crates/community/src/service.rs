@@ -169,6 +169,14 @@ impl CommunityService {
             .ok_or_else(|| ServiceError::not_found("community"))
     }
 
+    /// The communities the caller belongs to.
+    ///
+    /// No permission check: membership *is* the authorization, and a user can
+    /// always see the list of places they are a member of.
+    pub async fn list_for_user(&self, user_id: UserId) -> ServiceResult<Vec<Community>> {
+        Ok(self.repository.list_for_user(user_id).await?)
+    }
+
     /// Update community settings.
     pub async fn update(
         &self,

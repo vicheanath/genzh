@@ -135,6 +135,18 @@ pub async fn create(
     ))
 }
 
+/// `GET /api/v1/communities`
+///
+/// The communities the caller belongs to. This is the first call a client makes
+/// after signing in, so it returns the whole list rather than paginating: a
+/// user belongs to tens of communities, not thousands.
+pub async fn list(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+) -> ApiResult<Json<Vec<Community>>> {
+    Ok(Json(state.communities.list_for_user(caller.user_id).await?))
+}
+
 /// `GET /api/v1/communities/{id}`
 pub async fn get(
     State(state): State<AppState>,

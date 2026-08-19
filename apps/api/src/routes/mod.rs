@@ -12,3 +12,4 @@ pub mod media;
 pub mod messages;
 pub mod rooms;
 pub mod social;
+pub mod users;

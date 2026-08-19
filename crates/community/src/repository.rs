@@ -96,6 +96,26 @@ impl CommunityRepository {
         .map_err(RepositoryError::from)
     }
 
+    /// Every community a user belongs to.
+    ///
+    /// Membership rather than ownership is the filter: an owner is always
+    /// inserted as a member when the community is created, so one query covers
+    /// both without a UNION.
+    pub async fn list_for_user(&self, user_id: UserId) -> RepositoryResult<Vec<Community>> {
+        sqlx::query_as(
+            "SELECT c.id, c.name, c.description, c.icon_url, c.owner_id,
+                    c.created_at, c.updated_at
+             FROM communities c
+             JOIN community_members m
+               ON m.community_id = c.id AND m.user_id = $1
+             ORDER BY c.name ASC",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
     /// Partially update a community.
     pub async fn update(
         &self,

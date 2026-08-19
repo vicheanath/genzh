@@ -1,0 +1,47 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  width: 2.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out);
+}
+
+/* `data-checked` / `data-unchecked` are Base UI's state attributes — see
+   SwitchRootDataAttributes. Styling those rather than :checked works because
+   the root is a <button>, not a native checkbox. */
+.root[data-checked] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.root[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.thumb {
+  display: block;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-block: auto;
+  margin-inline-start: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+  box-shadow: var(--shadow-sm);
+  transition:
+    translate var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-out);
+}
+
+.thumb[data-checked] {
+  translate: 1rem 0;
+  background: #fff;
+}

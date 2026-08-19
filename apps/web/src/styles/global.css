@@ -1,0 +1,65 @@
+/*
+ * Global styles. Everything else in the app is a CSS Module.
+ *
+ * The rule this codebase follows: global CSS may set the page ground and
+ * element defaults; anything that belongs to a component lives in that
+ * component's `.module.css`. That keeps class names collision-free by
+ * construction rather than by naming convention.
+ */
+
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  /* Honours [data-theme] as well as the OS setting, so form controls and
+     scrollbars match the palette. */
+  color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
+}
+
+html[data-theme='light'] { color-scheme: light; }
+html[data-theme='dark']  { color-scheme: dark; }
+
+body {
+  min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Keyboard users get a ring; pointer users do not. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

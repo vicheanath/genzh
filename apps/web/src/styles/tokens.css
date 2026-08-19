@@ -1,0 +1,133 @@
+/*
+ * Design tokens.
+ *
+ * Base UI ships no styles at all, so this file is the single source of visual
+ * truth. Components reference tokens only — never a literal colour — which is
+ * what makes theming a change in one place.
+ *
+ * Theming has three states, and all three are handled:
+ *   1. an explicit choice stamps [data-theme] on <html>
+ *   2. no choice + OS dark  → prefers-color-scheme
+ *   3. no choice + OS light → the :root defaults below
+ */
+
+:root {
+  /* surfaces */
+  --color-bg: #fbfbfd;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-overlay: rgb(15 18 25 / 0.45);
+
+  /* text */
+  --color-text: #14171f;
+  --color-text-muted: #5b6172;
+  --color-text-inverted: #ffffff;
+
+  /* lines */
+  --color-border: #e3e5ec;
+  --color-border-strong: #c9ccd8;
+
+  /* accent */
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --color-accent-active: #3730a3;
+  --color-accent-subtle: #eef2ff;
+  --color-accent-ring: rgb(79 70 229 / 0.35);
+
+  /* status */
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+
+  /* type */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+
+  /* space — a 4px scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+
+  /* shape */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-full: 9999px;
+
+  /* elevation */
+  --shadow-sm: 0 1px 2px rgb(15 18 25 / 0.06);
+  --shadow-md: 0 4px 12px rgb(15 18 25 / 0.08);
+  --shadow-lg: 0 12px 32px rgb(15 18 25 / 0.14);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+}
+
+/* OS dark, unless the user explicitly chose light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #0c0e14;
+    --color-surface: #14171f;
+    --color-surface-raised: #1b1f2a;
+    --color-overlay: rgb(0 0 0 / 0.6);
+
+    --color-text: #eceef4;
+    --color-text-muted: #969cad;
+    --color-text-inverted: #14171f;
+
+    --color-border: #262b38;
+    --color-border-strong: #39404f;
+
+    --color-accent: #7c73f0;
+    --color-accent-hover: #8f88f3;
+    --color-accent-active: #a29cf6;
+    --color-accent-subtle: #1d1b3a;
+    --color-accent-ring: rgb(124 115 240 / 0.4);
+
+    --color-danger: #f87171;
+    --color-success: #4ade80;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+  }
+}
+
+/* An explicit dark choice wins in both directions. */
+:root[data-theme='dark'] {
+  --color-bg: #0c0e14;
+  --color-surface: #14171f;
+  --color-surface-raised: #1b1f2a;
+  --color-overlay: rgb(0 0 0 / 0.6);
+
+  --color-text: #eceef4;
+  --color-text-muted: #969cad;
+  --color-text-inverted: #14171f;
+
+  --color-border: #262b38;
+  --color-border-strong: #39404f;
+
+  --color-accent: #7c73f0;
+  --color-accent-hover: #8f88f3;
+  --color-accent-active: #a29cf6;
+  --color-accent-subtle: #1d1b3a;
+  --color-accent-ring: rgb(124 115 240 / 0.4);
+
+  --color-danger: #f87171;
+  --color-success: #4ade80;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+}

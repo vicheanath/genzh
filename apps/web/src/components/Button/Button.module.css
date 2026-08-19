@@ -1,0 +1,61 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+/* Base UI sets data-disabled on the root; styling the attribute rather than
+   :disabled means it also works when `focusableWhenDisabled` keeps the element
+   focusable and therefore not natively disabled. */
+.button[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── sizes ── */
+.sm { height: 2rem;    padding-inline: var(--space-3); }
+.md { height: 2.375rem; padding-inline: var(--space-4); }
+.lg { height: 2.75rem;  padding-inline: var(--space-5); font-size: var(--text-base); }
+
+/* ── variants ── */
+.primary {
+  background: var(--color-accent);
+  color: var(--color-text-inverted);
+}
+.primary:hover:not([data-disabled]) { background: var(--color-accent-hover); }
+.primary:active:not([data-disabled]) { background: var(--color-accent-active); }
+
+.secondary {
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+.secondary:hover:not([data-disabled]) { background: var(--color-accent-subtle); }
+
+.ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.ghost:hover:not([data-disabled]) {
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+}
+
+.danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+.danger:hover:not([data-disabled]) { filter: brightness(1.08); }

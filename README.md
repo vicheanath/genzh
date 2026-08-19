@@ -10,6 +10,7 @@ infrastructure.
 ```
 apps/api    control plane  — who you are, what you may do
 apps/media  media plane    — WebRTC, RTP forwarding
+apps/web    web client     — React + Base UI + CSS Modules
 ```
 
 ---
@@ -131,14 +132,23 @@ genzh-backend/
 │   │   │   └── routes/          thin handlers
 │   │   └── tests/               integration tests against real PostgreSQL
 │   │
-│   └── media/                   media plane
+│   ├── media/                   media plane
+│   │   └── src/
+│   │       ├── main.rs          startup, health, graceful room teardown
+│   │       ├── config.rs        no DATABASE_URL, no JWT_SECRET
+│   │       ├── state.rs
+│   │       ├── auth.rs          media token verification — the whole trust boundary
+│   │       ├── signaling.rs     the per-connection loop
+│   │       └── error.rs         close codes
+│   │
+│   └── web/                     web client (see apps/web/README.md)
 │       └── src/
-│           ├── main.rs          startup, health, graceful room teardown
-│           ├── config.rs        no DATABASE_URL, no JWT_SECRET
-│           ├── state.rs
-│           ├── auth.rs          media token verification — the whole trust boundary
-│           ├── signaling.rs     the per-connection loop
-│           └── error.rs         close codes
+│           ├── components/      Base UI + CSS Modules, one folder each
+│           ├── routes/          screens
+│           └── lib/
+│               ├── api/         typed client
+│               ├── auth/        session and refresh
+│               └── media/       VoiceClient — the browser half of the SFU
 │
 ├── crates/
 │   ├── domain/                  ids, entities, RoomType, Permission — pure
@@ -153,8 +163,7 @@ genzh-backend/
 │   └── media-room/              rooms, participants, tracks, and the SFU
 │
 ├── migrations/                  0001_initial_schema.sql, 0002_seed_permissions.sql
-├── docs/                        API reference, signalling protocol, SFU internals
-└── tools/test-client/           a browser client that drives the whole stack
+└── docs/                        API reference, signalling protocol, SFU internals
 ```
 
 ---
@@ -266,11 +275,12 @@ error, has one shape:
 ```
 
 ```
-POST   /api/v1/auth/register            POST   /api/v1/communities
-POST   /api/v1/auth/login               GET    /api/v1/communities/{id}
-POST   /api/v1/auth/refresh             PATCH  /api/v1/communities/{id}
-POST   /api/v1/auth/logout              DELETE /api/v1/communities/{id}
-GET    /api/v1/me
+POST   /api/v1/auth/register            GET    /api/v1/communities
+POST   /api/v1/auth/login               POST   /api/v1/communities
+POST   /api/v1/auth/refresh             GET    /api/v1/communities/{id}
+POST   /api/v1/auth/logout              PATCH  /api/v1/communities/{id}
+GET    /api/v1/me                       DELETE /api/v1/communities/{id}
+GET    /api/v1/users/{id}
 PATCH  /api/v1/me                       POST   /api/v1/communities/{id}/members
                                         DELETE /api/v1/communities/{id}/members/{user_id}
 GET    /api/v1/communities/{id}/rooms   POST   /api/v1/communities/{id}/roles
@@ -406,38 +416,35 @@ a sans-I/O core and shares almost no surface with 0.11-era tutorials.
 
 ## 9. Running two clients against a voice room
 
-`tools/test-client/` is a single HTML file that drives the entire stack:
-registers an account, creates a community and a voice room, requests a media
-token, joins the SFU, and publishes audio.
+`apps/web` is the client. Three processes:
 
 ```bash
-# terminal 1
-cargo run -p api
+# terminal 1 — control plane
+CORS_ALLOWED_ORIGINS=http://localhost:5173 cargo run -p api
 
-# terminal 2
+# terminal 2 — media plane
 cargo run -p media
 
-# terminal 3
-cd tools/test-client && python3 -m http.server 8090
+# terminal 3 — web client
+cd apps/web && npm install && npm run dev
 ```
 
-Then:
+Then, in two browser windows (or two devices on the same network):
 
-1. Open <http://127.0.0.1:8090> — **tab A**. Leave *Room* blank and click
-   **Join and publish**. The log prints a `community-id/room-id` pair.
-2. Open a second tab — **tab B**. Paste that pair into *Room*, click
-   **Join and publish**.
-3. Both tabs show `RTP ↑n ↓n` once audio is flowing in both directions.
+1. Open <http://localhost:5173> and create an account.
+2. Create a community, then a **voice** room inside it.
+3. On the community page, copy the community id.
+4. In the second window, register a second account, paste the id into
+   **Join with an invite**, and open the same room.
+5. Both press **Join voice**, then **Unmute**.
 
-The default audio source is a 440 Hz tone generated with WebAudio, so no
-microphone permission is needed and the test works headless. Switch the
-dropdown to *Microphone* to actually hear each other.
+Each participant appears with a speaking ring driven by the SFU's
+`speaking_started` / `speaking_stopped` events. Leaving, or closing the tab,
+tears down both peer connections and releases the microphone.
 
-**Verified end to end on this stack:** two browsers, Opus over DTLS-SRTP,
-A ↑4328/↓1767 and B ↑1501/↓1430 packets, jitter 0.003 s. On leave, the
-remaining participant renegotiated and its inbound RTP dropped to zero.
-
----
+To confirm media is actually flowing rather than trusting the UI, open
+`chrome://webrtc-internals` and look for non-zero `packetsSent` on the
+publisher connection and `packetsReceived` on the subscriber.
 
 ## 10. Known limitations
 

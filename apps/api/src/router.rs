@@ -32,7 +32,10 @@ pub fn build(state: AppState) -> Router {
             get(routes::auth::me).patch(routes::auth::update_profile),
         )
         // ---- communities ----
-        .route("/communities", post(routes::communities::create))
+        .route(
+            "/communities",
+            get(routes::communities::list).post(routes::communities::create),
+        )
         .route(
             "/communities/{id}",
             get(routes::communities::get)
@@ -61,6 +64,8 @@ pub fn build(state: AppState) -> Router {
             "/communities/{id}/roles/{role_id}",
             patch(routes::communities::update_role),
         )
+        // ---- users ----
+        .route("/users/{id}", get(routes::users::get))
         // ---- rooms ----
         .route(
             "/communities/{id}/rooms",

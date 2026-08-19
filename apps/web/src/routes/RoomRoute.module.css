@@ -1,0 +1,129 @@
+.room {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100dvh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.roomName { font-size: var(--text-base); font-weight: 600; }
+.topic { font-size: var(--text-sm); color: var(--color-text-muted); }
+.spacer { flex: 1; }
+
+/* ── voice ── */
+
+.voice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface));
+}
+
+.voiceBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+}
+
+.dotConnected { background: var(--color-success); }
+.dotPending { background: #eab308; }
+.dotFailed { background: var(--color-danger); }
+
+.participants {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.participant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: 4.5rem;
+  text-align: center;
+}
+
+.participantName {
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.mutedTag { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+/* ── messages ── */
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.message { display: flex; gap: var(--space-3); }
+
+.messageBody { min-width: 0; }
+
+.messageHeader {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.author { font-size: var(--text-sm); font-weight: 600; }
+.time { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+.content {
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.composer {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.composerInput { flex: 1; }
+
+.readOnly {
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+}

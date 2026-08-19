@@ -1,0 +1,39 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+
+.control {
+  width: 100%;
+  height: 2.375rem;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.control::placeholder { color: var(--color-text-muted); }
+.control:hover:not(:disabled) { border-color: var(--color-accent); }
+.control:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Base UI's Field marks validity on the control once it has been touched, so
+   the red border appears after a failed submit rather than while typing. */
+.control[data-invalid] { border-color: var(--color-danger); }
+
+.error {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+}
+
+.description {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

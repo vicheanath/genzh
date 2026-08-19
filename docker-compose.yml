@@ -75,5 +75,17 @@ services:
       # available, so this is the portable option.
       - "40000-40100:40000-40100/udp"
 
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Baked into the bundle at build time — see Dockerfile.web.
+        VITE_API_URL: ${VITE_API_URL:-http://127.0.0.1:8080}
+    depends_on:
+      - api
+    ports:
+      - "8082:8082"
+
 volumes:
   postgres-data:
