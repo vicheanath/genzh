@@ -1,0 +1,79 @@
+# Local development stack: PostgreSQL, the API, and one media server.
+#
+# Deliberately three services. No Redis, no message broker, no service mesh —
+# none of them would be carrying anything yet, and each one is a component that
+# has to be understood, operated and debugged. They can be added when there is
+# a workload that needs them; the architecture leaves room (see README).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: social
+      POSTGRES_PASSWORD: social
+      POSTGRES_DB: social
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` returns healthy before the database can actually serve, so
+      # the API must tolerate a not-yet-ready database anyway — which it does,
+      # by connecting lazily and reporting through /ready.
+      test: ["CMD-SHELL", "pg_isready -U social -d social"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://social:social@postgres:5432/social
+      RUN_MIGRATIONS: "true"
+      API_BIND: 0.0.0.0:8080
+
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
+
+      # How clients reach the media server. This is the address a *browser*
+      # dials, not a compose-internal hostname.
+      MEDIA_SERVER_URL: ${MEDIA_SERVER_URL:-ws://127.0.0.1:8081/ws/media}
+
+      STUN_URL: ${STUN_URL:-stun:stun.l.google.com:19302}
+      TURN_URL: ${TURN_URL:-}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_PASSWORD: ${TURN_PASSWORD:-}
+
+      RUST_LOG: ${RUST_LOG:-info,api=debug}
+    ports:
+      - "8080:8080"
+
+  media:
+    build:
+      context: .
+      dockerfile: Dockerfile.media
+    environment:
+      # The *only* secret this process gets. No database, no user JWT key.
+      MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
+      MEDIA_BIND: 0.0.0.0:8081
+
+      STUN_URL: ${STUN_URL:-stun:stun.l.google.com:19302}
+      TURN_URL: ${TURN_URL:-}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_PASSWORD: ${TURN_PASSWORD:-}
+
+      RUST_LOG: ${RUST_LOG:-info,media=debug}
+    ports:
+      - "8081:8081"
+      # Pinning the UDP range makes bridge networking workable. On Linux,
+      # `network_mode: host` is simpler and faster; on Docker Desktop it is not
+      # available, so this is the portable option.
+      - "40000-40100:40000-40100/udp"
+
+volumes:
+  postgres-data:

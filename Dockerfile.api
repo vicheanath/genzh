@@ -1,0 +1,41 @@
+# ─────────────────────────────── builder ───────────────────────────────
+FROM rust:1.90-bookworm AS builder
+
+WORKDIR /build
+
+# Copy manifests first so a source-only change does not re-resolve the
+# dependency graph. The dummy sources exist purely to make `cargo fetch` happy
+# before the real code lands.
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY apps/ apps/
+COPY migrations/ migrations/
+
+# `migrate!` embeds the SQL at compile time, so the image carries its own
+# schema and there is no separate migration artefact to keep in step.
+RUN cargo build --release --locked --bin api
+
+# ─────────────────────────────── runtime ───────────────────────────────
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# Unprivileged: the API needs no root capability at all.
+RUN useradd --system --create-home --uid 10001 social
+USER social
+WORKDIR /home/social
+
+COPY --from=builder /build/target/release/api /usr/local/bin/api
+
+EXPOSE 8080
+ENV API_BIND=0.0.0.0:8080 \
+    RUST_LOG=info
+
+# Liveness only — readiness is what an orchestrator should poll, and it is a
+# separate endpoint on purpose.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/api"]

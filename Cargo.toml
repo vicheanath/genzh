@@ -1,0 +1,95 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/api",
+    "apps/media",
+    "crates/domain",
+    "crates/auth",
+    "crates/community",
+    "crates/social",
+    "crates/room",
+    "crates/messaging",
+    "crates/media-core",
+    "crates/media-room",
+    "crates/media-signaling",
+    "crates/infrastructure",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+# ---- internal ----
+social-domain = { path = "crates/domain" }
+social-auth = { path = "crates/auth" }
+social-community = { path = "crates/community" }
+social-graph = { path = "crates/social" }
+social-room = { path = "crates/room" }
+social-messaging = { path = "crates/messaging" }
+genzh-core = { path = "crates/media-core" }
+genzh-room = { path = "crates/media-room" }
+genzh-signaling = { path = "crates/media-signaling" }
+social-infrastructure = { path = "crates/infrastructure" }
+
+# ---- async / runtime ----
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# ---- http ----
+axum = { version = "0.8", features = ["ws", "macros"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["trace", "cors", "limit", "timeout"] }
+http = "1"
+
+# ---- serde ----
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ---- persistence ----
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls-ring",
+    "postgres",
+    "uuid",
+    "chrono",
+    "macros",
+    "migrate",
+] }
+
+# ---- observability ----
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# ---- crypto / auth ----
+argon2 = { version = "0.5", features = ["std"] }
+password-hash = { version = "0.5", features = ["std"] }
+sha2 = "0.11"
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
+
+# ---- media ----
+webrtc = { version = "0.20.3", default-features = false, features = ["runtime-tokio"] }
+rtc = { version = "0.20.3", default-features = false, features = ["ring"] }
+
+# ---- misc ----
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+thiserror = "2"
+anyhow = "1"
+bitflags = { version = "2", features = ["serde"] }
+rand = "0.9"
+bytes = "1"
+dotenvy = "0.15"
+validator = { version = "0.21", features = ["derive"] }
+parking_lot = "0.12"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+panic = "unwind"
