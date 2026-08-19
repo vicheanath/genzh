@@ -124,6 +124,26 @@ pub async fn create(
         )
         .await?;
 
+    let _ = state
+        .rooms
+        .create(
+            Some(community.id),
+            caller.user_id,
+            genzh_room::CreateRoom {
+                community_id: Some(community.id),
+                name: "general".to_string(),
+                topic: Some("Welcome to your new server!".to_string()),
+                category: None,
+                room_type: genzh_domain::RoomType::Text,
+                visibility: None,
+                is_anonymous: false,
+                duration_minutes: None,
+                position: Some(0),
+                max_participants: None,
+            },
+        )
+        .await;
+
     Ok((
         StatusCode::CREATED,
         Json(CommunityResponse {

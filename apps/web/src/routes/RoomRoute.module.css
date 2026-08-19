@@ -83,6 +83,41 @@
   color: var(--color-accent-text);
 }
 
+.personaSwitch {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem;
+  background: var(--color-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  gap: 0.15rem;
+}
+
+.personaBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.personaBtn:hover {
+  color: var(--color-text);
+}
+
+.personaBtnActive {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
 /* ── the member rail ────────────────────────────────────────────────────── */
 
 .members {

@@ -32,14 +32,15 @@ impl MessageRepository {
     /// Insert a message.
     pub async fn create(&self, message: &Message) -> RepositoryResult<Message> {
         sqlx::query_as(
-            "INSERT INTO messages (id, room_id, author_id, content)
-             VALUES ($1, $2, $3, $4)
-             RETURNING id, room_id, author_id, content, edited_at, created_at",
+            "INSERT INTO messages (id, room_id, author_id, content, is_anonymous)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, room_id, author_id, content, is_anonymous, edited_at, created_at",
         )
         .bind(message.id)
         .bind(message.room_id)
         .bind(message.author_id)
         .bind(&message.content)
+        .bind(message.is_anonymous)
         .fetch_one(&self.pool)
         .await
         .map_err(RepositoryError::from)
@@ -48,7 +49,7 @@ impl MessageRepository {
     /// Fetch one message.
     pub async fn find(&self, id: MessageId) -> RepositoryResult<Option<Message>> {
         sqlx::query_as(
-            "SELECT id, room_id, author_id, content, edited_at, created_at
+            "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
              FROM messages WHERE id = $1",
         )
         .bind(id)
@@ -76,7 +77,7 @@ impl MessageRepository {
         let mut messages: Vec<Message> = match before {
             Some(before) => {
                 sqlx::query_as(
-                    "SELECT id, room_id, author_id, content, edited_at, created_at
+                    "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
                      FROM messages WHERE room_id = $1 AND created_at < $2
                      ORDER BY created_at DESC, id DESC LIMIT $3",
                 )
@@ -88,7 +89,7 @@ impl MessageRepository {
             }
             None => {
                 sqlx::query_as(
-                    "SELECT id, room_id, author_id, content, edited_at, created_at
+                    "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
                      FROM messages WHERE room_id = $1
                      ORDER BY created_at DESC, id DESC LIMIT $2",
                 )

@@ -27,7 +27,10 @@ pub mod user;
 pub use error::{DomainError, DomainResult};
 pub use ids::{CommunityId, MessageId, RoleId, RoomId, SessionId, UserId};
 pub use permission::{Permission, PermissionSet};
-pub use room::{Room, RoomType};
+pub use room::{
+    Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,
+    RoomVisibility,
+};
 
 /// The timestamp type used across the whole domain: always UTC.
 pub type Timestamp = chrono::DateTime<chrono::Utc>;

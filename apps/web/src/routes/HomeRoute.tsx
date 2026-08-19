@@ -1,220 +1,315 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
+import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
-import { Callout } from '@/components/Callout'
-import { CompassIcon, HashIcon, PlusIcon, UserPlusIcon } from '@/components/Icons'
-import { Input } from '@/components/Input'
+import {
+  CompassIcon,
+  HashIcon,
+  LockIcon,
+  MicIcon,
+  PlusIcon,
+  SparkleIcon,
+  UsersIcon,
+  VideoIcon,
+} from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
-import { ApiError, communities as communitiesApi } from '@/lib/api'
+import { communities as communitiesApi, rooms as roomsApi, type Room } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { cx } from '@/lib/cx'
 import { useAsync } from '@/lib/useAsync'
 
 import type { ShellContext } from './AppShell'
+import { CreatePlaygroundRoomDialog } from './CreatePlaygroundRoomDialog'
 import styles from './HomeRoute.module.css'
 
-/** Landing screen: your communities, and the two ways to get another one. */
+const ROOM_TYPE_ICONS: Record<string, typeof HashIcon> = {
+  text: HashIcon,
+  voice: MicIcon,
+  video: VideoIcon,
+  activity: SparkleIcon,
+  stage: VideoIcon,
+  poll: SparkleIcon,
+  debate: SparkleIcon,
+  game: SparkleIcon,
+  confession: LockIcon,
+  quick_chat: HashIcon,
+}
+
 export function HomeRoute() {
-  const { getToken, user } = useAuth()
+  const { getToken } = useAuth()
   const { reloadCommunities } = useOutletContext<ShellContext>()
   const navigate = useNavigate()
   const toast = useToast()
 
+  const [createRoomOpen, setCreateRoomOpen] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [matching, setMatching] = useState(false)
+
+  // Communities list
   const communities = useAsync(
     async () => communitiesApi.list(await getToken()),
     [getToken],
   )
 
-  const [name, setName] = useState('')
-  const [joinId, setJoinId] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState<'create' | 'join' | null>(null)
+  // Playground discovery feed
+  const discovery = useAsync(
+    async () => roomsApi.discovery(await getToken(), selectedCategory || undefined),
+    [getToken, selectedCategory],
+  )
 
-  async function create(event: FormEvent) {
-    event.preventDefault()
-    setError(null)
-    setBusy('create')
+  async function handleFindRandomRoom() {
+    setMatching(true)
     try {
-      const community = await communitiesApi.create(await getToken(), { name })
-      setName('')
-      reloadCommunities()
-      communities.reload()
-      toast.success(`${community.name} is ready`, 'Create a room to get started.')
-      void navigate(`/c/${community.id}`)
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not create it')
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  async function join(event: FormEvent) {
-    event.preventDefault()
-    setError(null)
-    setBusy('join')
-    const id = joinId.trim()
-    try {
-      await communitiesApi.join(await getToken(), id)
-      setJoinId('')
-      reloadCommunities()
-      communities.reload()
-      toast.success('Joined')
-      void navigate(`/c/${id}`)
-    } catch (cause) {
-      // Already a member is a success from the user's point of view.
-      if (cause instanceof ApiError && cause.code === 'CONFLICT') {
-        setJoinId('')
-        reloadCommunities()
-        void navigate(`/c/${id}`)
-        return
+      const room = await roomsApi.random(await getToken(), selectedCategory || undefined)
+      if (room) {
+        toast.success(`Entering ${room.name}!`)
+        void navigate(`/rooms/${room.id}`)
+      } else {
+        toast.success('No active rooms in this topic', 'Starting one now!')
+        setCreateRoomOpen(true)
       }
-      setError(cause instanceof ApiError ? cause.message : 'Could not join')
+    } catch {
+      toast.error('Could not find a random room right now')
     } finally {
-      setBusy(null)
+      setMatching(false)
     }
   }
+
+  const categoryList = [
+    { key: null, label: '✨ All Moments' },
+    { key: 'gaming', label: '🎮 Gaming' },
+    { key: 'debate', label: '🔥 Debates' },
+    { key: 'confession', label: '🤫 Confessions' },
+    { key: 'tech', label: '💻 Tech & Code' },
+    { key: 'music', label: '🎵 Music' },
+    { key: 'memes', label: '😂 Memes' },
+    { key: 'random', label: '🎲 Random' },
+  ]
 
   return (
     <div className={styles.scroll}>
       <div className={styles.page}>
-        <header className={styles.hero}>
-          <p className={styles.greeting}>{greeting()}</p>
-          <h1 className={styles.title}>{user?.profile.display_name ?? 'there'}</h1>
-          <p className={styles.lede}>
-            {communities.data?.length
-              ? 'Pick up where you left off, or start somewhere new.'
-              : 'You are not in any communities yet. Create one, or join with an invite.'}
-          </p>
-        </header>
-
-        {error && <Callout tone="danger">{error}</Callout>}
-
-        <section style={{ background: 'linear-gradient(135deg, var(--color-accent-subtle), var(--color-mint-subtle))', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4) var(--space-5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-          <div>
-            <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--color-text)' }}>
-              <CompassIcon size={18} />
-              Explore Public Communities
-            </h3>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)' }}>
-              Discover active servers, gaming groups, and learning spaces.
+        {/* Playground Hero Banner */}
+        <section className={styles.heroCard}>
+          <div className={styles.heroContent}>
+            <div className={styles.greeting}>
+              Anonymous Social Playground
+            </div>
+            <h1 className={styles.title}>Don't join communities. Join moments.</h1>
+            <p className={styles.lede}>
+              Discover vibrant live conversations, poll strangers, drop confessions, or debate unpopular opinions anonymously.
             </p>
           </div>
-          <Link to="/explore">
-            <Button size="sm">
-              <CompassIcon size={15} />
-              Browse Communities
+
+          <div className={styles.heroActions}>
+            <button
+              type="button"
+              className={styles.randomButton}
+              onClick={() => void handleFindRandomRoom()}
+              disabled={matching}
+            >
+              {matching ? <Spinner /> : <span>🎲</span>}
+              <span>Find Something Fun</span>
+            </button>
+
+            <Button
+              variant="secondary"
+              onClick={() => setCreateRoomOpen(true)}
+            >
+              <PlusIcon size={16} />
+              Start a Moment
             </Button>
-          </Link>
+          </div>
         </section>
 
+        {/* Categories Bar */}
+        <div className={styles.categories}>
+          {categoryList.map(({ key, label }) => (
+            <button
+              key={label}
+              type="button"
+              className={cx(
+                styles.categoryPill,
+                selectedCategory === key && styles.categoryPillActive,
+              )}
+              onClick={() => setSelectedCategory(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 🔥 Trending & Active Moments */}
         <section>
-          <h2 className={styles.sectionTitle}>Your communities</h2>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>
+              <span>🔥 Trending Moments</span>
+              {discovery.data?.rooms && <Badge>{discovery.data.rooms.length}</Badge>}
+            </h2>
+          </div>
+
+          {discovery.loading && (
+            <div className={styles.roomsGrid}>
+              {Array.from({ length: 4 }, (_, index) => (
+                <div key={index} className={styles.roomCard}>
+                  <Skeleton width="40%" height="0.9rem" />
+                  <div style={{ marginTop: 'var(--space-2)' }}>
+                    <Skeleton width="80%" height="1.1rem" />
+                  </div>
+                  <div style={{ marginTop: 'var(--space-2)' }}>
+                    <Skeleton width="95%" height="0.85rem" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!discovery.loading && (!discovery.data?.rooms || discovery.data.rooms.length === 0) && (
+            <div className={styles.empty}>
+              <span className={styles.emptyMark} aria-hidden>
+                <SparkleIcon size={22} />
+              </span>
+              <div>
+                <p>No active moments right now in this category.</p>
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <Button size="sm" onClick={() => setCreateRoomOpen(true)}>
+                    <PlusIcon size={15} />
+                    Start the First Room
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {discovery.data?.rooms && discovery.data.rooms.length > 0 && (
+            <div className={styles.roomsGrid}>
+              {(discovery.data.rooms as Room[]).map((room: Room) => {
+                const Icon = ROOM_TYPE_ICONS[room.room_type] ?? HashIcon
+                return (
+                  <Link
+                    key={room.id}
+                    to={room.community_id ? `/c/${room.community_id}/r/${room.id}` : `/rooms/${room.id}`}
+                    className={styles.roomCard}
+                  >
+                    <div className={styles.roomCardHead}>
+                      <span className={styles.roomTypeTag}>
+                        <Icon size={14} />
+                        {room.room_type.replace('_', ' ')}
+                      </span>
+                      <span className={styles.participantCount}>
+                        <UsersIcon size={12} />
+                        {room.current_participants || 1}
+                      </span>
+                    </div>
+
+                    <h3 className={styles.roomName}>{room.name}</h3>
+                    <p className={styles.roomTopic}>
+                      {room.topic || `Join this ${room.category} session and chat anonymously.`}
+                    </p>
+
+                    <div className={styles.roomCardFooter}>
+                      {room.is_anonymous ? (
+                        <span className={styles.anonPill}>
+                          <LockIcon size={12} />
+                          Anonymous
+                        </span>
+                      ) : (
+                        <span className={styles.anonPill}>
+                          Public
+                        </span>
+                      )}
+                      <Button size="sm" variant="ghost">
+                        Enter →
+                      </Button>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* 👥 Your Persistent Communities */}
+        <section>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>Your Communities</h2>
+            <Link to="/explore">
+              <Button size="sm" variant="ghost">
+                <CompassIcon size={15} />
+                Explore Servers
+              </Button>
+            </Link>
+          </div>
 
           {communities.loading && (
             <div className={styles.grid}>
               {Array.from({ length: 3 }, (_, index) => (
                 <div key={index} className={styles.card}>
                   <Skeleton circle width="2.375rem" height="2.375rem" />
-                  <Skeleton width="60%" height="0.9rem" />
+                  <div className={styles.cardBody} style={{ flex: 1 }}>
+                    <Skeleton width="70%" height="1rem" />
+                    <div style={{ marginTop: '0.35rem' }}>
+                      <Skeleton width="90%" height="0.75rem" />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
-          {!communities.loading && communities.data?.length === 0 && (
+          {!communities.loading && (!communities.data || communities.data.length === 0) && (
             <div className={styles.empty}>
               <span className={styles.emptyMark} aria-hidden>
-                <HashIcon size={22} />
+                <CompassIcon size={22} />
               </span>
-              <p>Nothing here yet — the forms below are where it starts.</p>
+              <div>
+                <p>You haven't joined any persistent communities yet.</p>
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <Link to="/explore">
+                    <Button size="sm">
+                      <CompassIcon size={15} />
+                      Browse Communities
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             </div>
           )}
 
           {communities.data && communities.data.length > 0 && (
             <div className={styles.grid}>
               {communities.data.map((community) => (
-                <Link key={community.id} to={`/c/${community.id}`} className={styles.card}>
+                <Link
+                  key={community.id}
+                  to={`/c/${community.id}`}
+                  className={styles.card}
+                >
                   <Avatar name={community.name} src={community.icon_url} size="md" />
                   <div className={styles.cardBody}>
                     <div className={styles.cardName}>{community.name}</div>
-                    {community.description && (
-                      <p className={styles.cardDescription}>{community.description}</p>
-                    )}
+                    <div className={styles.cardDescription}>
+                      {community.description ?? 'Server'}
+                    </div>
                   </div>
                 </Link>
               ))}
             </div>
           )}
         </section>
-
-        <div className={styles.forms}>
-          <form className={styles.form} onSubmit={create}>
-            <div className={styles.formHead}>
-              <span className={styles.formMark} aria-hidden>
-                <PlusIcon size={16} />
-              </span>
-              <div>
-                <div className={styles.formTitle}>Create a community</div>
-                <p className={styles.formHint}>You will own it, and can invite anyone.</p>
-              </div>
-            </div>
-            <div className={styles.row}>
-              <Input
-                className={styles.grow}
-                label="Name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Night Owls"
-                maxLength={64}
-                required
-              />
-              <Button type="submit" disabled={busy !== null || !name.trim()}>
-                {busy === 'create' && <Spinner />}
-                Create
-              </Button>
-            </div>
-          </form>
-
-          <form className={styles.form} onSubmit={join}>
-            <div className={styles.formHead}>
-              <span className={styles.formMark} aria-hidden>
-                <UserPlusIcon size={16} />
-              </span>
-              <div>
-                <div className={styles.formTitle}>Join with an invite</div>
-                <p className={styles.formHint}>Paste the community id someone shared.</p>
-              </div>
-            </div>
-            <div className={styles.row}>
-              <Input
-                className={styles.grow}
-                label="Community id"
-                value={joinId}
-                onChange={(event) => setJoinId(event.target.value)}
-                placeholder="6f1c…"
-                spellCheck={false}
-                required
-              />
-              <Button type="submit" variant="secondary" disabled={busy !== null || !joinId.trim()}>
-                {busy === 'join' && <Spinner />}
-                Join
-              </Button>
-            </div>
-          </form>
-        </div>
       </div>
+
+      <CreatePlaygroundRoomDialog
+        open={createRoomOpen}
+        onClose={() => setCreateRoomOpen(false)}
+        onCreated={() => {
+          discovery.reload()
+          reloadCommunities()
+        }}
+      />
     </div>
   )
-}
-
-/** Time-of-day greeting, from the reader's own clock. */
-function greeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 5) return 'Still up,'
-  if (hour < 12) return 'Good morning,'
-  if (hour < 18) return 'Good afternoon,'
-  return 'Good evening,'
 }

@@ -2,8 +2,13 @@
 
 use genzh_community::CommunityService;
 use genzh_community::authorization::apply_room_overrides;
-use genzh_domain::room::{self, Room, RoomType};
-use genzh_domain::{CommunityId, DomainError, Permission, RoomId, UserId, now};
+use genzh_domain::room::{
+    self, Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,
+    RoomVisibility,
+};
+use genzh_domain::{
+    CommunityId, DomainError, Permission, PermissionSet, RoomId, UserId, now,
+};
 use genzh_infrastructure::{DbPool, ServiceError, ServiceResult};
 
 use crate::authorization::RoomAccess;
@@ -12,13 +17,23 @@ use crate::repository::RoomRepository;
 /// Input for creating a room.
 #[derive(Debug, Clone)]
 pub struct CreateRoom {
+    /// Owning community, if created inside one.
+    pub community_id: Option<CommunityId>,
     /// Display name.
     pub name: String,
     /// Topic line.
     pub topic: Option<String>,
+    /// Topic category (e.g. "gaming", "debate", "tech", "confession", "random").
+    pub category: Option<String>,
     /// What the room is for.
     pub room_type: RoomType,
-    /// Sort order.
+    /// Visibility level.
+    pub visibility: Option<RoomVisibility>,
+    /// Whether user identities are anonymous.
+    pub is_anonymous: bool,
+    /// Duration in minutes (if temporary/expiring).
+    pub duration_minutes: Option<i64>,
+    /// Sort order (for community channels).
     pub position: Option<i32>,
     /// Participant cap for media rooms.
     pub max_participants: Option<i32>,
@@ -31,6 +46,12 @@ pub struct UpdateRoom {
     pub name: Option<String>,
     /// New topic.
     pub topic: Option<String>,
+    /// New category.
+    pub category: Option<String>,
+    /// New visibility.
+    pub visibility: Option<RoomVisibility>,
+    /// New status.
+    pub status: Option<RoomStatus>,
     /// New position.
     pub position: Option<i32>,
     /// New participant cap.
@@ -59,17 +80,6 @@ impl RoomService {
     }
 
     /// Resolve a caller's standing in a room.
-    ///
-    /// The order matters and is the whole authorization story for rooms:
-    ///
-    /// 1. the room must exist;
-    /// 2. the caller must be a member of its community (or its owner);
-    /// 3. their community permissions are folded from their roles;
-    /// 4. the room's overrides are applied on top.
-    ///
-    /// Callers then assert whatever specific capability they need. Nothing in
-    /// this chain trusts a value supplied by the client except the room id,
-    /// which is looked up rather than believed.
     pub async fn access(&self, room_id: RoomId, user_id: UserId) -> ServiceResult<RoomAccess> {
         let room = self
             .rooms
@@ -77,23 +87,38 @@ impl RoomService {
             .await?
             .ok_or_else(|| ServiceError::not_found("room"))?;
 
-        let member = self
-            .communities
-            .member_context(room.community_id, user_id)
-            .await?;
-        let overrides = self.rooms.overrides(room_id).await?;
-        let permissions = apply_room_overrides(member.permissions, &member.role_ids, &overrides);
+        if let Some(community_id) = room.community_id {
+            let member = self
+                .communities
+                .member_context(community_id, user_id)
+                .await?;
+            let overrides = self.rooms.overrides(room_id).await?;
+            let permissions =
+                apply_room_overrides(member.permissions, &member.role_ids, &overrides);
 
-        Ok(RoomAccess {
-            room,
-            member,
-            permissions,
-        })
+            Ok(RoomAccess {
+                room,
+                member: Some(member),
+                permissions,
+            })
+        } else {
+            // Standalone playground room.
+            let is_owner = room.owner_id == Some(user_id);
+            let permissions = if is_owner {
+                PermissionSet::ADMINISTRATOR
+            } else {
+                PermissionSet::default_member()
+            };
+
+            Ok(RoomAccess {
+                room,
+                member: None,
+                permissions,
+            })
+        }
     }
 
     /// Resolve access and assert the room is visible.
-    ///
-    /// The common case; separated so handlers do not each repeat it.
     pub async fn visible_access(
         &self,
         room_id: RoomId,
@@ -104,18 +129,17 @@ impl RoomService {
         Ok(access)
     }
 
-    /// Create a room in a community.
+    /// Create a room (either inside a community or as a global playground room).
     pub async fn create(
         &self,
-        community_id: CommunityId,
+        community_id: Option<CommunityId>,
         user_id: UserId,
         input: CreateRoom,
     ) -> ServiceResult<Room> {
-        let context = self
-            .communities
-            .member_context(community_id, user_id)
-            .await?;
-        context.require(Permission::ManageRoom)?;
+        if let Some(cid) = community_id {
+            let context = self.communities.member_context(cid, user_id).await?;
+            context.require(Permission::ManageRoom)?;
+        }
 
         let name = room::validate_room_name(&input.name)?;
 
@@ -131,7 +155,6 @@ impl RoomService {
             )));
         }
 
-        // A cap on a text room is meaningless and would confuse clients.
         let max_participants = if input.room_type.is_media() {
             input.max_participants
         } else {
@@ -139,23 +162,52 @@ impl RoomService {
         };
 
         let timestamp = now();
+        let expires_at = input.duration_minutes.map(|mins| {
+            timestamp + chrono::Duration::minutes(mins)
+        });
+
         let candidate = Room {
             id: RoomId::new(),
             community_id,
+            owner_id: Some(user_id),
             name,
             topic: input.topic,
+            category: input.category.unwrap_or_else(|| "random".to_string()),
             room_type: input.room_type,
+            visibility: input.visibility.unwrap_or(RoomVisibility::Public),
+            status: RoomStatus::Active,
+            is_anonymous: input.is_anonymous,
             position: input.position.unwrap_or(0),
             max_participants,
+            current_participants: 1, // Creator starts as 1 participant
+            started_at: Some(timestamp),
+            expires_at,
+            ended_at: None,
             created_at: timestamp,
             updated_at: timestamp,
         };
 
         let created = self.rooms.create(&candidate).await?;
+
+        // Add creator as owner participant
+        let _ = self
+            .rooms
+            .join_room(created.id, user_id, RoomParticipantRole::Owner)
+            .await;
+
+        // If anonymous, initialize anonymous identity
+        if created.is_anonymous {
+            let _ = self
+                .rooms
+                .get_or_create_anonymous_identity(created.id, user_id)
+                .await;
+        }
+
         tracing::info!(
             room_id = %created.id,
-            %community_id,
+            community_id = ?created.community_id,
             room_type = created.room_type.as_str(),
+            is_anonymous = created.is_anonymous,
             "room created"
         );
         Ok(created)
@@ -166,11 +218,7 @@ impl RoomService {
         Ok(self.visible_access(room_id, user_id).await?.room)
     }
 
-    /// List a community's rooms, filtered to those the caller may see.
-    ///
-    /// Filtering here rather than in SQL keeps one implementation of the
-    /// override rules; the room count per community is small enough that the
-    /// extra work is irrelevant.
+    /// List a community's rooms.
     pub async fn list(
         &self,
         community_id: CommunityId,
@@ -192,6 +240,90 @@ impl RoomService {
             }
         }
         Ok(visible)
+    }
+
+    /// List rooms for discovery feed.
+    pub async fn list_discovery(
+        &self,
+        category: Option<&str>,
+        limit: i64,
+    ) -> ServiceResult<Vec<Room>> {
+        Ok(self.rooms.list_discovery(category, limit).await?)
+    }
+
+    /// List trending rooms.
+    pub async fn list_trending(&self, limit: i64) -> ServiceResult<Vec<Room>> {
+        Ok(self.rooms.list_trending(limit).await?)
+    }
+
+    /// List live voice/video/stage rooms.
+    pub async fn list_live(&self, limit: i64) -> ServiceResult<Vec<Room>> {
+        Ok(self.rooms.list_live(limit).await?)
+    }
+
+    /// Find a random room for instant matchmaking.
+    pub async fn find_random(
+        &self,
+        category: Option<&str>,
+        room_type: Option<RoomType>,
+    ) -> ServiceResult<Option<Room>> {
+        Ok(self.rooms.find_random(category, room_type).await?)
+    }
+
+    /// Join a room (assigns anonymous identity if anonymous).
+    pub async fn join(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> ServiceResult<(Room, Option<RoomAnonymousIdentity>)> {
+        let access = self.visible_access(room_id, user_id).await?;
+        let role = if access.room.owner_id == Some(user_id) {
+            RoomParticipantRole::Owner
+        } else {
+            RoomParticipantRole::Participant
+        };
+
+        self.rooms.join_room(room_id, user_id, role).await?;
+
+        let anon_identity = if access.room.is_anonymous {
+            Some(
+                self.rooms
+                    .get_or_create_anonymous_identity(room_id, user_id)
+                    .await?,
+            )
+        } else {
+            None
+        };
+
+        let updated_room = self
+            .rooms
+            .find(room_id)
+            .await?
+            .unwrap_or(access.room);
+
+        Ok((updated_room, anon_identity))
+    }
+
+    /// Leave a room.
+    pub async fn leave(&self, room_id: RoomId, user_id: UserId) -> ServiceResult<bool> {
+        Ok(self.rooms.leave_room(room_id, user_id).await?)
+    }
+
+    /// Get anonymous identity for a user in a room.
+    pub async fn get_anonymous_identity(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> ServiceResult<Option<RoomAnonymousIdentity>> {
+        Ok(self.rooms.find_anonymous_identity(room_id, user_id).await?)
+    }
+
+    /// List active participants in a room.
+    pub async fn list_participants(
+        &self,
+        room_id: RoomId,
+    ) -> ServiceResult<Vec<RoomParticipant>> {
+        Ok(self.rooms.list_participants(room_id).await?)
     }
 
     /// Update a room.
@@ -216,6 +348,9 @@ impl RoomService {
                 room_id,
                 name.as_deref(),
                 input.topic.as_deref(),
+                input.category.as_deref(),
+                input.visibility,
+                input.status,
                 input.position,
                 input.max_participants,
             )

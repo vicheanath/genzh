@@ -153,6 +153,10 @@ migrate: ## Apply migrations (the API also does this on startup)
 	  printf 'or: cargo install sqlx-cli --no-default-features --features postgres\n'; \
 	fi
 
+.PHONY: seed
+seed: ## Populate database with users, communities, playground rooms & friendships
+	@$(LOAD_ENV); cargo run --bin seed
+
 # ── quality ─────────────────────────────────────────────────────────────────
 
 .PHONY: check

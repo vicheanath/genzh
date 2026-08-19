@@ -5,16 +5,20 @@ import type {
   CommunityMember,
   CommunityWithPermissions,
   CurrentUser,
+  DiscoveryResponse,
   Friendship,
   MediaJoinResponse,
-  MessagePage,
   Message,
+  MessagePage,
   Profile,
   PublicProfile,
   ReactionSummary,
   RoleWithPermissions,
   Room,
+  RoomParticipant,
+  RoomStatus,
   RoomType,
+  RoomVisibility,
   RoomWithPermissions,
   TokenPair,
   UpdateProfileInput,
@@ -149,11 +153,52 @@ export const communities = {
 // ── rooms ─────────────────────────────────────────────────────────────────
 
 export const rooms = {
+  discovery: (token: string, category?: string, limit?: number) => {
+    const params = new URLSearchParams()
+    if (category) params.set('category', category)
+    if (limit) params.set('limit', String(limit))
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return request<DiscoveryResponse>(`/api/v1/rooms/discovery${query}`, { token })
+  },
+
+  trending: (token: string) =>
+    request<Room[]>('/api/v1/rooms/trending', { token }),
+
+  live: (token: string) =>
+    request<Room[]>('/api/v1/rooms/live', { token }),
+
+  random: (token: string, category?: string, room_type?: RoomType) => {
+    const params = new URLSearchParams()
+    if (category) params.set('category', category)
+    if (room_type) params.set('room_type', room_type)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return request<Room | null>(`/api/v1/rooms/random${query}`, { token })
+  },
+
   list: (token: string, communityId: Uuid) =>
     request<Room[]>(`/api/v1/communities/${communityId}/rooms`, { token }),
 
   get: (token: string, id: Uuid) =>
     request<RoomWithPermissions>(`/api/v1/rooms/${id}`, { token }),
+
+  createStandalone: (
+    token: string,
+    input: {
+      name: string
+      room_type: RoomType
+      topic?: string
+      category?: string
+      visibility?: RoomVisibility
+      is_anonymous?: boolean
+      duration_minutes?: number
+      max_participants?: number
+    },
+  ) =>
+    request<Room>('/api/v1/rooms', {
+      method: 'POST',
+      body: input,
+      token,
+    }),
 
   create: (
     token: string,
@@ -162,6 +207,10 @@ export const rooms = {
       name: string
       room_type: RoomType
       topic?: string
+      category?: string
+      visibility?: RoomVisibility
+      is_anonymous?: boolean
+      duration_minutes?: number
       position?: number
       max_participants?: number
     },
@@ -172,12 +221,39 @@ export const rooms = {
       token,
     }),
 
+  join: (token: string, id: Uuid) =>
+    request<RoomWithPermissions>(`/api/v1/rooms/${id}/join`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  leave: (token: string, id: Uuid) =>
+    request<void>(`/api/v1/rooms/${id}/leave`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  participants: (token: string, id: Uuid) =>
+    request<RoomParticipant[]>(`/api/v1/rooms/${id}/participants`, { token }),
+
+  setPersona: (token: string, id: Uuid, is_anonymous: boolean) =>
+    request<RoomParticipant>(`/api/v1/rooms/${id}/persona`, {
+      method: 'PATCH',
+      body: { is_anonymous },
+      token,
+    }),
+
   update: (
     token: string,
     id: Uuid,
     input: {
       name?: string
       topic?: string
+      category?: string
+      visibility?: RoomVisibility
+      status?: RoomStatus
       position?: number
       max_participants?: number
     },
@@ -204,10 +280,10 @@ export const messages = {
     return request<MessagePage>(`/api/v1/rooms/${roomId}/messages?${params}`, { token })
   },
 
-  post: (token: string, roomId: Uuid, content: string) =>
+  post: (token: string, roomId: Uuid, content: string, is_anonymous?: boolean) =>
     request<Message>(`/api/v1/rooms/${roomId}/messages`, {
       method: 'POST',
-      body: { content },
+      body: { content, is_anonymous },
       token,
     }),
 

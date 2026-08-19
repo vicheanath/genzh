@@ -9,6 +9,7 @@ import {
   HashIcon,
   HeadphonesIcon,
   HomeIcon,
+  LockIcon,
   MenuIcon,
   MicIcon,
   MicOffIcon,
@@ -32,7 +33,6 @@ import {
   rooms as roomsApi,
   type Community,
   type Room,
-  type RoomType,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
@@ -259,11 +259,17 @@ function CommunityRail({
 
 // ── the sidebar ────────────────────────────────────────────────────────────
 
-const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
+const ROOM_ICONS: Record<string, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
   activity: SparkleIcon,
+  stage: VideoIcon,
+  poll: SparkleIcon,
+  debate: SparkleIcon,
+  game: SparkleIcon,
+  confession: LockIcon,
+  quick_chat: HashIcon,
 }
 
 function ChannelSidebar({

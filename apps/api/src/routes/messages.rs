@@ -1,10 +1,13 @@
 //! Messages and reactions.
 
+use std::collections::HashMap;
+
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use genzh_domain::message::{Message, ReactionSummary};
+use genzh_domain::room::RoomAnonymousIdentity;
 use genzh_domain::{MessageId, RoomId};
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +21,9 @@ use crate::state::AppState;
 pub struct PostMessageRequest {
     /// Message body.
     pub content: String,
+    /// Whether this message should be sent anonymously.
+    #[serde(default)]
+    pub is_anonymous: Option<bool>,
 }
 
 /// `PATCH /api/v1/messages/{id}` body.
@@ -46,10 +52,6 @@ pub struct HistoryQuery {
 }
 
 /// A message plus everything a client needs to render it.
-///
-/// `#[serde(flatten)]` keeps the message's own fields at the top level, so this
-/// is the message shape clients already know with `reactions` added — not a new
-/// envelope they have to unwrap.
 #[derive(Debug, Serialize)]
 pub struct MessageView {
     /// The message itself.
@@ -57,6 +59,9 @@ pub struct MessageView {
     pub message: Message,
     /// Reaction tallies, including whether the caller is in each one.
     pub reactions: Vec<ReactionSummary>,
+    /// Anonymous author alias if message was sent anonymously.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anonymous_author: Option<RoomAnonymousIdentity>,
 }
 
 /// A page of history.
@@ -75,6 +80,8 @@ pub async fn list(
     Path(room_id): Path<RoomId>,
     Query(query): Query<HistoryQuery>,
 ) -> ApiResult<Json<HistoryResponse>> {
+    let _access = state.rooms.visible_access(room_id, caller.user_id).await?;
+
     let page = state
         .messaging
         .history(room_id, caller.user_id, query.before, query.limit)
@@ -86,13 +93,35 @@ pub async fn list(
         .reactions_for(room_id, caller.user_id, &ids)
         .await?;
 
+    let mut anon_identities = HashMap::new();
+    for msg in &page.messages {
+        if msg.is_anonymous && !anon_identities.contains_key(&msg.author_id) {
+            if let Ok(Some(ident)) = state
+                .rooms
+                .repository()
+                .find_anonymous_identity(room_id, msg.author_id)
+                .await
+            {
+                anon_identities.insert(msg.author_id, ident);
+            }
+        }
+    }
+
     Ok(Json(HistoryResponse {
         messages: page
             .messages
             .into_iter()
-            .map(|message| MessageView {
-                reactions: reactions.remove(&message.id).unwrap_or_default(),
-                message,
+            .map(|message| {
+                let anon = if message.is_anonymous {
+                    anon_identities.get(&message.author_id).cloned()
+                } else {
+                    None
+                };
+                MessageView {
+                    reactions: reactions.remove(&message.id).unwrap_or_default(),
+                    anonymous_author: anon,
+                    message,
+                }
             })
             .collect(),
         next_before: page.next_before,
@@ -106,17 +135,44 @@ pub async fn post(
     Path(room_id): Path<RoomId>,
     ApiJson(body): ApiJson<PostMessageRequest>,
 ) -> ApiResult<(StatusCode, Json<MessageView>)> {
+    let access = state.rooms.visible_access(room_id, caller.user_id).await?;
+
+    // Determine anonymity: explicit choice in body > participant preference > room default
+    let participant = state
+        .rooms
+        .repository()
+        .find_participant(room_id, caller.user_id)
+        .await
+        .unwrap_or(None);
+
+    let is_anonymous = body.is_anonymous.unwrap_or_else(|| {
+        participant
+            .map(|p| p.is_anonymous)
+            .unwrap_or(access.room.is_anonymous)
+    });
+
     let message = state
         .messaging
-        .post(room_id, caller.user_id, &body.content)
+        .post(room_id, caller.user_id, &body.content, is_anonymous)
         .await?;
-    // A brand new message has no reactions, but returning the same shape as
-    // history means the client has one message type rather than two.
+
+    let anonymous_author = if is_anonymous {
+        state
+            .rooms
+            .repository()
+            .get_or_create_anonymous_identity(room_id, caller.user_id)
+            .await
+            .ok()
+    } else {
+        None
+    };
+
     Ok((
         StatusCode::CREATED,
         Json(MessageView {
             message,
             reactions: Vec::new(),
+            anonymous_author,
         }),
     ))
 }

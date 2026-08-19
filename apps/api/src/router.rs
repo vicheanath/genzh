@@ -66,10 +66,18 @@ pub fn build(state: AppState) -> Router {
         )
         // ---- users ----
         .route("/users/{id}", get(routes::users::get))
-        // ---- rooms ----
+        // ---- playground rooms & discovery ----
+        .route(
+            "/rooms",
+            post(routes::rooms::create_standalone_room),
+        )
+        .route("/rooms/discovery", get(routes::rooms::discovery))
+        .route("/rooms/trending", get(routes::rooms::trending))
+        .route("/rooms/live", get(routes::rooms::live))
+        .route("/rooms/random", get(routes::rooms::random_room))
         .route(
             "/communities/{id}/rooms",
-            get(routes::rooms::list).post(routes::rooms::create),
+            get(routes::rooms::list).post(routes::rooms::create_community_room),
         )
         .route(
             "/rooms/{id}",
@@ -77,6 +85,10 @@ pub fn build(state: AppState) -> Router {
                 .patch(routes::rooms::update)
                 .delete(routes::rooms::delete),
         )
+        .route("/rooms/{id}/join", post(routes::rooms::join))
+        .route("/rooms/{id}/leave", post(routes::rooms::leave))
+        .route("/rooms/{id}/persona", patch(routes::rooms::set_persona))
+        .route("/rooms/{id}/participants", get(routes::rooms::participants))
         // ---- media ----
         .route("/rooms/{id}/media/join", post(routes::media::join))
         .route("/rooms/{id}/media/leave", post(routes::media::leave))

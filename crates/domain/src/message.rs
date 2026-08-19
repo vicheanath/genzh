@@ -26,6 +26,9 @@ pub struct Message {
     pub author_id: UserId,
     /// Message body.
     pub content: String,
+    /// Whether this message was posted anonymously.
+    #[serde(default)]
+    pub is_anonymous: bool,
     /// Set when the body was edited (UTC).
     pub edited_at: Option<Timestamp>,
     /// Creation time (UTC).

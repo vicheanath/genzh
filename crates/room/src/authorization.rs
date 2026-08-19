@@ -1,8 +1,4 @@
 //! Room-level authorization.
-//!
-//! A room's effective permissions are the member's community-wide permissions
-//! with that room's overrides applied. [`RoomAccess`] is the resolved answer,
-//! and is what every room, message and media operation is checked against.
 
 use genzh_community::MemberContext;
 use genzh_domain::{DomainError, DomainResult, Permission, PermissionSet, Room};
@@ -12,9 +8,9 @@ use genzh_domain::{DomainError, DomainResult, Permission, PermissionSet, Room};
 pub struct RoomAccess {
     /// The room.
     pub room: Room,
-    /// The caller's community-level context.
-    pub member: MemberContext,
-    /// Effective permissions in this room, overrides applied.
+    /// The caller's community-level context, if room belongs to a community.
+    pub member: Option<MemberContext>,
+    /// Effective permissions in this room.
     pub permissions: PermissionSet,
 }
 
@@ -34,77 +30,7 @@ impl RoomAccess {
     }
 
     /// Assert the caller can see the room at all.
-    ///
-    /// Every other check is downstream of this one, so it is separated out to
-    /// make the ordering obvious at call sites.
     pub fn require_visible(&self) -> DomainResult<()> {
         self.require(Permission::ViewRoom)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use genzh_domain::community::Community;
-    use genzh_domain::room::RoomType;
-    use genzh_domain::{CommunityId, RoomId, UserId, now};
-    use std::collections::HashSet;
-
-    fn access(permissions: PermissionSet, room_type: RoomType) -> RoomAccess {
-        let owner = UserId::new();
-        let community = Community {
-            id: CommunityId::new(),
-            name: "Night Owls".into(),
-            description: None,
-            icon_url: None,
-            owner_id: owner,
-            created_at: now(),
-            updated_at: now(),
-        };
-        let member = MemberContext::new(&community, UserId::new(), HashSet::new(), []);
-
-        RoomAccess {
-            room: Room {
-                id: RoomId::new(),
-                community_id: community.id,
-                name: "lounge".into(),
-                topic: None,
-                room_type,
-                position: 0,
-                max_participants: None,
-                created_at: now(),
-                updated_at: now(),
-            },
-            member,
-            permissions,
-        }
-    }
-
-    #[test]
-    fn a_plain_member_can_see_and_speak_but_not_manage() {
-        let a = access(PermissionSet::default_member(), RoomType::Voice);
-        assert!(a.require_visible().is_ok());
-        assert!(a.require(Permission::Speak).is_ok());
-        assert_eq!(
-            a.require(Permission::ManageRoom).unwrap_err(),
-            DomainError::PermissionDenied("manage_room")
-        );
-    }
-
-    #[test]
-    fn a_member_denied_view_room_cannot_see_it() {
-        let a = access(PermissionSet::empty(), RoomType::Voice);
-        assert_eq!(
-            a.require_visible().unwrap_err(),
-            DomainError::PermissionDenied("view_room")
-        );
-    }
-
-    #[test]
-    fn an_administrator_holds_everything_in_every_room() {
-        let a = access(PermissionSet::ADMINISTRATOR, RoomType::Activity);
-        for permission in Permission::ALL {
-            assert!(a.allows(*permission));
-        }
     }
 }

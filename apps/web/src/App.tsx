@@ -53,6 +53,7 @@ function Router() {
         <Route path="/explore" element={<ExploreRoute />} />
         <Route path="/c/:communityId" element={<CommunityRoute />} />
         <Route path="/c/:communityId/r/:roomId" element={<RoomRoute />} />
+        <Route path="/rooms/:roomId" element={<RoomRoute />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

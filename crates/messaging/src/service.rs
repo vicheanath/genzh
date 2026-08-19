@@ -32,6 +32,7 @@ impl MessagingService {
         room_id: RoomId,
         author_id: UserId,
         content: &str,
+        is_anonymous: bool,
     ) -> ServiceResult<Message> {
         let access = self.rooms.visible_access(room_id, author_id).await?;
         access.require(Permission::SendMessage)?;
@@ -43,6 +44,7 @@ impl MessagingService {
             room_id,
             author_id,
             content,
+            is_anonymous,
             edited_at: None,
             created_at: now(),
         };

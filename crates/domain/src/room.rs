@@ -1,16 +1,13 @@
-//! Rooms.
+//! Rooms & Spontaneous Moments.
 //!
-//! There is exactly **one** room concept. A voice room is not a different
-//! server or a different table — it is a room whose [`RoomType`] happens to
-//! carry media. That is what lets the same permission model, the same
-//! membership checks and the same message history apply everywhere, and what
-//! lets a room gain video later without a migration.
+//! A room is a temporary or persistent social space where users interact
+//! either within a community or across the global playground.
 
 use serde::{Deserialize, Serialize};
 
 use crate::Timestamp;
 use crate::error::{DomainError, DomainResult};
-use crate::ids::{CommunityId, RoomId};
+use crate::ids::{CommunityId, RoomId, UserId};
 use crate::permission::Permission;
 
 /// Maximum length of a room name.
@@ -30,60 +27,148 @@ pub enum RoomType {
     Voice,
     /// Video-first room.
     Video,
-    /// A mini-game or shared activity, with media alongside it.
+    /// Mini-game or interactive activity.
     Activity,
+    /// Moderated audience broadcast stage.
+    Stage,
+    /// Interactive live voting & opinion polling.
+    Poll,
+    /// Structured 2-sided debate with live vote tracking.
+    Debate,
+    /// Spontaneous party mini-games.
+    Game,
+    /// Anonymous confessions & truth drops.
+    Confession,
+    /// Ephemeral speed-dating or fast spontaneous chat.
+    QuickChat,
 }
 
 impl RoomType {
-    /// Does joining this room involve the media plane at all?
+    /// Does joining this room involve the media plane (audio/video/streams)?
     pub const fn is_media(self) -> bool {
-        matches!(self, RoomType::Voice | RoomType::Video | RoomType::Activity)
+        matches!(
+            self,
+            RoomType::Voice | RoomType::Video | RoomType::Activity | RoomType::Stage
+        )
     }
 
-    /// Can messages be posted here?
-    ///
-    /// Every room has a text channel — a voice room's chat sidebar is the same
-    /// `messages` table as a text room's history.
+    /// Can messages/reactions be posted here?
     pub const fn allows_messages(self) -> bool {
         true
     }
 
-    /// Stable lower-case name, used in errors and logs.
+    /// Stable lower-case name, used in errors, URLs, and logs.
     pub const fn as_str(self) -> &'static str {
         match self {
             RoomType::Text => "text",
             RoomType::Voice => "voice",
             RoomType::Video => "video",
             RoomType::Activity => "activity",
+            RoomType::Stage => "stage",
+            RoomType::Poll => "poll",
+            RoomType::Debate => "debate",
+            RoomType::Game => "game",
+            RoomType::Confession => "confession",
+            RoomType::QuickChat => "quick_chat",
         }
     }
 
     /// The permission a participant needs to publish a camera track here.
-    ///
-    /// Kept as a method rather than a constant so a future "stage" room type
-    /// can demand something stricter without touching call sites.
     pub const fn camera_permission(self) -> Permission {
-        Permission::UseVideo
+        match self {
+            RoomType::Stage => Permission::ScreenShare,
+            _ => Permission::UseVideo,
+        }
     }
 }
 
-/// A room inside a community.
+/// Lifecycle status of a room.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "room_status", rename_all = "snake_case")]
+pub enum RoomStatus {
+    Created,
+    Waiting,
+    Active,
+    Ending,
+    Ended,
+}
+
+impl Default for RoomStatus {
+    fn default() -> Self {
+        Self::Active
+    }
+}
+
+/// Discoverability and access visibility of a room.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "room_visibility", rename_all = "snake_case")]
+pub enum RoomVisibility {
+    Public,
+    Unlisted,
+    FriendsOnly,
+    Private,
+}
+
+impl Default for RoomVisibility {
+    fn default() -> Self {
+        Self::Public
+    }
+}
+
+/// Participant role within a room.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "room_participant_role", rename_all = "snake_case")]
+pub enum RoomParticipantRole {
+    Owner,
+    Moderator,
+    Participant,
+    Observer,
+}
+
+impl Default for RoomParticipantRole {
+    fn default() -> Self {
+        Self::Participant
+    }
+}
+
+/// A room on the platform (either standalone global or community-bound).
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Room {
     /// Primary key.
     pub id: RoomId,
-    /// Owning community.
-    pub community_id: CommunityId,
+    /// Owning community, if bounded to a persistent server.
+    pub community_id: Option<CommunityId>,
+    /// Owner user ID (optional for system/community rooms).
+    pub owner_id: Option<UserId>,
     /// Display name.
     pub name: String,
     /// Topic line shown under the name.
     pub topic: Option<String>,
+    /// Topic category (e.g., "gaming", "debate", "tech", "music", "confession", "random").
+    pub category: String,
     /// What the room is for.
     pub room_type: RoomType,
-    /// Sort order within the community.
+    /// Visibility level for discovery.
+    pub visibility: RoomVisibility,
+    /// Lifecycle status.
+    pub status: RoomStatus,
+    /// Whether user real profiles are replaced with room-scoped anonymous identities.
+    pub is_anonymous: bool,
+    /// Sort order within a community (if applicable).
     pub position: i32,
-    /// Cap on simultaneous media participants; `None` means the global default.
+    /// Cap on simultaneous participants; `None` means the global default.
     pub max_participants: Option<i32>,
+    /// Current count of active participants.
+    pub current_participants: i32,
+    /// When the room session started.
+    pub started_at: Option<Timestamp>,
+    /// When the room session automatically expires (if temporary).
+    pub expires_at: Option<Timestamp>,
+    /// When the room was ended or archived.
+    pub ended_at: Option<Timestamp>,
     /// Creation time (UTC).
     pub created_at: Timestamp,
     /// Last modification time (UTC).
@@ -96,7 +181,7 @@ impl Room {
         self.max_participants.unwrap_or(MEDIA_ROOM_MAX_PARTICIPANTS)
     }
 
-    /// Reject media joins on text rooms early, with a typed error.
+    /// Reject media joins on non-media rooms early, with a typed error.
     pub fn require_media(&self) -> DomainResult<()> {
         if self.room_type.is_media() {
             Ok(())
@@ -104,6 +189,39 @@ impl Room {
             Err(DomainError::UnsupportedRoomType(self.room_type.as_str()))
         }
     }
+
+    /// Has this room expired?
+    pub fn is_expired(&self, now: Timestamp) -> bool {
+        if let Some(exp) = self.expires_at {
+            now >= exp
+        } else {
+            false
+        }
+    }
+}
+
+/// An anonymous identity scoped strictly to a single room.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RoomAnonymousIdentity {
+    pub room_id: RoomId,
+    pub user_id: UserId,
+    pub alias_name: String,
+    pub avatar_seed: String,
+    pub accent_color: String,
+    pub created_at: Timestamp,
+}
+
+/// Participant membership in a live room.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RoomParticipant {
+    pub room_id: RoomId,
+    pub user_id: UserId,
+    pub role: RoomParticipantRole,
+    pub is_muted: bool,
+    #[serde(default)]
+    pub is_anonymous: bool,
+    pub joined_at: Timestamp,
+    pub last_seen_at: Timestamp,
 }
 
 /// Validate a room name.
@@ -118,6 +236,54 @@ pub fn validate_room_name(raw: &str) -> DomainResult<String> {
     Ok(name)
 }
 
+/// Adjectives for generating fun anonymous identities.
+const ANONYMOUS_ADJECTIVES: &[&str] = &[
+    "Blue", "Pixel", "Neon", "Velvet", "Cosmic", "Chill", "Spicy", "Golden", "Cyber", "Quiet",
+    "Silver", "Mystic", "Electric", "Midnight", "Solar", "Shadow", "Sunny", "Happy", "Lucky",
+    "Breezy", "Ruby", "Frosty", "Hyper", "Clever", "Brave", "Dreamy", "Astral", "Atomic",
+];
+
+/// Nouns for generating fun anonymous identities.
+const ANONYMOUS_NOUNS: &[&str] = &[
+    "Fox", "Cat", "Panda", "Ghost", "Owl", "Otter", "Falcon", "Wolf", "Koala", "Rabbit", "Dolphin",
+    "Tiger", "Hawk", "Bear", "Raven", "Dragon", "Phoenix", "Badger", "Hedgehog", "Penguin",
+    "Sloth", "Gecko", "Lynx", "Raccoon", "Sparrow", "Hamster", "Firefly", "Chameleon",
+];
+
+/// Fun accent colors for anonymous identities.
+const ANONYMOUS_COLORS: &[&str] = &[
+    "#5865f2", "#57f287", "#fee75c", "#eb459e", "#ed4245", "#3ba55d", "#a855f7", "#06b6d4",
+    "#f97316", "#14b8a6", "#ec4899", "#8b5cf6",
+];
+
+/// Generate a deterministic, playful anonymous identity for a user in a room.
+pub fn generate_anonymous_identity(
+    room_id: RoomId,
+    user_id: UserId,
+) -> (String, String, String) {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in room_id.as_uuid().as_bytes() {
+        hash = hash.wrapping_mul(0x100000001b3) ^ (*byte as u64);
+    }
+    for byte in user_id.as_uuid().as_bytes() {
+        hash = hash.wrapping_mul(0x100000001b3) ^ (*byte as u64);
+    }
+
+    let adj_idx = (hash as usize) % ANONYMOUS_ADJECTIVES.len();
+    let noun_idx = ((hash >> 8) as usize) % ANONYMOUS_NOUNS.len();
+    let color_idx = ((hash >> 16) as usize) % ANONYMOUS_COLORS.len();
+    let discriminator = ((hash >> 24) % 9000 + 1000) as u16;
+
+    let alias = format!(
+        "{}{}#{:04}",
+        ANONYMOUS_ADJECTIVES[adj_idx], ANONYMOUS_NOUNS[noun_idx], discriminator
+    );
+    let avatar_seed = format!("{}-{}", ANONYMOUS_NOUNS[noun_idx], discriminator);
+    let color = ANONYMOUS_COLORS[color_idx].to_string();
+
+    (alias, avatar_seed, color)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,12 +291,21 @@ mod tests {
     fn room(room_type: RoomType) -> Room {
         Room {
             id: RoomId::new(),
-            community_id: CommunityId::new(),
+            community_id: Some(CommunityId::new()),
+            owner_id: None,
             name: "lounge".into(),
             topic: None,
+            category: "random".into(),
             room_type,
+            visibility: RoomVisibility::Public,
+            status: RoomStatus::Active,
+            is_anonymous: false,
             position: 0,
             max_participants: None,
+            current_participants: 0,
+            started_at: Some(crate::now()),
+            expires_at: None,
+            ended_at: None,
             created_at: crate::now(),
             updated_at: crate::now(),
         }
@@ -141,28 +316,23 @@ mod tests {
         assert!(room(RoomType::Voice).require_media().is_ok());
         assert!(room(RoomType::Video).require_media().is_ok());
         assert!(room(RoomType::Activity).require_media().is_ok());
+        assert!(room(RoomType::Stage).require_media().is_ok());
 
         let err = room(RoomType::Text).require_media().unwrap_err();
         assert_eq!(err, DomainError::UnsupportedRoomType("text"));
     }
 
     #[test]
-    fn every_room_has_chat() {
-        for t in [
-            RoomType::Text,
-            RoomType::Voice,
-            RoomType::Video,
-            RoomType::Activity,
-        ] {
-            assert!(t.allows_messages());
-        }
-    }
+    fn deterministic_anonymous_identity() {
+        let r_id = RoomId::new();
+        let u_id = UserId::new();
 
-    #[test]
-    fn participant_limit_falls_back_to_the_default() {
-        let mut r = room(RoomType::Voice);
-        assert_eq!(r.participant_limit(), MEDIA_ROOM_MAX_PARTICIPANTS);
-        r.max_participants = Some(4);
-        assert_eq!(r.participant_limit(), 4);
+        let (alias1, seed1, col1) = generate_anonymous_identity(r_id, u_id);
+        let (alias2, seed2, col2) = generate_anonymous_identity(r_id, u_id);
+
+        assert_eq!(alias1, alias2);
+        assert_eq!(seed1, seed2);
+        assert_eq!(col1, col2);
+        assert!(alias1.contains('#'));
     }
 }

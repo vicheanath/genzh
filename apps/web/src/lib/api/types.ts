@@ -1,16 +1,26 @@
 /**
  * Wire types, mirroring the Rust DTOs in `apps/api/src/routes`.
- *
- * Hand-written rather than generated: the surface is small, and a generator
- * would be a build step to maintain for types that change when the handlers do
- * — which is exactly when a compile error is most useful.
  */
 
 export type Uuid = string
 /** RFC 3339, always UTC. */
 export type Timestamp = string
 
-export type RoomType = 'text' | 'voice' | 'video' | 'activity'
+export type RoomType =
+  | 'text'
+  | 'voice'
+  | 'video'
+  | 'activity'
+  | 'stage'
+  | 'poll'
+  | 'debate'
+  | 'game'
+  | 'confession'
+  | 'quick_chat'
+
+export type RoomStatus = 'created' | 'waiting' | 'active' | 'ending' | 'ended'
+export type RoomVisibility = 'public' | 'unlisted' | 'friends_only' | 'private'
+export type RoomParticipantRole = 'owner' | 'moderator' | 'participant' | 'observer'
 
 export type Permission =
   | 'view_room'
@@ -87,20 +97,56 @@ export interface CommunityMember {
   joined_at: Timestamp
 }
 
+export interface RoomAnonymousIdentity {
+  room_id: Uuid
+  user_id: Uuid
+  alias_name: string
+  avatar_seed: string
+  accent_color: string
+  created_at: Timestamp
+}
+
+export interface RoomParticipant {
+  room_id: Uuid
+  user_id: Uuid
+  role: RoomParticipantRole
+  is_muted: boolean
+  is_anonymous: boolean
+  joined_at: Timestamp
+  last_seen_at: Timestamp
+}
+
 export interface Room {
   id: Uuid
-  community_id: Uuid
+  community_id: Uuid | null
+  owner_id?: Uuid | null
   name: string
   topic: string | null
+  category: string
   room_type: RoomType
+  visibility: RoomVisibility
+  status: RoomStatus
+  is_anonymous: boolean
   position: number
   max_participants: number | null
+  current_participants: number
+  started_at?: Timestamp | null
+  expires_at?: Timestamp | null
+  ended_at?: Timestamp | null
   created_at: Timestamp
   updated_at: Timestamp
 }
 
 export interface RoomWithPermissions extends Room {
   your_permissions: Permission[]
+  anonymous_identity?: RoomAnonymousIdentity | null
+}
+
+export interface DiscoveryResponse {
+  trending: Room[]
+  live_now: Room[]
+  categories: string[]
+  rooms: Room[]
 }
 
 /** Reaction counts on one message, as the calling user sees them. */
@@ -116,9 +162,11 @@ export interface Message {
   room_id: Uuid
   author_id: Uuid
   content: string
+  is_anonymous?: boolean
   edited_at: Timestamp | null
   created_at: Timestamp
   reactions: ReactionSummary[]
+  anonymous_author?: RoomAnonymousIdentity | null
 }
 
 export interface MessagePage {
@@ -128,12 +176,6 @@ export interface MessagePage {
 
 export type FriendshipStatus = 'pending' | 'accepted' | 'declined'
 
-/**
- * A friendship or friend request.
- *
- * One row per unordered pair; `requester_id` is what distinguishes a request
- * you sent from one you received.
- */
 export interface Friendship {
   requester_id: Uuid
   addressee_id: Uuid
@@ -142,7 +184,6 @@ export interface Friendship {
   updated_at: Timestamp
 }
 
-/** Every field optional: the API patches only what is present. */
 export interface UpdateProfileInput {
   display_name?: string
   bio?: string
@@ -179,32 +220,11 @@ export interface CreateRoleInput {
   permissions?: Permission[]
 }
 
-export interface UpdateRoleInput {
-  name?: string
-  color?: string
-  position?: number
-  permissions?: Permission[]
-}
-
-export interface UpdateRoomInput {
-  name?: string
-  topic?: string
-  position?: number
-  max_participants?: number
-}
-
-export interface IceServer {
-  urls: string[]
-  username?: string
-  credential?: string
-}
-
 export interface MediaJoinResponse {
   room_id: Uuid
-  participant_id: Uuid
+  participant_id: string
   media_url: string
   token: string
   expires_at: Timestamp
-  ice_servers: IceServer[]
+  ice_servers: Array<{ urls: string | string[]; username?: string; credential?: string }>
 }
-

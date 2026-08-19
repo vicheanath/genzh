@@ -1,8 +1,11 @@
-//! Persistence for rooms and their permission overrides.
+//! Persistence for rooms, anonymous identities, participants, and permission overrides.
 
 use genzh_community::authorization::RoomOverride;
-use genzh_domain::room::{Room, RoomType};
-use genzh_domain::{CommunityId, Permission, RoleId, RoomId};
+use genzh_domain::room::{
+    Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,
+    RoomVisibility, generate_anonymous_identity,
+};
+use genzh_domain::{CommunityId, Permission, RoleId, RoomId, UserId};
 use genzh_infrastructure::{DbPool, RepositoryError, RepositoryResult};
 
 /// Row shape for the override query.
@@ -21,7 +24,7 @@ enum PermissionEffect {
     Deny,
 }
 
-/// Rooms.
+/// Rooms Repository.
 #[derive(Debug, Clone)]
 pub struct RoomRepository {
     pool: DbPool,
@@ -36,27 +39,44 @@ impl RoomRepository {
     /// Insert a room.
     pub async fn create(&self, room: &Room) -> RepositoryResult<Room> {
         sqlx::query_as(
-            "INSERT INTO rooms (id, community_id, name, topic, room_type, position, max_participants)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING id, community_id, name, topic, room_type, position, max_participants,
+            "INSERT INTO rooms (
+                id, community_id, owner_id, name, topic, category, room_type,
+                visibility, status, is_anonymous, position, max_participants,
+                current_participants, started_at, expires_at, ended_at
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+             RETURNING id, community_id, owner_id, name, topic, category, room_type,
+                       visibility, status, is_anonymous, position, max_participants,
+                       current_participants, started_at, expires_at, ended_at,
                        created_at, updated_at",
         )
         .bind(room.id)
         .bind(room.community_id)
+        .bind(room.owner_id)
         .bind(&room.name)
         .bind(&room.topic)
+        .bind(&room.category)
         .bind(room.room_type)
+        .bind(room.visibility)
+        .bind(room.status)
+        .bind(room.is_anonymous)
         .bind(room.position)
         .bind(room.max_participants)
+        .bind(room.current_participants)
+        .bind(room.started_at)
+        .bind(room.expires_at)
+        .bind(room.ended_at)
         .fetch_one(&self.pool)
         .await
         .map_err(RepositoryError::from)
     }
 
-    /// Fetch a room.
+    /// Fetch a room by id.
     pub async fn find(&self, id: RoomId) -> RepositoryResult<Option<Room>> {
         sqlx::query_as(
-            "SELECT id, community_id, name, topic, room_type, position, max_participants,
+            "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                    visibility, status, is_anonymous, position, max_participants,
+                    current_participants, started_at, expires_at, ended_at,
                     created_at, updated_at
              FROM rooms WHERE id = $1",
         )
@@ -72,9 +92,13 @@ impl RoomRepository {
         community_id: CommunityId,
     ) -> RepositoryResult<Vec<Room>> {
         sqlx::query_as(
-            "SELECT id, community_id, name, topic, room_type, position, max_participants,
+            "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                    visibility, status, is_anonymous, position, max_participants,
+                    current_participants, started_at, expires_at, ended_at,
                     created_at, updated_at
-             FROM rooms WHERE community_id = $1 ORDER BY position ASC, created_at ASC",
+             FROM rooms
+             WHERE community_id = $1 AND status <> 'ended'::room_status
+             ORDER BY position ASC, created_at ASC",
         )
         .bind(community_id)
         .fetch_all(&self.pool)
@@ -82,16 +106,179 @@ impl RoomRepository {
         .map_err(RepositoryError::from)
     }
 
+    /// List public rooms for playground discovery.
+    pub async fn list_discovery(
+        &self,
+        category: Option<&str>,
+        limit: i64,
+    ) -> RepositoryResult<Vec<Room>> {
+        if let Some(cat) = category {
+            sqlx::query_as(
+                "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                        visibility, status, is_anonymous, position, max_participants,
+                        current_participants, started_at, expires_at, ended_at,
+                        created_at, updated_at
+                 FROM rooms
+                 WHERE visibility = 'public'::room_visibility
+                   AND status = 'active'::room_status
+                   AND category = $1
+                 ORDER BY current_participants DESC, created_at DESC
+                 LIMIT $2",
+            )
+            .bind(cat)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::from)
+        } else {
+            sqlx::query_as(
+                "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                        visibility, status, is_anonymous, position, max_participants,
+                        current_participants, started_at, expires_at, ended_at,
+                        created_at, updated_at
+                 FROM rooms
+                 WHERE visibility = 'public'::room_visibility
+                   AND status = 'active'::room_status
+                 ORDER BY current_participants DESC, created_at DESC
+                 LIMIT $1",
+            )
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::from)
+        }
+    }
+
+    /// List trending rooms by engagement score.
+    pub async fn list_trending(&self, limit: i64) -> RepositoryResult<Vec<Room>> {
+        sqlx::query_as(
+            "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                    visibility, status, is_anonymous, position, max_participants,
+                    current_participants, started_at, expires_at, ended_at,
+                    created_at, updated_at
+             FROM rooms
+             WHERE visibility = 'public'::room_visibility
+               AND status = 'active'::room_status
+             ORDER BY current_participants DESC, created_at DESC
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// List live voice/video/stage rooms with active participants.
+    pub async fn list_live(&self, limit: i64) -> RepositoryResult<Vec<Room>> {
+        sqlx::query_as(
+            "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                    visibility, status, is_anonymous, position, max_participants,
+                    current_participants, started_at, expires_at, ended_at,
+                    created_at, updated_at
+             FROM rooms
+             WHERE visibility = 'public'::room_visibility
+               AND status = 'active'::room_status
+               AND room_type IN ('voice'::room_type, 'video'::room_type, 'stage'::room_type, 'game'::room_type)
+             ORDER BY current_participants DESC, created_at DESC
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// Find a random active public room for one-click matchmaking.
+    pub async fn find_random(
+        &self,
+        category: Option<&str>,
+        room_type: Option<RoomType>,
+    ) -> RepositoryResult<Option<Room>> {
+        match (category, room_type) {
+            (Some(cat), Some(rt)) => {
+                sqlx::query_as(
+                    "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                            visibility, status, is_anonymous, position, max_participants,
+                            current_participants, started_at, expires_at, ended_at,
+                            created_at, updated_at
+                     FROM rooms
+                     WHERE visibility = 'public'::room_visibility
+                       AND status = 'active'::room_status
+                       AND category = $1
+                       AND room_type = $2
+                     ORDER BY RANDOM()
+                     LIMIT 1",
+                )
+                .bind(cat)
+                .bind(rt)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(RepositoryError::from)
+            }
+            (Some(cat), None) => {
+                sqlx::query_as(
+                    "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                            visibility, status, is_anonymous, position, max_participants,
+                            current_participants, started_at, expires_at, ended_at,
+                            created_at, updated_at
+                     FROM rooms
+                     WHERE visibility = 'public'::room_visibility
+                       AND status = 'active'::room_status
+                       AND category = $1
+                     ORDER BY RANDOM()
+                     LIMIT 1",
+                )
+                .bind(cat)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(RepositoryError::from)
+            }
+            (None, Some(rt)) => {
+                sqlx::query_as(
+                    "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                            visibility, status, is_anonymous, position, max_participants,
+                            current_participants, started_at, expires_at, ended_at,
+                            created_at, updated_at
+                     FROM rooms
+                     WHERE visibility = 'public'::room_visibility
+                       AND status = 'active'::room_status
+                       AND room_type = $1
+                     ORDER BY RANDOM()
+                     LIMIT 1",
+                )
+                .bind(rt)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(RepositoryError::from)
+            }
+            (None, None) => {
+                sqlx::query_as(
+                    "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                            visibility, status, is_anonymous, position, max_participants,
+                            current_participants, started_at, expires_at, ended_at,
+                            created_at, updated_at
+                     FROM rooms
+                     WHERE visibility = 'public'::room_visibility
+                       AND status = 'active'::room_status
+                     ORDER BY RANDOM()
+                     LIMIT 1",
+                )
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(RepositoryError::from)
+            }
+        }
+    }
+
     /// Partially update a room.
-    ///
-    /// `room_type` is intentionally not updatable: turning a text room into a
-    /// voice room mid-flight would strand clients and invalidate every media
-    /// token already issued for it.
     pub async fn update(
         &self,
         id: RoomId,
         name: Option<&str>,
         topic: Option<&str>,
+        category: Option<&str>,
+        visibility: Option<RoomVisibility>,
+        status: Option<RoomStatus>,
         position: Option<i32>,
         max_participants: Option<i32>,
     ) -> RepositoryResult<Room> {
@@ -99,16 +286,24 @@ impl RoomRepository {
             "UPDATE rooms SET
                 name             = COALESCE($2, name),
                 topic            = COALESCE($3, topic),
-                position         = COALESCE($4, position),
-                max_participants = COALESCE($5, max_participants),
+                category         = COALESCE($4, category),
+                visibility       = COALESCE($5, visibility),
+                status           = COALESCE($6, status),
+                position         = COALESCE($7, position),
+                max_participants = COALESCE($8, max_participants),
                 updated_at       = now()
              WHERE id = $1
-             RETURNING id, community_id, name, topic, room_type, position, max_participants,
+             RETURNING id, community_id, owner_id, name, topic, category, room_type,
+                       visibility, status, is_anonymous, position, max_participants,
+                       current_participants, started_at, expires_at, ended_at,
                        created_at, updated_at",
         )
         .bind(id)
         .bind(name)
         .bind(topic)
+        .bind(category)
+        .bind(visibility)
+        .bind(status)
         .bind(position)
         .bind(max_participants)
         .fetch_optional(&self.pool)
@@ -124,6 +319,181 @@ impl RoomRepository {
             .await?;
         Ok(result.rows_affected() > 0)
     }
+
+    // ── Anonymous Identity ────────────────────────────────────────────────────
+
+    /// Get or create room-scoped anonymous identity for a user.
+    pub async fn get_or_create_anonymous_identity(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> RepositoryResult<RoomAnonymousIdentity> {
+        if let Some(existing) = sqlx::query_as(
+            "SELECT room_id, user_id, alias_name, avatar_seed, accent_color, created_at
+             FROM room_anonymous_identities WHERE room_id = $1 AND user_id = $2",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?
+        {
+            return Ok(existing);
+        }
+
+        let (alias, seed, color) = generate_anonymous_identity(room_id, user_id);
+
+        sqlx::query_as(
+            "INSERT INTO room_anonymous_identities (room_id, user_id, alias_name, avatar_seed, accent_color)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (room_id, user_id) DO UPDATE SET room_id = EXCLUDED.room_id
+             RETURNING room_id, user_id, alias_name, avatar_seed, accent_color, created_at",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .bind(&alias)
+        .bind(&seed)
+        .bind(&color)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// Lookup anonymous identity for a user in a room.
+    pub async fn find_anonymous_identity(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> RepositoryResult<Option<RoomAnonymousIdentity>> {
+        sqlx::query_as(
+            "SELECT room_id, user_id, alias_name, avatar_seed, accent_color, created_at
+             FROM room_anonymous_identities WHERE room_id = $1 AND user_id = $2",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    // ── Participants ──────────────────────────────────────────────────────────
+
+    /// Join a room as a participant.
+    pub async fn join_room(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+        role: RoomParticipantRole,
+    ) -> RepositoryResult<RoomParticipant> {
+        let mut tx = self.pool.begin().await?;
+
+        let participant: RoomParticipant = sqlx::query_as(
+            "INSERT INTO room_participants (room_id, user_id, role, is_anonymous, last_seen_at)
+             VALUES ($1, $2, $3, FALSE, now())
+             ON CONFLICT (room_id, user_id) DO UPDATE SET last_seen_at = now()
+             RETURNING room_id, user_id, role, is_muted, is_anonymous, joined_at, last_seen_at",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .bind(role)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "UPDATE rooms SET
+                current_participants = (SELECT COUNT(*) FROM room_participants WHERE room_id = $1)
+             WHERE id = $1",
+        )
+        .bind(room_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(participant)
+    }
+
+    /// Set participant's active persona preference (anonymous vs public).
+    pub async fn set_participant_persona(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+        is_anonymous: bool,
+    ) -> RepositoryResult<Option<RoomParticipant>> {
+        sqlx::query_as(
+            "UPDATE room_participants
+             SET is_anonymous = $3, last_seen_at = now()
+             WHERE room_id = $1 AND user_id = $2
+             RETURNING room_id, user_id, role, is_muted, is_anonymous, joined_at, last_seen_at",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .bind(is_anonymous)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// Find participant standing.
+    pub async fn find_participant(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> RepositoryResult<Option<RoomParticipant>> {
+        sqlx::query_as(
+            "SELECT room_id, user_id, role, is_muted, is_anonymous, joined_at, last_seen_at
+             FROM room_participants WHERE room_id = $1 AND user_id = $2",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// Leave a room.
+    pub async fn leave_room(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> RepositoryResult<bool> {
+        let mut tx = self.pool.begin().await?;
+
+        let result = sqlx::query(
+            "DELETE FROM room_participants WHERE room_id = $1 AND user_id = $2",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "UPDATE rooms SET
+                current_participants = (SELECT COUNT(*) FROM room_participants WHERE room_id = $1)
+             WHERE id = $1",
+        )
+        .bind(room_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// List current participants in a room.
+    pub async fn list_participants(
+        &self,
+        room_id: RoomId,
+    ) -> RepositoryResult<Vec<RoomParticipant>> {
+        sqlx::query_as(
+            "SELECT room_id, user_id, role, is_muted, is_anonymous, joined_at, last_seen_at
+             FROM room_participants WHERE room_id = $1 ORDER BY joined_at ASC",
+        )
+        .bind(room_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    // ── Overrides ─────────────────────────────────────────────────────────────
 
     /// Every permission override configured on a room.
     pub async fn overrides(&self, room_id: RoomId) -> RepositoryResult<Vec<RoomOverride>> {
@@ -199,15 +569,11 @@ impl RoomRepository {
     pub async fn count_media_rooms(&self, community_id: CommunityId) -> RepositoryResult<i64> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM rooms
-             WHERE community_id = $1 AND room_type <> 'text'::room_type",
+             WHERE community_id = $1 AND room_type NOT IN ('text'::room_type, 'poll'::room_type, 'confession'::room_type, 'quick_chat'::room_type)",
         )
         .bind(community_id)
         .fetch_one(&self.pool)
         .await?;
         Ok(row.0)
     }
-
-    /// The room types that carry media, for callers that need the list.
-    pub const MEDIA_ROOM_TYPES: [RoomType; 3] =
-        [RoomType::Voice, RoomType::Video, RoomType::Activity];
 }

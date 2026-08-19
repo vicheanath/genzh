@@ -5,7 +5,7 @@ import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { CopyIcon, HashIcon, MicIcon, SettingsIcon, SparkleIcon, VideoIcon } from '@/components/Icons'
+import { CopyIcon, HashIcon, LockIcon, MicIcon, SettingsIcon, SparkleIcon, VideoIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
 import { LoadingPanel, Spinner } from '@/components/Spinner'
@@ -33,11 +33,17 @@ const ROOM_TYPES = [
   { value: 'video', label: 'Video' },
 ] as const satisfies ReadonlyArray<{ value: RoomType; label: string }>
 
-const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
+const ROOM_ICONS: Record<string, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
   activity: SparkleIcon,
+  stage: VideoIcon,
+  poll: SparkleIcon,
+  debate: SparkleIcon,
+  game: SparkleIcon,
+  confession: LockIcon,
+  quick_chat: HashIcon,
 }
 
 export function CommunityRoute() {

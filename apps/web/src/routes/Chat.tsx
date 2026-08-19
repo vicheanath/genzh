@@ -14,11 +14,13 @@ import { Callout } from '@/components/Callout'
 import {
   ArrowDownIcon,
   CopyIcon,
+  LockIcon,
   MoreIcon,
   PencilIcon,
   SendIcon,
   SmileIcon,
   TrashIcon,
+  UsersIcon,
 } from '@/components/Icons'
 import { Menu, MenuItem, MenuSeparator } from '@/components/Menu'
 import { Skeleton } from '@/components/Skeleton'
@@ -71,7 +73,15 @@ interface PendingMessage {
   failed: boolean
 }
 
-export function Chat({ room }: { room: RoomWithPermissions }) {
+export function Chat({
+  room,
+  isAnonymousPersona = false,
+  onTogglePersona,
+}: {
+  room: RoomWithPermissions
+  isAnonymousPersona?: boolean
+  onTogglePersona?: (isAnon: boolean) => void
+}) {
   const { getToken, user } = useAuth()
   const toast = useToast()
 
@@ -140,50 +150,57 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
     if (!olderCursor || loadingOlder) return
     setLoadingOlder(true)
 
+    // Capture the current scroll geometry so prepending rows can push the
+    // list down by exactly as much as they added, keeping the message the
+    // user is looking at anchored in place.
     const list = listRef.current
-    const anchor = list ? list.scrollHeight - list.scrollTop : 0
+    const previousHeight = list?.scrollHeight ?? 0
 
     try {
       const page = await messagesApi.history(await getToken(), room.id, olderCursor)
-      setItems((current) => merge([...page.messages].reverse(), current))
+      const older = [...page.messages].reverse()
+      setItems((current) => merge(older, current))
       setOlderCursor(page.next_before)
 
-      // Prepending grows the scroll container upward, which would otherwise
-      // yank the reader to a different message. Restoring the distance from the
-      // *bottom* keeps whatever they were reading exactly where it was.
-      if (list) {
-        requestAnimationFrame(() => {
-          list.scrollTop = list.scrollHeight - anchor
-        })
-      }
+      // Restore position after React has committed the new rows.
+      requestAnimationFrame(() => {
+        if (!list) return
+        list.scrollTop += list.scrollHeight - previousHeight
+      })
     } catch {
       toast.error('Could not load older messages')
     } finally {
       setLoadingOlder(false)
     }
-  }, [getToken, olderCursor, loadingOlder, room.id, toast])
+  }, [getToken, room.id, olderCursor, loadingOlder, toast])
 
-  // ── scrolling ────────────────────────────────────────────────────────────
+  // ── scroll tracking ──────────────────────────────────────────────────────
 
   const handleScroll = useCallback(() => {
     const list = listRef.current
     if (!list) return
 
-    // 80px of slack: a reader a line or two off the bottom still counts as
-    // "following along", and should keep being pushed down.
-    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80
-    atBottomRef.current = nearBottom
-    setAtBottom(nearBottom)
-    if (nearBottom) setUnseen(0)
+    const distanceToBottom = list.scrollHeight - list.scrollTop - list.clientHeight
+    const isNowAtBottom = distanceToBottom < 32
+    atBottomRef.current = isNowAtBottom
+    setAtBottom(isNowAtBottom)
 
-    if (list.scrollTop < 120) void loadOlder()
-  }, [loadOlder])
+    if (isNowAtBottom) {
+      setUnseen(0)
+    }
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    if (list.scrollTop < 64 && olderCursor && !loadingOlder) {
+      void loadOlder()
+    }
+  }, [loadOlder, olderCursor, loadingOlder])
+
+  const scrollToBottom = useCallback((smooth = true) => {
     const list = listRef.current
     if (!list) return
-    list.scrollTo({ top: list.scrollHeight, behavior })
-    atBottomRef.current = true
+    list.scrollTo({
+      top: list.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
+    })
     setAtBottom(true)
     setUnseen(0)
   }, [])
@@ -211,7 +228,7 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
       ])
 
       try {
-        const posted = await messagesApi.post(await getToken(), room.id, content)
+        const posted = await messagesApi.post(await getToken(), room.id, content, isAnonymousPersona)
         setPending((current) => current.filter((item) => item.localId !== localId))
         setItems((current) => merge(current, [posted]))
       } catch (cause) {
@@ -224,7 +241,7 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
         )
       }
     },
-    [getToken, room.id, toast],
+    [getToken, room.id, isAnonymousPersona, toast],
   )
 
   const retry = useCallback(
@@ -405,7 +422,14 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
       )}
 
       {canSend ? (
-        <Composer roomName={room.name} onSend={send} />
+        <Composer
+          roomName={room.name}
+          onSend={send}
+          isAnonymous={isAnonymousPersona}
+          onTogglePersona={onTogglePersona}
+          anonAlias={room.anonymous_identity?.alias_name}
+          publicName={user?.profile.display_name ?? 'You'}
+        />
       ) : (
         <p className={styles.readOnly}>You do not have permission to post in this room.</p>
       )}
@@ -426,9 +450,17 @@ export function Chat({ room }: { room: RoomWithPermissions }) {
 function Composer({
   roomName,
   onSend,
+  isAnonymous,
+  onTogglePersona,
+  anonAlias,
+  publicName,
 }: {
   roomName: string
   onSend: (content: string) => Promise<void>
+  isAnonymous?: boolean
+  onTogglePersona?: (isAnon: boolean) => void
+  anonAlias?: string
+  publicName: string
 }) {
   const [draft, setDraft] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -466,6 +498,28 @@ function Composer({
         submit()
       }}
     >
+      <div className={styles.personaBanner}>
+        <span className={styles.personaLabel}>Appear as:</span>
+        <button
+          type="button"
+          className={cx(styles.personaChip, isAnonymous && styles.personaChipActive)}
+          onClick={() => onTogglePersona?.(true)}
+          title="Post anonymously with masked identity"
+        >
+          <LockIcon size={12} />
+          <span>{anonAlias ?? 'Anonymous'}</span>
+        </button>
+        <button
+          type="button"
+          className={cx(styles.personaChip, !isAnonymous && styles.personaChipActive)}
+          onClick={() => onTogglePersona?.(false)}
+          title="Post with your public account profile"
+        >
+          <UsersIcon size={12} />
+          <span>{publicName}</span>
+        </button>
+      </div>
+
       <div className={styles.composerField}>
         <textarea
           ref={textareaRef}
@@ -527,8 +581,14 @@ function MessageRow({
   const toast = useToast()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
-
-  const name = author?.display_name ?? 'Unknown'
+  const isAnonymous = Boolean(message.anonymous_author)
+  const name = message.anonymous_author
+    ? message.anonymous_author.alias_name
+    : (author?.display_name ?? 'Unknown')
+  const avatarColor = message.anonymous_author
+    ? message.anonymous_author.accent_color
+    : author?.accent_color
+  const avatarUrl = message.anonymous_author ? undefined : author?.avatar_url
 
   function commitEdit() {
     const content = draft.trim()
@@ -546,13 +606,15 @@ function MessageRow({
         </time>
       ) : (
         <div
-          style={{ cursor: 'pointer' }}
-          onClick={() => onOpenProfile?.(message.author_id)}
+          style={{ cursor: isAnonymous ? 'default' : 'pointer' }}
+          onClick={() => {
+            if (!isAnonymous) onOpenProfile?.(message.author_id)
+          }}
         >
           <Avatar
             name={name}
-            src={author?.avatar_url}
-            color={author?.accent_color}
+            src={avatarUrl}
+            color={avatarColor}
             size="md"
             className={styles.messageAvatar}
           />
@@ -564,8 +626,10 @@ function MessageRow({
           <div className={styles.messageHeader}>
             <span
               className={styles.author}
-              style={{ cursor: 'pointer' }}
-              onClick={() => onOpenProfile?.(message.author_id)}
+              style={{ cursor: isAnonymous ? 'default' : 'pointer', color: avatarColor ?? undefined }}
+              onClick={() => {
+                if (!isAnonymous) onOpenProfile?.(message.author_id)
+              }}
             >
               {name}
             </span>

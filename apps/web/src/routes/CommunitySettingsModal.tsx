@@ -68,11 +68,17 @@ const ROOM_TYPES = [
   { value: 'activity', label: 'Activity' },
 ] as const satisfies ReadonlyArray<{ value: RoomType; label: string }>
 
-const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
+const ROOM_ICONS: Record<string, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
   activity: SparkleIcon,
+  stage: VideoIcon,
+  poll: SparkleIcon,
+  debate: SparkleIcon,
+  game: SparkleIcon,
+  confession: LockIcon,
+  quick_chat: HashIcon,
 }
 
 interface CommunitySettingsModalProps {

@@ -215,7 +215,11 @@ impl MediaSessionService {
         let grant = MediaGrant {
             user_id: user_id.as_uuid(),
             room_id: room_id.as_uuid(),
-            community_id: access.room.community_id.as_uuid(),
+            community_id: access
+                .room
+                .community_id
+                .map(|c| c.as_uuid())
+                .unwrap_or(uuid::Uuid::nil()),
             participant_id,
             permissions,
             display_name,
