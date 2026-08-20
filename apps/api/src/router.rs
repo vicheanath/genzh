@@ -120,6 +120,12 @@ pub fn build(state: AppState) -> Router {
         .route("/friends/{user_id}", delete(routes::social::remove))
         .route("/friends/{user_id}/respond", post(routes::social::respond))
         .route("/presence", get(routes::presence::online))
+        .route("/notifications", get(routes::notifications::list))
+        .route("/notifications/read", post(routes::notifications::mark_all_read))
+        .route(
+            "/notifications/{id}/read",
+            post(routes::notifications::mark_read),
+        )
         .route("/blocks", get(routes::social::blocked))
         .route(
             "/blocks/{user_id}",

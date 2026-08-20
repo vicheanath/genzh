@@ -140,14 +140,14 @@ impl CommunityService {
             updated_at: timestamp,
         };
 
-        let created = self
-            .repository
-            .create(
-                &candidate,
-                RoleId::new(),
-                &PermissionSet::default_member().to_permissions(),
-            )
-            .await?;
+        // Ids are minted here rather than in the repository so the whole set is
+        // one value the transaction either writes or does not.
+        let roles: Vec<(RoleId, community::RoleTemplate)> = community::starter_roles()
+            .into_iter()
+            .map(|template| (RoleId::new(), template))
+            .collect();
+
+        let created = self.repository.create(&candidate, &roles).await?;
 
         tracing::info!(community_id = %created.id, %owner_id, "community created");
         Ok(created)

@@ -91,6 +91,10 @@ typed_id!(
     /// Identifies a chat message.
     MessageId
 );
+typed_id!(
+    /// Identifies one delivered notification.
+    NotificationId
+);
 
 #[cfg(test)]
 mod tests {

@@ -112,6 +112,28 @@ impl UserRepository {
         .map_err(RepositoryError::from)
     }
 
+    /// Resolve a batch of handles to ids.
+    ///
+    /// One query for a message's whole mention list rather than one per name,
+    /// and unknown handles are simply absent from the result — a message that
+    /// says `@nobody` mentions nobody rather than failing to post.
+    pub async fn find_ids_by_handles(
+        &self,
+        handles: &[String],
+    ) -> RepositoryResult<Vec<(String, UserId)>> {
+        if handles.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        sqlx::query_as(
+            "SELECT handle, id FROM users WHERE handle = ANY($1) AND is_active",
+        )
+        .bind(handles)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
     /// Fetch a profile.
     pub async fn find_profile(&self, user_id: UserId) -> RepositoryResult<Option<Profile>> {
         sqlx::query_as(

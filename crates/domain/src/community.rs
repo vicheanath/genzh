@@ -15,6 +15,74 @@ pub const ROLE_NAME_MAX_LEN: usize = 48;
 /// Name of the implicit role every member carries.
 pub const EVERYONE_ROLE_NAME: &str = "@everyone";
 
+/// A role a community is created with.
+///
+/// Static shapes, not rows: the repository turns these into `roles` and
+/// `role_permissions` when the community is made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RoleTemplate {
+    pub name: &'static str,
+    pub color: Option<&'static str>,
+    /// Higher wins when roles disagree, and gates who may edit whom.
+    pub position: i32,
+    /// The implicit role every member carries. Exactly one is true.
+    pub is_default: bool,
+    pub permissions: PermissionSet,
+}
+
+/// The roles every new community starts with.
+///
+/// A community used to be created with `@everyone` alone, which left an owner
+/// with no way to delegate anything without first designing a role from a list
+/// of fourteen permissions — and no way for an ordinary member to share a
+/// screen at all, since `@everyone` deliberately withholds it.
+///
+/// These are a starting point, not a fixed set: they are ordinary rows, so an
+/// owner can rename, re-permission or delete any of them except `@everyone`.
+pub fn starter_roles() -> Vec<RoleTemplate> {
+    vec![
+        RoleTemplate {
+            name: EVERYONE_ROLE_NAME,
+            color: None,
+            position: 0,
+            is_default: true,
+            permissions: PermissionSet::default_member(),
+        },
+        RoleTemplate {
+            name: "Presenter",
+            color: Some("#2fe6a7"),
+            position: 1,
+            is_default: false,
+            // The gap `@everyone` leaves: everything a member can do, plus the
+            // two publishing rights that are withheld by default.
+            permissions: PermissionSet::default_member()
+                .union(PermissionSet::SCREEN_SHARE)
+                .union(PermissionSet::STREAM),
+        },
+        RoleTemplate {
+            name: "Moderator",
+            color: Some("#06b6d4"),
+            position: 2,
+            is_default: false,
+            // Can run the place day to day, but cannot change what the place
+            // *is* — no community settings, no roles, no members removed.
+            permissions: PermissionSet::default_member()
+                .union(PermissionSet::SCREEN_SHARE)
+                .union(PermissionSet::MUTE_MEMBERS)
+                .union(PermissionSet::MOVE_MEMBERS)
+                .union(PermissionSet::MANAGE_ROOM),
+        },
+        RoleTemplate {
+            name: "Admin",
+            color: Some("#8b5cf6"),
+            position: 3,
+            is_default: false,
+            // Administrator short-circuits every check, so it needs no others.
+            permissions: PermissionSet::ADMINISTRATOR,
+        },
+    ]
+}
+
 /// A community ("server", "hangout").
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Community {
@@ -141,5 +209,66 @@ mod tests {
         );
         assert!(validate_community_name(&"x".repeat(65)).is_err());
         assert!(validate_role_name(&"x".repeat(49)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod starter_role_tests {
+    use super::*;
+    use crate::Permission;
+
+    #[test]
+    fn exactly_one_starter_role_is_the_default() {
+        let defaults = starter_roles().iter().filter(|r| r.is_default).count();
+        assert_eq!(defaults, 1);
+    }
+
+    #[test]
+    fn the_default_role_is_everyone_and_sits_at_the_bottom() {
+        let roles = starter_roles();
+        let everyone = roles.iter().find(|r| r.is_default).expect("a default role");
+        assert_eq!(everyone.name, EVERYONE_ROLE_NAME);
+        assert_eq!(everyone.position, 0);
+    }
+
+    #[test]
+    fn positions_are_distinct_so_precedence_is_unambiguous() {
+        let mut positions: Vec<i32> = starter_roles().iter().map(|r| r.position).collect();
+        positions.sort_unstable();
+        let before = positions.len();
+        positions.dedup();
+        assert_eq!(positions.len(), before);
+    }
+
+    #[test]
+    fn presenter_closes_the_gap_everyone_leaves() {
+        let roles = starter_roles();
+        let everyone = roles.iter().find(|r| r.is_default).unwrap();
+        let presenter = roles.iter().find(|r| r.name == "Presenter").unwrap();
+
+        assert!(!everyone.permissions.allows(Permission::ScreenShare));
+        assert!(presenter.permissions.allows(Permission::ScreenShare));
+        assert!(presenter.permissions.allows(Permission::Speak));
+    }
+
+    #[test]
+    fn moderator_runs_the_place_but_cannot_redefine_it() {
+        let roles = starter_roles();
+        let moderator = roles.iter().find(|r| r.name == "Moderator").unwrap();
+
+        assert!(moderator.permissions.allows(Permission::ManageRoom));
+        assert!(moderator.permissions.allows(Permission::MuteMembers));
+        assert!(!moderator.permissions.allows(Permission::ManageCommunity));
+        assert!(!moderator.permissions.allows(Permission::ManageRoles));
+        assert!(!moderator.permissions.allows(Permission::Administrator));
+    }
+
+    #[test]
+    fn admin_is_administrator_and_therefore_allows_everything() {
+        let roles = starter_roles();
+        let admin = roles.iter().find(|r| r.name == "Admin").unwrap();
+        for permission in Permission::ALL {
+            assert!(admin.permissions.allows(*permission), "{permission:?}");
+        }
     }
 }

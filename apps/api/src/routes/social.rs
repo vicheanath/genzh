@@ -10,6 +10,8 @@ use serde::Deserialize;
 use crate::error::ApiResult;
 use crate::extract::ApiJson;
 use crate::middleware::CurrentUser;
+use genzh_domain::notification::NotificationKind;
+use genzh_domain::social::FriendshipStatus;
 use crate::state::AppState;
 
 /// `GET /api/v1/friends/sent`
@@ -60,6 +62,16 @@ pub async fn request(
         .social
         .request_friend(caller.user_id, body.user_id)
         .await?;
+
+    // Requesting back an outstanding request accepts it, so which side to tell
+    // depends on what actually happened rather than on which endpoint was hit.
+    let (recipient, kind) = if friendship.status == FriendshipStatus::Accepted {
+        (friendship.requester_id, NotificationKind::FriendAccepted)
+    } else {
+        (body.user_id, NotificationKind::FriendRequest)
+    };
+    crate::notify::notify_friendship(&state, recipient, caller.user_id, kind).await;
+
     Ok((StatusCode::CREATED, Json(friendship)))
 }
 
@@ -74,6 +86,19 @@ pub async fn respond(
         .social
         .respond_to_request(caller.user_id, requester_id, body.accept)
         .await?;
+
+    // Only an acceptance is worth telling someone about. A decline that
+    // notified would make declining quietly impossible.
+    if body.accept {
+        crate::notify::notify_friendship(
+            &state,
+            requester_id,
+            caller.user_id,
+            NotificationKind::FriendAccepted,
+        )
+        .await;
+    }
+
     Ok(Json(friendship))
 }
 

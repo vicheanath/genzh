@@ -63,6 +63,14 @@ pub enum ChatServerEvent {
         message_id: MessageId,
         reactions: Vec<ReactionSummary>,
     },
+    /// A notification was recorded for this user.
+    ///
+    /// User-scoped: it carries the stored row so a connected client can render
+    /// it without a round trip, and only its owner receives it.
+    NotificationCreated {
+        user_id: UserId,
+        notification: genzh_domain::notification::Notification,
+    },
     /// Somebody's online state changed.
     ///
     /// Broadcast to everyone: presence is not a secret between friends here,
@@ -119,7 +127,8 @@ impl ChatServerEvent {
     /// keeps a user-scoped one from doing that.
     pub fn target_user(&self) -> Option<UserId> {
         match self {
-            Self::DirectRoomOpened { user_id, .. } => Some(*user_id),
+            Self::DirectRoomOpened { user_id, .. }
+            | Self::NotificationCreated { user_id, .. } => Some(*user_id),
             _ => None,
         }
     }
@@ -362,10 +371,21 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
 
                                     let _ = state.chat_tx.send(ChatServerEvent::MessageCreated {
                                         room_id,
-                                        message,
+                                        message: message.clone(),
                                         reactions: vec![],
                                         anonymous_author,
                                     });
+
+                                    // The same notification path as the REST
+                                    // endpoint, so a mention lands whichever way
+                                    // the message was sent.
+                                    if let Ok(room) = state.rooms.get(room_id, user.user_id).await {
+                                        let actor = (!is_anon).then_some(user.user_id);
+                                        crate::notify::notify_for_message(
+                                            &state, &room, &message, actor,
+                                        )
+                                        .await;
+                                    }
                                 }
                             }
                             ChatClientCommand::React { room_id, message_id, reaction } => {

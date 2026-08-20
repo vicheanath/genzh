@@ -55,6 +55,8 @@ import { chatSocket } from '@/lib/ws/ChatSocket'
 
 import { UserSettingsModal } from '@/features/settings'
 
+import { NotificationBell } from './NotificationBell'
+
 import { AddCommunityDialog } from './AddCommunityDialog'
 import { ProfileDialog } from './ProfileDialog'
 
@@ -621,6 +623,8 @@ function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
         <div className={styles.identityName}>{user?.profile.display_name}</div>
         <div className={styles.identityHandle}>@{user?.handle}</div>
       </div>
+
+      <NotificationBell />
 
       <Button
         variant="ghost"

@@ -22,6 +22,8 @@ import type {
   RoomVisibility,
   RoomWithPermissions,
   TokenPair,
+  NotificationPage,
+  Timestamp,
   UpdateProfileInput,
   UserRoom,
   Uuid,
@@ -358,6 +360,24 @@ export const friends = {
 
   remove: (token: string, userId: Uuid) =>
     request<void>(`/api/v1/friends/${userId}`, { method: 'DELETE', token }),
+}
+
+// ── notifications ─────────────────────────────────────────────────────────
+
+export const notifications = {
+  list: (token: string, before?: Timestamp, limit?: number) => {
+    const params = new URLSearchParams()
+    if (before) params.set('before', before)
+    if (limit) params.set('limit', String(limit))
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return request<NotificationPage>(`/api/v1/notifications${query}`, { token })
+  },
+
+  markRead: (token: string, id: Uuid) =>
+    request<void>(`/api/v1/notifications/${id}/read`, { method: 'POST', token }),
+
+  markAllRead: (token: string) =>
+    request<void>('/api/v1/notifications/read', { method: 'POST', token }),
 }
 
 // ── presence ──────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use genzh_domain::community::{Community, CommunityMember, Role};
+use genzh_domain::community::{Community, CommunityMember, Role, RoleTemplate};
 use genzh_domain::{CommunityId, Permission, RoleId, UserId};
 use genzh_infrastructure::{DbPool, RepositoryError, RepositoryResult};
 
@@ -30,16 +30,17 @@ impl CommunityRepository {
         Self { pool }
     }
 
-    /// Create a community, its `@everyone` role and its owner's membership in
-    /// one transaction.
+    /// Create a community, its starter roles and its owner's membership in one
+    /// transaction.
     ///
-    /// All three or none: a community with no default role has no way to grant
-    /// anything, and an ownerless community cannot be administered.
+    /// All of it or none: a community with no default role has no way to grant
+    /// anything, and an ownerless community cannot be administered. The extra
+    /// starter roles ride the same transaction rather than being added
+    /// afterwards, so a community can never exist half-configured.
     pub async fn create(
         &self,
         community: &Community,
-        default_role_id: RoleId,
-        default_permissions: &[Permission],
+        roles: &[(RoleId, RoleTemplate)],
     ) -> RepositoryResult<Community> {
         let mut tx = self.pool.begin().await?;
 
@@ -56,22 +57,29 @@ impl CommunityRepository {
         .fetch_one(&mut *tx)
         .await?;
 
-        sqlx::query(
-            "INSERT INTO roles (id, community_id, name, position, is_default)
-             VALUES ($1, $2, $3, 0, TRUE)",
-        )
-        .bind(default_role_id)
-        .bind(community.id)
-        .bind(genzh_domain::community::EVERYONE_ROLE_NAME)
-        .execute(&mut *tx)
-        .await?;
+        for (role_id, template) in roles {
+            sqlx::query(
+                "INSERT INTO roles (id, community_id, name, color, position, is_default)
+                 VALUES ($1, $2, $3, $4, $5, $6)",
+            )
+            .bind(role_id)
+            .bind(community.id)
+            .bind(template.name)
+            .bind(template.color)
+            .bind(template.position)
+            .bind(template.is_default)
+            .execute(&mut *tx)
+            .await?;
 
-        for permission in default_permissions {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_key) VALUES ($1, $2)")
-                .bind(default_role_id)
+            for permission in template.permissions.to_permissions() {
+                sqlx::query(
+                    "INSERT INTO role_permissions (role_id, permission_key) VALUES ($1, $2)",
+                )
+                .bind(role_id)
                 .bind(permission.key())
                 .execute(&mut *tx)
                 .await?;
+            }
         }
 
         sqlx::query("INSERT INTO community_members (community_id, user_id) VALUES ($1, $2)")

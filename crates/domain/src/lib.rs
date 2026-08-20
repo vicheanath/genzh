@@ -18,14 +18,18 @@
 pub mod community;
 pub mod error;
 pub mod ids;
+pub mod mention;
 pub mod message;
+pub mod notification;
 pub mod permission;
 pub mod room;
 pub mod social;
 pub mod user;
 
 pub use error::{DomainError, DomainResult};
-pub use ids::{CommunityId, MessageId, RoleId, RoomId, SessionId, UserId};
+pub use ids::{
+    CommunityId, MessageId, NotificationId, RoleId, RoomId, SessionId, UserId,
+};
 pub use permission::{Permission, PermissionSet};
 pub use room::{
     Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,

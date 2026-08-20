@@ -83,6 +83,7 @@ dependencies = [
  "genzh-infrastructure",
  "genzh-media-core",
  "genzh-messaging",
+ "genzh-notification",
  "genzh-room",
  "http",
  "http-body-util",
@@ -1178,6 +1179,19 @@ dependencies = [
  "genzh-domain",
  "genzh-infrastructure",
  "genzh-room",
+ "serde",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-notification"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genzh-domain",
+ "genzh-infrastructure",
  "serde",
  "sqlx",
  "tracing",

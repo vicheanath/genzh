@@ -1059,7 +1059,20 @@ function MessageSkeletons() {
  * expect to work, and everything past that is a sanitising problem. Text is
  * rendered as text, so nothing here can inject markup.
  */
+/**
+ * A mention, matching the server's parser in `genzh_domain::mention`.
+ *
+ * The two have to agree: the server decides who gets notified, and a client
+ * that highlighted a different set of words would show mentions nobody was
+ * told about — or fail to show one that did notify someone. `(^|[^\w.])`
+ * enforces the same "must begin a word" rule that keeps `a@b.com` from being a
+ * mention, and the trailing `[^.]` stops a sentence-final dot being captured.
+ */
+const MENTION = /(^|[^\w.])@([a-z0-9_.]*[a-z0-9_])/gi
+
+/** Message body with links and @mentions marked up. */
 function Linkified({ text }: { text: string }) {
+  const { user } = useAuth()
   const parts = text.split(/(https?:\/\/[^\s<]+)/g)
 
   return (
@@ -1078,11 +1091,47 @@ function Linkified({ text }: { text: string }) {
             {part}
           </a>
         ) : (
-          part
+          <Mentioned key={index} text={part} handle={user?.handle} />
         ),
       )}
     </>
   )
+}
+
+/**
+ * Marks up `@handle` runs inside one plain-text span.
+ *
+ * A mention of *you* is styled differently from a mention of someone else —
+ * that distinction is the whole reason to highlight mentions at all.
+ */
+function Mentioned({ text, handle }: { text: string; handle?: string }) {
+  const nodes: React.ReactNode[] = []
+  let cursor = 0
+
+  for (const match of text.matchAll(MENTION)) {
+    const [whole, prefix = '', mentioned] = match
+    if (!mentioned) continue
+    const start = match.index ?? 0
+
+    nodes.push(text.slice(cursor, start + prefix.length))
+
+    const isEveryone = mentioned.toLowerCase() === 'everyone'
+    const isMe = handle !== undefined && mentioned.toLowerCase() === handle.toLowerCase()
+
+    nodes.push(
+      <span
+        key={`${start}-${mentioned}`}
+        className={cx(styles.mention, (isMe || isEveryone) && styles.mentionSelf)}
+      >
+        @{mentioned}
+      </span>,
+    )
+    cursor = start + whole.length
+  }
+
+  if (cursor === 0) return <>{text}</>
+  nodes.push(text.slice(cursor))
+  return <>{nodes}</>
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────

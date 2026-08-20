@@ -10,6 +10,7 @@ pub mod communities;
 pub mod health;
 pub mod media;
 pub mod messages;
+pub mod notifications;
 pub mod oauth;
 pub mod presence;
 pub mod rooms;

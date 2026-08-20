@@ -4,7 +4,13 @@
  * typing indicators, and presence updates.
  */
 
-import type { Message, ReactionSummary, RoomAnonymousIdentity, Uuid } from '@/lib/api/types'
+import type {
+  AppNotification,
+  Message,
+  ReactionSummary,
+  RoomAnonymousIdentity,
+  Uuid,
+} from '@/lib/api/types'
 import { config } from '@/lib/config'
 
 export type ChatServerEvent =
@@ -44,6 +50,11 @@ export type ChatServerEvent =
       room_id: Uuid
       message_id: Uuid
       reactions: ReactionSummary[]
+    }
+  | {
+      type: 'notification_created'
+      user_id: Uuid
+      notification: AppNotification
     }
   | {
       type: 'presence_changed'

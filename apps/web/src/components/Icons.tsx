@@ -2,6 +2,7 @@ import type { LucideProps } from 'lucide-react'
 import {
   ArrowDown,
   ArrowLeft,
+  AtSign,
   Ban,
   Bell,
   Check,
@@ -128,6 +129,7 @@ export const UserPlusIcon: IconComponent = (props: IconProps) => <UserPlus size=
 export const UserMinusIcon: IconComponent = (props: IconProps) => <UserMinus size={18} {...props} />
 export const ShieldIcon: IconComponent = (props: IconProps) => <Shield size={18} {...props} />
 export const BellIcon: IconComponent = (props: IconProps) => <Bell size={18} {...props} />
+export const AtSignIcon: IconComponent = (props: IconProps) => <AtSign size={18} {...props} />
 export const SunIcon: IconComponent = (props: IconProps) => <Sun size={18} {...props} />
 export const MoonIcon: IconComponent = (props: IconProps) => <Moon size={18} {...props} />
 export const MonitorIcon: IconComponent = (props: IconProps) => <Tv size={18} {...props} />

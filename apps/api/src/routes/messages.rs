@@ -174,6 +174,11 @@ pub async fn post(
         anonymous_author: anonymous_author.clone(),
     });
 
+    // An anonymous message still notifies — being mentioned is the point — but
+    // names no actor, so it cannot unmask who wrote it.
+    let actor = (!is_anonymous).then_some(caller.user_id);
+    crate::notify::notify_for_message(&state, &access.room, &message, actor).await;
+
     Ok((
         StatusCode::CREATED,
         Json(MessageView {

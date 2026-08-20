@@ -154,6 +154,34 @@ export interface UserRoom extends Room {
   dm_peer_id?: Uuid | null
 }
 
+// ── notifications ─────────────────────────────────────────────────────────
+
+export type NotificationKind =
+  | 'mention'
+  | 'everyone'
+  | 'direct_message'
+  | 'friend_request'
+  | 'friend_accepted'
+
+export interface AppNotification {
+  id: Uuid
+  user_id: Uuid
+  kind: NotificationKind
+  /** Absent when the cause was anonymous, or the actor has been deleted. */
+  actor_id: Uuid | null
+  room_id: Uuid | null
+  message_id: Uuid | null
+  preview: string | null
+  read_at: Timestamp | null
+  created_at: Timestamp
+}
+
+export interface NotificationPage {
+  notifications: AppNotification[]
+  next_before?: Timestamp
+  unread: number
+}
+
 export interface DiscoveryResponse {
   trending: Room[]
   live_now: Room[]

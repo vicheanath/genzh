@@ -12,6 +12,7 @@ use genzh_graph::SocialService;
 use genzh_infrastructure::{DbPool, PgConfig, RepositoryResult, connect};
 use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
+use genzh_notification::NotificationService;
 use genzh_room::{MediaSessionService, RoomService, StaticMediaServers};
 
 use crate::config::Config;
@@ -35,6 +36,8 @@ pub struct AppState {
     pub messaging: MessagingService,
     /// Friendships and blocks.
     pub social: SocialService,
+    /// Recorded notifications.
+    pub notifications: NotificationService,
     /// Media join authorization and token minting.
     pub media: Arc<MediaSessionService>,
     /// The configuration this process started with.
@@ -77,6 +80,7 @@ impl AppState {
         let social = SocialService::new(pool.clone());
         let rooms = RoomService::new(pool.clone(), communities.clone(), social.clone());
         let messaging = MessagingService::new(pool.clone(), rooms.clone());
+        let notifications = NotificationService::new(pool.clone());
 
         let signer = Arc::new(MediaTokenSigner::new(
             config.media_token_secret.as_bytes(),
@@ -124,6 +128,7 @@ impl AppState {
             rooms,
             messaging,
             social,
+            notifications,
             media,
             chat_tx: tokio::sync::broadcast::channel(4096).0,
             presence: crate::presence::PresenceRegistry::new(),

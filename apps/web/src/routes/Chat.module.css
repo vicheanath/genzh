@@ -569,3 +569,21 @@
   .composerHint { display: none; }
   .jump { bottom: 5.5rem; }
 }
+
+/* ── mentions ───────────────────────────────────────────────────────────── */
+
+/* Someone else being named: legible, but not shouting. */
+.mention {
+  padding: 0 0.2rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+/* You being named, or @everyone. The one case worth actually catching an eye,
+   so it gets the accent fill rather than the tint. */
+.mentionSelf {
+  background: var(--gradient-accent);
+  color: var(--color-accent-contrast);
+}
