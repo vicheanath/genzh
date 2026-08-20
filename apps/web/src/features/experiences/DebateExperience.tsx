@@ -9,12 +9,15 @@ import {
   PlayIcon,
   UsersIcon,
   PlusIcon,
+  SendIcon,
 } from '@/components/Icons'
 import { Badge } from '@/components/Badge'
 import { Avatar } from '@/components/Avatar'
+import { useToast } from '@/components/Toast'
 import { cx } from '@/lib/cx'
-import type { RoomWithPermissions } from '@/lib/api'
+import { messages as messagesApi, type RoomWithPermissions } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { chatSocket } from '@/lib/ws/ChatSocket'
 import styles from './DebateExperience.module.css'
 
 interface DebatePoint {
@@ -43,7 +46,8 @@ const DEFAULT_POINTS: DebatePoint[] = [
 ]
 
 export function DebateExperience({ room }: { room: RoomWithPermissions }) {
-  const { user } = useAuth()
+  const { user, getToken } = useAuth()
+  const toast = useToast()
   const [proVotes, setProVotes] = useState(14)
   const [conVotes, setConVotes] = useState(9)
   const [userVote, setUserVote] = useState<'pro' | 'con' | null>(null)
@@ -57,6 +61,23 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
   const [points, setPoints] = useState<DebatePoint[]>(DEFAULT_POINTS)
   const [newPointText, setNewPointText] = useState('')
   const [pointSide, setPointSide] = useState<'pro' | 'con'>('pro')
+
+  async function postDebateStandingsToChat() {
+    const total = proVotes + conVotes || 1
+    const pP = Math.round((proVotes / total) * 100)
+    const pC = 100 - pP
+    const topic = room.topic || room.name
+    const msg = `🔥 **LIVE DEBATE STANDINGS** 🔥\n📌 Motion: *" ${topic} "*\n\n🟢 **PRO (Side A)**: ${pP}% (${proVotes} votes)\n🔴 **CON (Side B)**: ${pC}% (${conVotes} votes)\n\n*Cast your vote on the live meter above!*`
+
+    try {
+      const token = await getToken()
+      await messagesApi.post(token, room.id, msg, room.is_anonymous)
+      chatSocket.sendMessage(room.id, msg, room.is_anonymous)
+      toast.success('Debate standings posted to chat!')
+    } catch {
+      toast.error('Could not post to chat')
+    }
+  }
 
   useEffect(() => {
     let interval: number | undefined
@@ -168,6 +189,13 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
             <VoteIcon size={16} />
             <span>Vote CON ({conVotes})</span>
           </button>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-1)' }}>
+          <Button size="sm" variant="ghost" onClick={() => void postDebateStandingsToChat()}>
+            <SendIcon size={13} />
+            Share Standings to Room Chat
+          </Button>
         </div>
       </div>
 

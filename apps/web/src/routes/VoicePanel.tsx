@@ -9,6 +9,7 @@ import {
   HandIcon,
   HeadphonesIcon,
   MaximizeIcon,
+  MessageSquareIcon,
   MicIcon,
   MicOffIcon,
   MinimizeIcon,
@@ -17,9 +18,7 @@ import {
   ScreenShareIcon,
   ScreenShareOffIcon,
   UsersIcon,
-  Volume2Icon,
 } from '@/components/Icons'
-import { Spinner } from '@/components/Spinner'
 import { Tooltip } from '@/components/Tooltip'
 import type { RoomWithPermissions } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -35,7 +34,13 @@ interface StageRequest {
   avatar?: string | null
 }
 
-export function VoicePanel({ room }: { room: RoomWithPermissions }) {
+interface VoicePanelProps {
+  room: RoomWithPermissions
+  onToggleChat?: () => void
+  isChatOpen?: boolean
+}
+
+export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) {
   const { user } = useAuth()
   const voice = useVoiceRoom(room.id)
 
@@ -48,8 +53,6 @@ export function VoicePanel({ room }: { room: RoomWithPermissions }) {
   const inOtherRoom = Boolean(voice.activeRoomId && voice.activeRoomId !== room.id)
   const headcount = isCurrentRoom ? voice.participants.length + 1 : 0
 
-  // Screen share & Stage states
-  const [autoShareScreen, setAutoShareScreen] = useState(false)
   const [theaterMode, setTheaterMode] = useState(false)
   const [stageRequests, setStageRequests] = useState<StageRequest[]>([])
   const [stageRole, setStageRole] = useState<'host' | 'speaker' | 'audience'>(() => {
@@ -58,13 +61,6 @@ export function VoicePanel({ room }: { room: RoomWithPermissions }) {
     if (isStage) return 'audience'
     return 'speaker'
   })
-
-  // Auto screen-share on connect if enabled
-  useEffect(() => {
-    if (connected && autoShareScreen && !voice.isScreenSharing) {
-      void voice.startScreenShare()
-    }
-  }, [connected, autoShareScreen, voice])
 
   // Raised hands simulation / state
   function handleToggleRaiseHand() {
@@ -107,303 +103,329 @@ export function VoicePanel({ room }: { room: RoomWithPermissions }) {
     (p) => isStage && p.stageRole === 'audience' && !p.screenSharing,
   )
 
-  // ── INVITATION / DISCONNECTED STATE ──
+  // ── INVITATION / DISCONNECTED STATE (DISCORD LOBBY) ──
   if (!connected && !pending) {
     return (
-      <section className={styles.panel}>
-        <div className={styles.invite}>
-          <span className={styles.inviteMark} aria-hidden>
-            {isStage ? <RadioIcon size={20} /> : <HeadphonesIcon size={20} />}
-          </span>
-          <div className={styles.inviteText}>
-            <div className={styles.inviteTitle}>
-              {inOtherRoom
-                ? `Currently connected in ${voice.activeRoomName || 'another room'}`
-                : isCurrentRoom && voice.status === 'failed'
-                  ? 'Voice disconnected'
-                  : isStage
-                    ? 'Discord-Style Live Stage'
-                    : 'Voice & Screen Share Hangout'}
-            </div>
-            <p className={styles.inviteHint}>
-              {inOtherRoom
-                ? 'Joining this room will switch your voice connection here.'
-                : isStage
-                  ? 'Listen in as audience, or request to speak and share your screen on stage.'
-                  : canSpeak
-                    ? 'Join to talk, broadcast audio, or share your screen.'
-                    : 'You can listen in this room, but not speak.'}
-            </p>
+      <section className={styles.lobbyPanel}>
+        <div className={styles.lobbyCard}>
+          <div className={styles.lobbyIconWrap}>
+            {isStage ? <RadioIcon size={36} /> : <HeadphonesIcon size={36} />}
           </div>
 
-          <div className={styles.inviteActions}>
-            <label className={styles.autoShareCheck}>
-              <input
-                type="checkbox"
-                checked={autoShareScreen}
-                onChange={(e) => setAutoShareScreen(e.target.checked)}
-              />
-              <span>Auto-Share Screen on Join</span>
-            </label>
+          <h2 className={styles.lobbyTitle}>
+            {inOtherRoom
+              ? `Connected in ${voice.activeRoomName || 'another room'}`
+              : isStage
+                ? 'Live Stage Channel'
+                : 'Voice & Screen Channel'}
+          </h2>
 
-            <Button
-              onClick={() => void voice.join(room.name, room.community_id ?? undefined)}
-              style={{ background: inOtherRoom ? 'var(--color-accent)' : undefined }}
-            >
-              <MicIcon size={16} />
-              {inOtherRoom ? 'Switch to this room' : isStage ? 'Join Stage' : 'Join Voice'}
-            </Button>
-          </div>
+          <p className={styles.lobbySubtitle}>
+            {inOtherRoom
+              ? 'Click below to switch your voice connection to this room.'
+              : isStage
+                ? 'Join the audience to listen in, or request to speak and share your screen on stage.'
+                : 'Hang out with voice, video, and crisp screen sharing with zero latency.'}
+          </p>
+
+          <Button
+            size="lg"
+            onClick={() => void voice.join(room.name, room.community_id ?? undefined)}
+            className={styles.joinBtn}
+          >
+            <MicIcon size={18} />
+            <span>{inOtherRoom ? 'Switch to this room' : isStage ? 'Join Stage' : 'Join Voice'}</span>
+          </Button>
+
+          {isCurrentRoom && voice.error && <Callout tone="danger">{voice.error}</Callout>}
         </div>
-
-        {isCurrentRoom && voice.error && <Callout tone="danger">{voice.error}</Callout>}
       </section>
     )
   }
 
-  // ── CONNECTED LIVE STAGE / VOICE ROOM ──
+  // ── CONNECTED LIVE STAGE / VOICE ROOM VIEWPORT ──
   return (
-    <section className={cx(styles.panel, styles.live, isStage && styles.stageMode)}>
-      {/* Stage Top Status Bar */}
-      <div className={styles.bar}>
-        <Badge tone={connected ? 'mint' : 'neutral'} dot={connected}>
-          {connected ? (isStage ? 'Stage Live' : 'Live') : statusLabel(voice.status)}
-        </Badge>
+    <section className={cx(styles.stageViewport, theaterMode && styles.theaterFullscreen)}>
+      {/* ── TOP STAGE HEADER BAR ── */}
+      <div className={styles.viewportHeader}>
+        <div className={styles.viewportHeaderLeft}>
+          <Badge tone={connected ? 'mint' : 'neutral'} dot={connected}>
+            {connected ? (isStage ? 'STAGE LIVE' : 'VOICE CONNECTED') : 'CONNECTING'}
+          </Badge>
 
-        <span className={styles.headcount}>
-          <UsersIcon size={13} />
-          {headcount} {headcount === 1 ? 'person' : 'people'}
-        </span>
-
-        {isStage && (
-          <span className={styles.stageTopicTag}>
-            <RadioIcon size={13} />
-            {room.topic || room.name}
+          <span className={styles.headcount}>
+            <UsersIcon size={13} />
+            {headcount} {headcount === 1 ? 'participant' : 'participants'}
           </span>
-        )}
 
-        {pending && <Spinner />}
+          {isStage && (
+            <span className={styles.stageTopicTag}>
+              <RadioIcon size={13} />
+              {room.topic || room.name}
+            </span>
+          )}
+        </div>
 
-        <div className={styles.spacer} />
+        <div className={styles.viewportHeaderRight}>
+          {activeScreenStream && (
+            <Tooltip content={theaterMode ? 'Exit Fullscreen' : 'Fullscreen / Theater'}>
+              <button
+                type="button"
+                className={styles.headerIconBtn}
+                onClick={() => setTheaterMode((t) => !t)}
+                aria-label="Toggle Fullscreen"
+              >
+                {theaterMode ? <MinimizeIcon size={16} /> : <MaximizeIcon size={16} />}
+              </button>
+            </Tooltip>
+          )}
 
-        {/* Mute Mic Button */}
-        <Tooltip content={voice.muted ? 'Unmute Mic' : 'Mute Mic'}>
-          <Button
-            variant={voice.muted ? 'danger' : 'secondary'}
-            size="sm"
-            round
-            onClick={voice.toggleMute}
-            disabled={!connected || (!canSpeak && !isUserSpeaker)}
-            aria-label={voice.muted ? 'Unmute microphone' : 'Mute microphone'}
-            aria-pressed={voice.muted}
-          >
-            {voice.muted ? <MicOffIcon size={15} /> : <MicIcon size={15} />}
-            <span>{voice.muted ? 'Muted' : 'Unmuted'}</span>
-          </Button>
-        </Tooltip>
-
-        {/* Screen Share Button */}
-        <Tooltip content={voice.isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}>
-          <Button
-            variant={voice.isScreenSharing ? 'primary' : 'secondary'}
-            size="sm"
-            round
-            onClick={() => void voice.toggleScreenShare()}
-            disabled={!connected}
-            aria-label="Toggle screen share"
-          >
-            {voice.isScreenSharing ? <ScreenShareOffIcon size={15} /> : <ScreenShareIcon size={15} />}
-            <span>{voice.isScreenSharing ? 'Sharing Screen' : 'Share Screen'}</span>
-          </Button>
-        </Tooltip>
-
-        {/* Stage Raise Hand button (for audience or speaker) */}
-        {isStage && (
-          <Tooltip content={voice.handRaised ? 'Lower Hand' : 'Raise Hand to Speak'}>
-            <Button
-              variant={voice.handRaised ? 'primary' : 'secondary'}
-              size="sm"
-              round
-              onClick={handleToggleRaiseHand}
-            >
-              <HandIcon size={15} />
-              <span>{voice.handRaised ? 'Hand Raised ✋' : 'Raise Hand'}</span>
-            </Button>
-          </Tooltip>
-        )}
-
-        {/* Theater view toggle if screen is active */}
-        {activeScreenStream && (
-          <Tooltip content={theaterMode ? 'Exit Theater Mode' : 'Theater Mode'}>
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              round
-              onClick={() => setTheaterMode((t) => !t)}
-              aria-label="Toggle theater mode"
-            >
-              {theaterMode ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
-            </Button>
-          </Tooltip>
-        )}
-
-        {/* Leave Button */}
-        <Tooltip content={isStage ? 'Leave Stage' : 'Leave Voice'}>
-          <Button
-            variant="danger"
-            size="sm"
-            iconOnly
-            round
-            onClick={() => void voice.leave()}
-            aria-label="Disconnect"
-          >
-            <PhoneOffIcon size={15} />
-          </Button>
-        </Tooltip>
+          {onToggleChat && (
+            <Tooltip content={isChatOpen ? 'Hide Text Chat' : 'Show Text Chat'}>
+              <button
+                type="button"
+                className={cx(styles.headerIconBtn, isChatOpen && styles.headerIconBtnActive)}
+                onClick={onToggleChat}
+                aria-label="Toggle Chat"
+              >
+                <MessageSquareIcon size={16} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
-      {!canSpeak && !isUserSpeaker && (
-        <Callout>You are in the audience. Raise your hand to request speaking on stage.</Callout>
-      )}
       {voice.error && <Callout tone="danger">{voice.error}</Callout>}
 
-      {/* ── STAGE PRESENTATION SCREEN VIEWER ── */}
-      {activeScreenStream && (
-        <div className={cx(styles.screenViewerCard, theaterMode && styles.theaterScreen)}>
-          <div className={styles.screenViewerHeader}>
-            <div className={styles.screenViewerTitle}>
-              <ScreenShareIcon size={15} />
-              <span>
-                {voice.isScreenSharing
-                  ? 'You are sharing your screen'
-                  : `${activeScreenParticipant?.displayName ?? 'Speaker'}'s Screen`}
-              </span>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              iconOnly
-              onClick={() => setTheaterMode((t) => !t)}
-            >
-              {theaterMode ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
-            </Button>
-          </div>
-
-          <div className={styles.videoWrap}>
-            <ScreenVideo stream={activeScreenStream} />
-          </div>
-        </div>
-      )}
-
-      {/* ── MODERATOR RAISED HANDS QUEUE (FOR STAGE HOSTS) ── */}
-      {isStage && (stageRole === 'host' || canModerate) && stageRequests.length > 0 && (
-        <div className={styles.requestsCard}>
-          <div className={styles.requestsTitle}>
-            <HandIcon size={15} />
-            <span>Raised Hands ({stageRequests.length})</span>
-          </div>
-          <div className={styles.requestsList}>
-            {stageRequests.map((req) => (
-              <div key={req.userId} className={styles.requestItem}>
-                <Avatar name={req.displayName} src={req.avatar} size="sm" />
-                <span className={styles.requestName}>{req.displayName}</span>
-                <Button size="sm" onClick={() => handleApproveSpeaker(req)}>
-                  Invite to Stage
-                </Button>
+      {/* ── STAGE VIEWPORT CONTENT ── */}
+      <div className={styles.viewportBody}>
+        {/* 1. SCREEN SHARE PRESENTATION THEATER */}
+        {activeScreenStream ? (
+          <div className={styles.presentationView}>
+            <div className={styles.screenVideoCard}>
+              <div className={styles.liveTagOverlay}>
+                <span className={styles.liveTag}>LIVE</span>
+                <span className={styles.liveSpeakerName}>
+                  {voice.isScreenSharing
+                    ? 'Your Screen'
+                    : `${activeScreenParticipant?.displayName ?? 'Speaker'}'s Screen`}
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <ScreenVideo stream={activeScreenStream} />
+            </div>
 
-      {/* ── DISCORD-LIKE STAGE PODIUM / SPEAKERS AREA ── */}
-      <div className={styles.stageSection}>
-        <div className={styles.sectionHeading}>
-          <span>{isStage ? '🎙️ Speakers on Stage' : 'Active Participants'}</span>
-          <Badge tone="mint">
-            {(isUserSpeaker ? 1 : 0) + speakerParticipants.length}
-          </Badge>
-        </div>
-
-        <div className={styles.stageGrid}>
-          {isUserSpeaker && (
-            <SpeakerTile
-              name={user?.profile.display_name ?? 'You'}
-              avatar={user?.profile.avatar_url}
-              accent={user?.profile.accent_color}
-              speaking={voice.speaking}
-              muted={voice.muted}
-              role={stageRole}
-              screenSharing={voice.isScreenSharing}
-              you
-              onStepDown={
-                isStage && stageRole !== 'host'
-                  ? () => {
-                      setStageRole('audience')
-                      voice.setStageRole('audience')
-                    }
-                  : undefined
-              }
-            />
-          )}
-
-          {speakerParticipants.map((participant) => (
-            <SpeakerTile
-              key={participant.id}
-              name={participant.displayName}
-              speaking={participant.speaking}
-              muted={participant.muted}
-              role={participant.stageRole ?? 'speaker'}
-              screenSharing={Boolean(participant.screenSharing)}
-            >
-              <RemoteAudio stream={participant.stream} />
-            </SpeakerTile>
-          ))}
-
-          {!isUserSpeaker && speakerParticipants.length === 0 && (
-            <p className={styles.alone}>The stage is currently quiet.</p>
-          )}
-        </div>
-      </div>
-
-      {/* ── AUDIENCE SECTION (FOR STAGE ROOMS) ── */}
-      {isStage && (
-        <div className={styles.audienceSection}>
-          <div className={styles.sectionHeading}>
-            <span>👥 Audience ({(!isUserSpeaker ? 1 : 0) + audienceParticipants.length})</span>
-          </div>
-
-          <div className={styles.audienceGrid}>
-            {!isUserSpeaker && (
-              <div className={cx(styles.audienceTile, styles.audienceTileYou)}>
-                <Avatar
+            {/* Thumbnail Participant Strip under Screen Share */}
+            <div className={styles.participantStrip}>
+              {isUserSpeaker && (
+                <DiscordVoiceTile
                   name={user?.profile.display_name ?? 'You'}
-                  src={user?.profile.avatar_url}
-                  color={user?.profile.accent_color}
-                  size="md"
+                  avatar={user?.profile.avatar_url}
+                  accent={user?.profile.accent_color}
+                  speaking={voice.speaking}
+                  muted={voice.muted}
+                  screenSharing={voice.isScreenSharing}
+                  compact
+                  you
                 />
-                <span className={styles.audienceName}>You (Audience)</span>
-                {voice.handRaised && <span className={styles.handBadge}>✋</span>}
+              )}
+              {speakerParticipants.map((p) => (
+                <DiscordVoiceTile
+                  key={p.id}
+                  name={p.displayName}
+                  speaking={p.speaking}
+                  muted={p.muted}
+                  screenSharing={Boolean(p.screenSharing)}
+                  compact
+                >
+                  <RemoteAudio stream={p.stream} />
+                </DiscordVoiceTile>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* 2. REGULAR DISCORD VOICE GRID & STAGE PODIUM */
+          <div className={styles.stageGridArea}>
+            {/* Moderator Raised Hand Approvals */}
+            {isStage && (stageRole === 'host' || canModerate) && stageRequests.length > 0 && (
+              <div className={styles.requestsCard}>
+                <div className={styles.requestsTitle}>
+                  <HandIcon size={14} />
+                  <span>Raised Hands Queue ({stageRequests.length})</span>
+                </div>
+                <div className={styles.requestsList}>
+                  {stageRequests.map((req) => (
+                    <div key={req.userId} className={styles.requestItem}>
+                      <Avatar name={req.displayName} src={req.avatar} size="xs" />
+                      <span className={styles.requestName}>{req.displayName}</span>
+                      <Button size="sm" onClick={() => handleApproveSpeaker(req)}>
+                        Invite to Stage
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {audienceParticipants.map((participant) => (
-              <div key={participant.id} className={styles.audienceTile}>
-                <Avatar name={participant.displayName} size="md" />
-                <span className={styles.audienceName}>{participant.displayName}</span>
-                {participant.handRaised && <span className={styles.handBadge}>✋</span>}
-                <RemoteAudio stream={participant.stream} />
+            {/* Speakers / Active Voice Grid */}
+            <div className={styles.gridSection}>
+              {isStage && (
+                <div className={styles.sectionHeader}>
+                  <span>🎙️ Speakers on Stage ({(isUserSpeaker ? 1 : 0) + speakerParticipants.length})</span>
+                </div>
+              )}
+
+              <div className={styles.voiceGrid}>
+                {isUserSpeaker && (
+                  <DiscordVoiceTile
+                    name={user?.profile.display_name ?? 'You'}
+                    avatar={user?.profile.avatar_url}
+                    accent={user?.profile.accent_color}
+                    speaking={voice.speaking}
+                    muted={voice.muted}
+                    role={stageRole}
+                    screenSharing={voice.isScreenSharing}
+                    you
+                    onStepDown={
+                      isStage && stageRole !== 'host'
+                        ? () => {
+                            setStageRole('audience')
+                            voice.setStageRole('audience')
+                          }
+                        : undefined
+                    }
+                  />
+                )}
+
+                {speakerParticipants.map((p) => (
+                  <DiscordVoiceTile
+                    key={p.id}
+                    name={p.displayName}
+                    speaking={p.speaking}
+                    muted={p.muted}
+                    role={p.stageRole ?? 'speaker'}
+                    screenSharing={Boolean(p.screenSharing)}
+                  >
+                    <RemoteAudio stream={p.stream} />
+                  </DiscordVoiceTile>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* Audience Section (Stage rooms) */}
+            {isStage && (
+              <div className={styles.audienceSection}>
+                <div className={styles.sectionHeader}>
+                  <span>👥 Audience ({(!isUserSpeaker ? 1 : 0) + audienceParticipants.length})</span>
+                </div>
+
+                <div className={styles.audienceGrid}>
+                  {!isUserSpeaker && (
+                    <div className={cx(styles.audienceTile, styles.audienceTileYou)}>
+                      <Avatar
+                        name={user?.profile.display_name ?? 'You'}
+                        src={user?.profile.avatar_url}
+                        color={user?.profile.accent_color}
+                        size="md"
+                      />
+                      <span className={styles.audienceName}>You</span>
+                      {voice.handRaised && <span className={styles.handBadge}>✋</span>}
+                    </div>
+                  )}
+
+                  {audienceParticipants.map((p) => (
+                    <div key={p.id} className={styles.audienceTile}>
+                      <Avatar name={p.displayName} size="md" />
+                      <span className={styles.audienceName}>{p.displayName}</span>
+                      {p.handRaised && <span className={styles.handBadge}>✋</span>}
+                      <RemoteAudio stream={p.stream} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+        )}
+      </div>
+
+      {/* ── DISCORD FLOATING CONTROLS CAPSULE BAR ── */}
+      <div className={styles.floatingControlsContainer}>
+        <div className={styles.floatingControlsPill}>
+          {/* Mute Mic */}
+          <Tooltip content={voice.muted ? 'Unmute Microphone' : 'Mute Microphone'}>
+            <button
+              type="button"
+              className={cx(styles.controlBtn, voice.muted && styles.controlBtnDanger)}
+              onClick={voice.toggleMute}
+              disabled={!connected || (!canSpeak && !isUserSpeaker)}
+              aria-label="Toggle Microphone"
+            >
+              {voice.muted ? <MicOffIcon size={20} /> : <MicIcon size={20} />}
+            </button>
+          </Tooltip>
+
+          {/* Screen Share (1-Click toggle, NO auto-share) */}
+          <Tooltip content={voice.isScreenSharing ? 'Stop Sharing Screen' : 'Share Your Screen'}>
+            <button
+              type="button"
+              className={cx(styles.controlBtn, voice.isScreenSharing && styles.controlBtnActive)}
+              onClick={() => void voice.toggleScreenShare()}
+              disabled={!connected}
+              aria-label="Share Screen"
+            >
+              {voice.isScreenSharing ? (
+                <ScreenShareOffIcon size={20} />
+              ) : (
+                <ScreenShareIcon size={20} />
+              )}
+            </button>
+          </Tooltip>
+
+          {/* Stage Raise Hand (Stage channels) */}
+          {isStage && (
+            <Tooltip content={voice.handRaised ? 'Lower Hand' : 'Raise Hand to Speak'}>
+              <button
+                type="button"
+                className={cx(styles.controlBtn, voice.handRaised && styles.controlBtnActive)}
+                onClick={handleToggleRaiseHand}
+                aria-label="Raise Hand"
+              >
+                <HandIcon size={20} />
+              </button>
+            </Tooltip>
+          )}
+
+          {/* Text Chat Drawer Toggle */}
+          {onToggleChat && (
+            <Tooltip content={isChatOpen ? 'Hide Chat' : 'Show Chat'}>
+              <button
+                type="button"
+                className={cx(styles.controlBtn, isChatOpen && styles.controlBtnActive)}
+                onClick={onToggleChat}
+                aria-label="Toggle Chat"
+              >
+                <MessageSquareIcon size={20} />
+              </button>
+            </Tooltip>
+          )}
+
+          {/* Red Disconnect Button */}
+          <Tooltip content="Disconnect">
+            <button
+              type="button"
+              className={cx(styles.controlBtn, styles.controlBtnDisconnect)}
+              onClick={() => void voice.leave()}
+              aria-label="Disconnect"
+            >
+              <PhoneOffIcon size={20} />
+            </button>
+          </Tooltip>
         </div>
-      )}
+      </div>
     </section>
   )
 }
 
-function SpeakerTile({
+function DiscordVoiceTile({
   name,
   avatar,
   accent,
@@ -411,6 +433,7 @@ function SpeakerTile({
   muted,
   role,
   screenSharing,
+  compact,
   you,
   onStepDown,
   children,
@@ -422,56 +445,52 @@ function SpeakerTile({
   muted: boolean
   role?: 'host' | 'speaker' | 'audience'
   screenSharing?: boolean
+  compact?: boolean
   you?: boolean
   onStepDown?: () => void
   children?: React.ReactNode
 }) {
   return (
-    <div className={cx(styles.speakerCard, speaking && styles.speakerSpeaking)}>
-      <div className={styles.avatarWrapper}>
-        <Avatar name={name} src={avatar} color={accent} size="xl" speaking={speaking} />
+    <div
+      className={cx(
+        styles.voiceTile,
+        speaking && styles.voiceTileSpeaking,
+        compact && styles.voiceTileCompact,
+      )}
+    >
+      <div className={styles.avatarWrap}>
+        <Avatar
+          name={name}
+          src={avatar}
+          color={accent}
+          size={compact ? 'lg' : 'xl'}
+          speaking={speaking}
+        />
         {speaking && <div className={styles.speakingWaveRing} />}
       </div>
 
-      <div className={styles.speakerDetails}>
-        <div className={styles.speakerNameRow}>
-          <span className={styles.speakerName}>{you ? `${name} (You)` : name}</span>
-          {role === 'host' && (
-            <span className={styles.roleBadge} title="Stage Host">
-              <CrownIcon size={12} />
-              Host
-            </span>
-          )}
-          {screenSharing && (
-            <span className={styles.sharingTag} title="Sharing screen">
-              <ScreenShareIcon size={11} />
-              Live
-            </span>
-          )}
-        </div>
-
-        <div className={styles.speakerStatusRow}>
-          {muted ? (
-            <span className={styles.mutedTag}>
-              <MicOffIcon size={11} />
-              Muted
-            </span>
-          ) : speaking ? (
-            <span className={styles.speakingTag}>
-              <Volume2Icon size={11} />
-              Speaking
-            </span>
-          ) : (
-            <span className={styles.idleTag}>Listening</span>
-          )}
-        </div>
-
-        {you && onStepDown && (
-          <button type="button" className={styles.stepDownBtn} onClick={onStepDown}>
-            Move to Audience
-          </button>
+      <div className={styles.tileNameTag}>
+        <span className={styles.tileNameText}>{you ? `${name} (You)` : name}</span>
+        {role === 'host' && (
+          <span className={styles.crownTag} title="Stage Host">
+            <CrownIcon size={11} />
+          </span>
+        )}
+        {screenSharing && (
+          <span className={styles.livePill}>LIVE</span>
+        )}
+        {muted && (
+          <span className={styles.mutedPill}>
+            <MicOffIcon size={12} />
+          </span>
         )}
       </div>
+
+      {you && onStepDown && (
+        <button type="button" className={styles.stepDownLink} onClick={onStepDown}>
+          Step Down
+        </button>
+      )}
 
       {children}
     </div>
@@ -492,7 +511,7 @@ function ScreenVideo({ stream }: { stream: MediaStream | null }) {
   }, [stream])
 
   if (!stream) return null
-  return <video ref={videoRef} autoPlay playsInline muted className={styles.videoElement} />
+  return <video ref={videoRef} autoPlay playsInline muted className={styles.screenVideoElement} />
 }
 
 function RemoteAudio({ stream }: { stream: MediaStream | null }) {
@@ -510,19 +529,4 @@ function RemoteAudio({ stream }: { stream: MediaStream | null }) {
 
   if (!stream) return null
   return <audio ref={ref} autoPlay playsInline />
-}
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case 'connected':
-      return 'Connected'
-    case 'connecting':
-      return 'Connecting'
-    case 'reconnecting':
-      return 'Reconnecting'
-    case 'failed':
-      return 'Disconnected'
-    default:
-      return 'Not connected'
-  }
 }

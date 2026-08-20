@@ -94,7 +94,8 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const [profileUserId, setProfileUserId] = useState<Uuid | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
 
-  const isMediaRoom = room.room_type === 'voice' || room.room_type === 'video' || room.room_type === 'stage' || room.room_type === 'activity'
+  const [voiceChatOpen, setVoiceChatOpen] = useState(false)
+  const isMediaRoom = room.room_type === 'voice' || room.room_type === 'video' || room.room_type === 'stage'
   const isDM = room.category === 'dm'
   const Icon = isDM ? MessageSquareIcon : (ROOM_ICONS[room.room_type] ?? HashIcon)
 
@@ -197,6 +198,19 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
             </Badge>
           )}
 
+          {isMediaRoom && !isMobile && (
+            <Tooltip content={voiceChatOpen ? 'Hide text chat' : 'Show text chat'}>
+              <button
+                type="button"
+                className={cx(styles.headerButton, voiceChatOpen && styles.headerButtonActive)}
+                onClick={() => setVoiceChatOpen((o) => !o)}
+                aria-label="Toggle text chat"
+              >
+                <MessageSquareIcon size={17} />
+              </button>
+            </Tooltip>
+          )}
+
           {!isMobile && !isDM && (
             <Tooltip content={membersOpen ? 'Hide members' : 'Show members'}>
               <button
@@ -212,20 +226,40 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
           )}
         </header>
 
-        {/* Experience Type Interactive feature engines */}
-        {room.room_type === 'debate' && <DebateExperience room={room} />}
-        {room.room_type === 'poll' && <PollExperience room={room} />}
-        {room.room_type === 'game' && <GameExperience room={room} />}
-        {room.room_type === 'confession' && <ConfessionExperience room={room} />}
-        {room.room_type === 'quick_chat' && <QuickChatExperience room={room} />}
-        {room.room_type === 'activity' && <ActivityExperience room={room} />}
-        {isMediaRoom && <VoicePanel room={room} />}
+        {isMediaRoom ? (
+          <div className={styles.mediaStageContainer}>
+            <VoicePanel
+              room={room}
+              onToggleChat={() => setVoiceChatOpen((o) => !o)}
+              isChatOpen={voiceChatOpen}
+            />
+            {voiceChatOpen && (
+              <div className={styles.voiceSideChat}>
+                <Chat
+                  room={room}
+                  isAnonymousPersona={isDM ? false : isAnonymous}
+                  onTogglePersona={(next) => void handleTogglePersona(next)}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Experience Type Interactive feature engines */}
+            {room.room_type === 'debate' && <DebateExperience room={room} />}
+            {room.room_type === 'poll' && <PollExperience room={room} />}
+            {room.room_type === 'game' && <GameExperience room={room} />}
+            {room.room_type === 'confession' && <ConfessionExperience room={room} />}
+            {room.room_type === 'quick_chat' && <QuickChatExperience room={room} />}
+            {room.room_type === 'activity' && <ActivityExperience room={room} />}
 
-        <Chat
-          room={room}
-          isAnonymousPersona={isDM ? false : isAnonymous}
-          onTogglePersona={(next) => void handleTogglePersona(next)}
-        />
+            <Chat
+              room={room}
+              isAnonymousPersona={isDM ? false : isAnonymous}
+              onTogglePersona={(next) => void handleTogglePersona(next)}
+            />
+          </>
+        )}
       </div>
 
       {!isMobile && membersOpen && !isDM && (

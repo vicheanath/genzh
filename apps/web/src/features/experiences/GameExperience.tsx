@@ -9,23 +9,42 @@ import {
   FlameIcon,
   RotateCcwIcon,
   ZapIcon,
+  PlusIcon,
+  PencilIcon,
+  SendIcon,
 } from '@/components/Icons'
 import { Badge } from '@/components/Badge'
+import { useToast } from '@/components/Toast'
 import { cx } from '@/lib/cx'
-import type { RoomWithPermissions } from '@/lib/api'
+import { messages as messagesApi, type RoomWithPermissions } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import { can } from '@/lib/permissions'
+import { chatSocket } from '@/lib/ws/ChatSocket'
 import styles from './GameExperience.module.css'
 
 type GameMode = 'trivia' | 'would_you_rather' | 'truth_or_dare' | 'word_chain'
 
-interface TriviaQuestion {
+export interface TriviaQuestion {
+  category: string
   question: string
   options: string[]
   answer: number
   explanation: string
-  category: string
 }
 
-const TRIVIA_DECK: TriviaQuestion[] = [
+export interface WouldYouRatherItem {
+  optionA: string
+  optionB: string
+  votesA: number
+  votesB: number
+}
+
+export interface TruthOrDareItem {
+  type: 'truth' | 'dare'
+  text: string
+}
+
+const DEFAULT_TRIVIA_DECK: TriviaQuestion[] = [
   {
     category: '💻 Tech & Internet',
     question: 'What was the original name of JavaScript when Brendan Eich created it in 10 days?',
@@ -56,7 +75,7 @@ const TRIVIA_DECK: TriviaQuestion[] = [
   },
 ]
 
-const WOULD_YOU_RATHER_DECK = [
+const DEFAULT_WOULD_YOU_RATHER_DECK: WouldYouRatherItem[] = [
   {
     optionA: 'Have infinite free flight travel anywhere in the world',
     optionB: 'Never need to sleep again with 100% full energy 24/7',
@@ -77,7 +96,7 @@ const WOULD_YOU_RATHER_DECK = [
   },
 ]
 
-const TRUTH_OR_DARE_DECK = [
+const DEFAULT_TRUTH_OR_DARE_DECK: TruthOrDareItem[] = [
   {
     type: 'truth',
     text: 'What is the most unhinged Google search in your history in the past 7 days?',
@@ -96,27 +115,77 @@ const TRUTH_OR_DARE_DECK = [
   },
 ]
 
-export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
-  const [activeMode, setActiveMode] = useState<GameMode>('trivia')
+export function GameExperience({ room }: { room: RoomWithPermissions }) {
+  const { user, getToken } = useAuth()
+  const toast = useToast()
 
-  // Trivia state
+  const isOwner = room.owner_id === user?.id || can(room.your_permissions, 'manage_room')
+
+  // Creator Customized Decks
+  const [activeMode, setActiveMode] = useState<GameMode>('trivia')
+  const [showBuilder, setShowBuilder] = useState(false)
+  const [builderTab, setBuilderTab] = useState<GameMode>('trivia')
+
+  // Decks state (customizable by room creator)
+  const [triviaDeck, setTriviaDeck] = useState<TriviaQuestion[]>(() => {
+    try {
+      const saved = localStorage.getItem(`genzh_custom_trivia_${room.id}`)
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_TRIVIA_DECK
+  })
+
+  const [wyrDeck, setWyrDeck] = useState<WouldYouRatherItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(`genzh_custom_wyr_${room.id}`)
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_WOULD_YOU_RATHER_DECK
+  })
+
+  const [todDeck, setTodDeck] = useState<TruthOrDareItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(`genzh_custom_tod_${room.id}`)
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_TRUTH_OR_DARE_DECK
+  })
+
+  // Trivia player state
   const [triviaIndex, setTriviaIndex] = useState(0)
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
   const [score, setScore] = useState(0)
   const [streak, setStreak] = useState(0)
   const [timeLeft, setTimeLeft] = useState(15)
   const [triviaDone, setTriviaDone] = useState(false)
+  const [hasSharedResults, setHasSharedResults] = useState(false)
 
-  // WYR state
+  // WYR player state
   const [wyrIndex, setWyrIndex] = useState(0)
   const [wyrVoted, setWyrVoted] = useState<'A' | 'B' | null>(null)
 
-  // Truth or Dare state
+  // Truth or Dare player state
   const [todIndex, setTodIndex] = useState(0)
 
-  // Word chain state
+  // Word chain player state
   const [wordChain, setWordChain] = useState<string[]>(['GENZH', 'HYPER', 'REACT', 'TURBO'])
   const [currentWordInput, setCurrentWordInput] = useState('')
+
+  // ── BUILDER FORM STATES ──
+  // Trivia builder form
+  const [customQuestion, setCustomQuestion] = useState('')
+  const [customCategory, setCustomCategory] = useState('🎲 Random Trivia')
+  const [customOptions, setCustomOptions] = useState(['', '', '', ''])
+  const [customAnswer, setCustomAnswer] = useState(0)
+  const [customExplanation, setCustomExplanation] = useState('')
+
+  // WYR builder form
+  const [customWyrA, setCustomWyrA] = useState('')
+  const [customWyrB, setCustomWyrB] = useState('')
+
+  // TOD builder form
+  const [customTodType, setCustomTodType] = useState<'truth' | 'dare'>('truth')
+  const [customTodText, setCustomTodText] = useState('')
 
   // Trivia countdown timer
   useEffect(() => {
@@ -134,7 +203,7 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
     if (selectedOption !== null) return
     setSelectedOption(index)
 
-    const currentQ = TRIVIA_DECK[triviaIndex]
+    const currentQ = triviaDeck[triviaIndex]
     if (currentQ && index === currentQ.answer) {
       const bonus = timeLeft * 10
       setScore((s) => s + 100 + bonus)
@@ -145,7 +214,7 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
   }
 
   function handleNextTrivia() {
-    if (triviaIndex + 1 < TRIVIA_DECK.length) {
+    if (triviaIndex + 1 < triviaDeck.length) {
       setTriviaIndex((i) => i + 1)
       setSelectedOption(null)
       setTimeLeft(15)
@@ -161,6 +230,54 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
     setStreak(0)
     setTimeLeft(15)
     setTriviaDone(false)
+    setHasSharedResults(false)
+  }
+
+  // ── POST RESULTS TO CHAT ──
+  async function postTriviaResultsToChat() {
+    const playerName = user?.profile.display_name ?? 'Anonymous Gamer'
+    const messageContent = `🏆 **TRIVIA RUSH RESULTS** 🏆\n👤 Player: **${playerName}**\n⭐️ Final Score: **${score} Pts** (${score >= 300 ? '🔥 Godlike!' : score >= 150 ? '⚡ Great Job!' : '👍 Good Try!'})\n🔥 Best Streak: **${streak}x**\n📚 Questions Completed: **${triviaDeck.length}/${triviaDeck.length}**\n\n*Can anyone in the room beat this high score?*`
+
+    try {
+      const token = await getToken()
+      await messagesApi.post(token, room.id, messageContent, room.is_anonymous)
+      chatSocket.sendMessage(room.id, messageContent, room.is_anonymous)
+      setHasSharedResults(true)
+      toast.success('Results posted to chat!')
+    } catch {
+      toast.error('Could not post results to chat')
+    }
+  }
+
+  async function postWyrResultsToChat() {
+    const wyr = wyrDeck[wyrIndex] ?? wyrDeck[0]!
+    const total = wyr.votesA + wyr.votesB || 1
+    const pA = Math.round((wyr.votesA / total) * 100)
+    const pB = 100 - pA
+    const messageContent = `🤔 **WOULD YOU RATHER POLL RESULT**\n🅰️ **${wyr.optionA}** — ${pA}%\n🅱️ **${wyr.optionB}** — ${pB}%\n\n*Vote live on the mini-game bar above!*`
+
+    try {
+      const token = await getToken()
+      await messagesApi.post(token, room.id, messageContent, room.is_anonymous)
+      chatSocket.sendMessage(room.id, messageContent, room.is_anonymous)
+      toast.success('Dilemma shared to chat!')
+    } catch {
+      toast.error('Could not share to chat')
+    }
+  }
+
+  async function postTodPromptToChat() {
+    const tod = todDeck[todIndex] ?? todDeck[0]!
+    const messageContent = `🎯 **${tod.type.toUpperCase()} DROP**\n🎲 *" ${tod.text} "*\n\n*Answer or complete the dare in chat!*`
+
+    try {
+      const token = await getToken()
+      await messagesApi.post(token, room.id, messageContent, room.is_anonymous)
+      chatSocket.sendMessage(room.id, messageContent, room.is_anonymous)
+      toast.success('Prompt dropped into chat!')
+    } catch {
+      toast.error('Could not share prompt to chat')
+    }
   }
 
   function handleAddWord(e: React.FormEvent) {
@@ -176,13 +293,89 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
       return
     }
 
-    setWordChain([...wordChain, word])
+    const nextChain = [...wordChain, word]
+    setWordChain(nextChain)
     setCurrentWordInput('')
+
+    // Share milestones every 5 words
+    if (nextChain.length % 5 === 0) {
+      const msg = `⚡ **WORD CHAIN MILESTONE!** Chain reached **${nextChain.length} words**! Last word: **${word}** (Next starts with: **${word.slice(-1)}**)`
+      void getToken().then((token) => {
+        void messagesApi.post(token, room.id, msg, room.is_anonymous)
+      })
+    }
   }
 
-  const currentTrivia = TRIVIA_DECK[triviaIndex] ?? TRIVIA_DECK[0]!
-  const currentWyr = WOULD_YOU_RATHER_DECK[wyrIndex] ?? WOULD_YOU_RATHER_DECK[0]!
-  const currentTod = TRUTH_OR_DARE_DECK[todIndex] ?? TRUTH_OR_DARE_DECK[0]!
+  // ── BUILDER ACTIONS (FOR ROOM CREATORS) ──
+  function handleSaveCustomTrivia(e: React.FormEvent) {
+    e.preventDefault()
+    const validOpts = customOptions.map((o) => o.trim())
+    if (!customQuestion.trim() || validOpts.some((o) => !o)) return
+
+    const newQ: TriviaQuestion = {
+      category: customCategory.trim() || 'Custom Trivia',
+      question: customQuestion.trim(),
+      options: validOpts,
+      answer: customAnswer,
+      explanation: customExplanation.trim() || 'Created by the room host!',
+    }
+
+    const updated = [newQ, ...triviaDeck]
+    setTriviaDeck(updated)
+    try {
+      localStorage.setItem(`genzh_custom_trivia_${room.id}`, JSON.stringify(updated))
+    } catch {}
+
+    setCustomQuestion('')
+    setCustomOptions(['', '', '', ''])
+    setCustomExplanation('')
+    toast.success('Custom trivia question added to deck!')
+  }
+
+  function handleSaveCustomWyr(e: React.FormEvent) {
+    e.preventDefault()
+    if (!customWyrA.trim() || !customWyrB.trim()) return
+
+    const newWyr: WouldYouRatherItem = {
+      optionA: customWyrA.trim(),
+      optionB: customWyrB.trim(),
+      votesA: 1,
+      votesB: 1,
+    }
+
+    const updated = [newWyr, ...wyrDeck]
+    setWyrDeck(updated)
+    try {
+      localStorage.setItem(`genzh_custom_wyr_${room.id}`, JSON.stringify(updated))
+    } catch {}
+
+    setCustomWyrA('')
+    setCustomWyrB('')
+    toast.success('Custom dilemma added to deck!')
+  }
+
+  function handleSaveCustomTod(e: React.FormEvent) {
+    e.preventDefault()
+    if (!customTodText.trim()) return
+
+    const newTod: TruthOrDareItem = {
+      type: customTodType,
+      text: customTodText.trim(),
+    }
+
+    const updated = [newTod, ...todDeck]
+    setTodDeck(updated)
+    try {
+      localStorage.setItem(`genzh_custom_tod_${room.id}`, JSON.stringify(updated))
+    } catch {}
+
+    setCustomTodText('')
+    toast.success(`Custom ${customTodType.toUpperCase()} added!`)
+  }
+
+  const currentTrivia = triviaDeck[triviaIndex] ?? triviaDeck[0]!
+  const currentWyr = wyrDeck[wyrIndex] ?? wyrDeck[0]!
+  const currentTod = todDeck[todIndex] ?? todDeck[0]!
 
   return (
     <div className={styles.gameContainer}>
@@ -191,39 +384,214 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
         <div className={styles.gameTag}>
           <GamepadIcon size={16} />
           <span>Party Mini-Games Hub</span>
+          {isOwner && (
+            <Badge tone="accent">Host Controls</Badge>
+          )}
         </div>
 
-        <div className={styles.modeTabs}>
-          <button
-            type="button"
-            className={cx(styles.modeTab, activeMode === 'trivia' && styles.modeTabActive)}
-            onClick={() => setActiveMode('trivia')}
-          >
-            🧠 Trivia Rush
-          </button>
-          <button
-            type="button"
-            className={cx(styles.modeTab, activeMode === 'would_you_rather' && styles.modeTabActive)}
-            onClick={() => setActiveMode('would_you_rather')}
-          >
-            🤔 Would You Rather
-          </button>
-          <button
-            type="button"
-            className={cx(styles.modeTab, activeMode === 'truth_or_dare' && styles.modeTabActive)}
-            onClick={() => setActiveMode('truth_or_dare')}
-          >
-            🎯 Truth / Dare
-          </button>
-          <button
-            type="button"
-            className={cx(styles.modeTab, activeMode === 'word_chain' && styles.modeTabActive)}
-            onClick={() => setActiveMode('word_chain')}
-          >
-            ⚡ Word Chain
-          </button>
+        <div className={styles.headerRightActions}>
+          <div className={styles.modeTabs}>
+            <button
+              type="button"
+              className={cx(styles.modeTab, activeMode === 'trivia' && styles.modeTabActive)}
+              onClick={() => setActiveMode('trivia')}
+            >
+              🧠 Trivia Rush ({triviaDeck.length})
+            </button>
+            <button
+              type="button"
+              className={cx(styles.modeTab, activeMode === 'would_you_rather' && styles.modeTabActive)}
+              onClick={() => setActiveMode('would_you_rather')}
+            >
+              🤔 Would You Rather
+            </button>
+            <button
+              type="button"
+              className={cx(styles.modeTab, activeMode === 'truth_or_dare' && styles.modeTabActive)}
+              onClick={() => setActiveMode('truth_or_dare')}
+            >
+              🎯 Truth / Dare
+            </button>
+            <button
+              type="button"
+              className={cx(styles.modeTab, activeMode === 'word_chain' && styles.modeTabActive)}
+              onClick={() => setActiveMode('word_chain')}
+            >
+              ⚡ Word Chain
+            </button>
+          </div>
+
+          {isOwner && (
+            <Button
+              size="sm"
+              variant={showBuilder ? 'secondary' : 'ghost'}
+              onClick={() => setShowBuilder((s) => !s)}
+            >
+              <PencilIcon size={14} />
+              {showBuilder ? 'Close Deck Builder' : 'Build / Customize Games'}
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* ── ROOM CREATOR GAME BUILDER DRAWER ── */}
+      {showBuilder && isOwner && (
+        <div className={styles.builderCard}>
+          <div className={styles.builderHeader}>
+            <div className={styles.builderTitle}>
+              <PencilIcon size={15} />
+              <span>Room Creator Game Deck Builder</span>
+            </div>
+            <div className={styles.builderTabs}>
+              <button
+                type="button"
+                className={cx(styles.builderTabBtn, builderTab === 'trivia' && styles.builderTabActive)}
+                onClick={() => setBuilderTab('trivia')}
+              >
+                + Add Trivia
+              </button>
+              <button
+                type="button"
+                className={cx(styles.builderTabBtn, builderTab === 'would_you_rather' && styles.builderTabActive)}
+                onClick={() => setBuilderTab('would_you_rather')}
+              >
+                + Add Dilemma
+              </button>
+              <button
+                type="button"
+                className={cx(styles.builderTabBtn, builderTab === 'truth_or_dare' && styles.builderTabActive)}
+                onClick={() => setBuilderTab('truth_or_dare')}
+              >
+                + Add Truth/Dare
+              </button>
+            </div>
+          </div>
+
+          {/* Builder Tab 1: Trivia */}
+          {builderTab === 'trivia' && (
+            <form className={styles.builderForm} onSubmit={handleSaveCustomTrivia}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 'var(--space-2)' }}>
+                <input
+                  type="text"
+                  className={styles.builderInput}
+                  placeholder="Enter custom trivia question (e.g. Which framework was built by Google?)"
+                  value={customQuestion}
+                  onChange={(e) => setCustomQuestion(e.target.value)}
+                  required
+                />
+                <input
+                  type="text"
+                  className={styles.builderInput}
+                  placeholder="Category (e.g. Web Dev)"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                />
+              </div>
+
+              <div className={styles.optionsGrid}>
+                {customOptions.map((opt, idx) => (
+                  <div key={idx} className={styles.builderOptionRow}>
+                    <input
+                      type="radio"
+                      name="correctAnswer"
+                      checked={customAnswer === idx}
+                      onChange={() => setCustomAnswer(idx)}
+                      title="Select this as the correct answer"
+                    />
+                    <input
+                      type="text"
+                      className={styles.builderInput}
+                      placeholder={`Choice ${['A', 'B', 'C', 'D'][idx]}${customAnswer === idx ? ' (Correct Answer)' : ''}`}
+                      value={opt}
+                      onChange={(e) => {
+                        const copy = [...customOptions]
+                        copy[idx] = e.target.value
+                        setCustomOptions(copy)
+                      }}
+                      required
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <input
+                  type="text"
+                  className={styles.builderInput}
+                  placeholder="Explanation / Fun fact when answered (optional)"
+                  value={customExplanation}
+                  onChange={(e) => setCustomExplanation(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <Button size="sm" type="submit">
+                  <PlusIcon size={14} />
+                  Add to Room Deck
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {/* Builder Tab 2: Would You Rather */}
+          {builderTab === 'would_you_rather' && (
+            <form className={styles.builderForm} onSubmit={handleSaveCustomWyr}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+                <input
+                  type="text"
+                  className={styles.builderInput}
+                  placeholder="Choice A (e.g. Have teleportation power)"
+                  value={customWyrA}
+                  onChange={(e) => setCustomWyrA(e.target.value)}
+                  required
+                />
+                <input
+                  type="text"
+                  className={styles.builderInput}
+                  placeholder="Choice B (e.g. Have time travel power)"
+                  value={customWyrB}
+                  onChange={(e) => setCustomWyrB(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button size="sm" type="submit">
+                  <PlusIcon size={14} />
+                  Add Dilemma to Room Deck
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {/* Builder Tab 3: Truth or Dare */}
+          {builderTab === 'truth_or_dare' && (
+            <form className={styles.builderForm} onSubmit={handleSaveCustomTod}>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <select
+                  className={styles.builderInput}
+                  value={customTodType}
+                  onChange={(e) => setCustomTodType(e.target.value as 'truth' | 'dare')}
+                  style={{ width: '120px' }}
+                >
+                  <option value="truth">Truth</option>
+                  <option value="dare">Dare</option>
+                </select>
+                <input
+                  type="text"
+                  className={styles.builderInput}
+                  placeholder="Enter the spicy truth question or hilarious dare…"
+                  value={customTodText}
+                  onChange={(e) => setCustomTodText(e.target.value)}
+                  style={{ flex: 1 }}
+                  required
+                />
+                <Button size="sm" type="submit">
+                  <PlusIcon size={14} />
+                  Add Prompt to Room Deck
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
 
       {/* ── MODE 1: TRIVIA RUSH ── */}
       {activeMode === 'trivia' && (
@@ -234,7 +602,7 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
                 <div className={styles.triviaMeta}>
                   <Badge tone="accent">{currentTrivia.category}</Badge>
                   <span className={styles.qCount}>
-                    Question {triviaIndex + 1} of {TRIVIA_DECK.length}
+                    Question {triviaIndex + 1} of {triviaDeck.length}
                   </span>
                 </div>
 
@@ -292,7 +660,7 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
                   </div>
                   <p className={styles.explanationText}>{currentTrivia.explanation}</p>
                   <Button size="sm" onClick={handleNextTrivia}>
-                    {triviaIndex + 1 < TRIVIA_DECK.length ? 'Next Question →' : 'View Final Score 🏆'}
+                    {triviaIndex + 1 < triviaDeck.length ? 'Next Question →' : 'View Final Score 🏆'}
                   </Button>
                 </div>
               )}
@@ -302,11 +670,22 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
               <SparklesIcon size={32} className={styles.sparkleIcon} />
               <h3>Trivia Round Complete!</h3>
               <div className={styles.finalScoreDigits}>{score} Pts</div>
-              <p>Great job! Challenge other room members or play another round.</p>
-              <Button onClick={handleResetTrivia}>
-                <RotateCcwIcon size={16} />
-                Play Again
-              </Button>
+              <p>Great job! Share your high score with everyone in chat or play another round.</p>
+              
+              <div className={styles.finalActionsRow}>
+                <Button
+                  onClick={() => void postTriviaResultsToChat()}
+                  disabled={hasSharedResults}
+                  style={{ background: hasSharedResults ? 'var(--color-surface-hover)' : 'var(--color-accent)' }}
+                >
+                  <SendIcon size={15} />
+                  {hasSharedResults ? '✓ Posted in Room Chat' : '📢 Post Results to Room Chat'}
+                </Button>
+                <Button variant="secondary" onClick={handleResetTrivia}>
+                  <RotateCcwIcon size={15} />
+                  Play Again
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -317,17 +696,23 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
         <div className={styles.gameCard}>
           <div className={styles.wyrHeader}>
             <span className={styles.wyrTitle}>Would You Rather…</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setWyrIndex((i) => (i + 1) % WOULD_YOU_RATHER_DECK.length)
-                setWyrVoted(null)
-              }}
-            >
-              <ShuffleIcon size={14} />
-              Next Dilemma
-            </Button>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <Button size="sm" variant="ghost" onClick={() => void postWyrResultsToChat()}>
+                <SendIcon size={14} />
+                Share Dilemma to Chat
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setWyrIndex((i) => (i + 1) % wyrDeck.length)
+                  setWyrVoted(null)
+                }}
+              >
+                <ShuffleIcon size={14} />
+                Next Dilemma
+              </Button>
+            </div>
           </div>
 
           <div className={styles.wyrOptions}>
@@ -377,13 +762,19 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
             <Badge tone={currentTod.type === 'truth' ? 'mint' : 'danger'}>
               {currentTod.type.toUpperCase()}
             </Badge>
-            <Button
-              size="sm"
-              onClick={() => setTodIndex((i) => (i + 1) % TRUTH_OR_DARE_DECK.length)}
-            >
-              <ShuffleIcon size={14} />
-              Spin Next Card
-            </Button>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <Button size="sm" variant="ghost" onClick={() => void postTodPromptToChat()}>
+                <SendIcon size={14} />
+                Drop to Chat
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setTodIndex((i) => (i + 1) % todDeck.length)}
+              >
+                <ShuffleIcon size={14} />
+                Spin Next Card
+              </Button>
+            </div>
           </div>
 
           <div className={styles.todPromptCard}>
@@ -406,7 +797,7 @@ export function GameExperience({ room: _room }: { room: RoomWithPermissions }) {
                 "
               </span>
             </div>
-            <Badge tone="mint">Active Chain: {wordChain.length}</Badge>
+            <Badge tone="mint">Active Chain: {wordChain.length} Words</Badge>
           </div>
 
           <div className={styles.chainPills}>

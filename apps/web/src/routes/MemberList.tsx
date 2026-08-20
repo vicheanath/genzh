@@ -38,13 +38,47 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
   }, [getToken, communityId, roomId])
 
   const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? [])
+  const allMembers = members.data ?? []
 
   return (
     <div className={styles.panel}>
-      <h2 className={styles.heading}>
-        {communityId ? 'Members' : 'Participants'}
-        {members.data && <span className={styles.count}>{members.data.length}</span>}
-      </h2>
+      {allMembers.length > 0 && (
+        <div className={styles.group}>
+          <h2 className={styles.heading}>
+            {communityId ? 'MEMBERS' : 'PARTICIPANTS'} — {allMembers.length}
+          </h2>
+          {allMembers.map((member) => {
+            const profile = lookup(member.user_id)
+            const name = member.nickname ?? profile?.display_name ?? 'Loading…'
+            return (
+              <div
+                key={member.user_id}
+                className={styles.member}
+                style={{ cursor: 'pointer' }}
+                onClick={() => {
+                  setSelectedUserId(member.user_id)
+                  setDialogOpen(true)
+                }}
+              >
+                <Avatar
+                  name={name}
+                  src={profile?.avatar_url}
+                  color={profile?.accent_color}
+                  size="sm"
+                  presence="online"
+                />
+                <div className={styles.identity}>
+                  <div className={styles.name} style={{ color: profile?.accent_color ?? undefined }}>
+                    {name}
+                  </div>
+                  {profile && <div className={styles.handle}>@{profile.handle}</div>}
+                </div>
+                {member.user_id === user?.id && <span className={styles.youTag}>you</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {members.loading && (
         <div className={styles.skeletons}>
@@ -58,36 +92,6 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
       )}
 
       {members.error && <p className={styles.message}>{members.error}</p>}
-
-      {members.data?.map((member) => {
-        const profile = lookup(member.user_id)
-        const name = member.nickname ?? profile?.display_name ?? 'Loading…'
-
-        return (
-          <div
-            key={member.user_id}
-            className={styles.member}
-            style={{ cursor: 'pointer' }}
-            onClick={() => {
-              setSelectedUserId(member.user_id)
-              setDialogOpen(true)
-            }}
-          >
-            <Avatar
-              name={name}
-              src={profile?.avatar_url}
-              color={profile?.accent_color}
-              size="sm"
-            />
-            <div className={styles.identity}>
-              <div className={styles.name}>{name}</div>
-              {profile && <div className={styles.handle}>@{profile.handle}</div>}
-            </div>
-            {member.user_id === user?.id && <span className={styles.youTag}>you</span>}
-          </div>
-        )
-      })}
-
       {members.data?.length === 0 && <p className={styles.message}>Nobody here yet.</p>}
 
       {selectedUserId && (

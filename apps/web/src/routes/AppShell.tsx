@@ -6,6 +6,8 @@ import { Button } from '@/components/Button'
 import {
   CheckIcon,
   CompassIcon,
+  FlameIcon,
+  GamepadIcon,
   HashIcon,
   HeadphonesIcon,
   HomeIcon,
@@ -16,14 +18,18 @@ import {
   MicOffIcon,
   MonitorIcon,
   MoonIcon,
+  PaletteIcon,
   PhoneOffIcon,
   PlusIcon,
+  RadioIcon,
   SettingsIcon,
   SignOutIcon,
   SparkleIcon,
   SunIcon,
   UsersIcon,
   VideoIcon,
+  VoteIcon,
+  ZapIcon,
 } from '@/components/Icons'
 import { Menu, MenuItem, MenuSeparator } from '@/components/Menu'
 import { Sheet } from '@/components/Sheet'
@@ -81,15 +87,16 @@ export function AppShell() {
     [getToken],
   )
 
-  const rooms = useAsync(async () => {
-    if (!communityId) return []
-    return roomsApi.list(await getToken(), communityId)
-  }, [getToken, communityId])
+  const rooms = useAsync(
+    async () => (communityId ? roomsApi.list(await getToken(), communityId) : null),
+    [communityId, getToken],
+  )
 
-  const myRooms = useAsync(async () => {
-    if (communityId) return []
-    return roomsApi.mine(await getToken())
-  }, [getToken, communityId])
+  // Load user's direct message / private playground rooms for the left sidebar
+  const myRooms = useAsync(
+    async () => roomsApi.mine(await getToken()),
+    [getToken],
+  )
 
   const navigation = (
     <>
@@ -191,16 +198,16 @@ function CommunityRail({
 }) {
   return (
     <nav className={styles.rail} aria-label="Communities">
-      <Tooltip content="Home" side="right">
+      <Tooltip content="Direct Messages" side="right">
         <NavLink
           to="/"
           end
           className={({ isActive }) => cx(styles.railItem, isActive && styles.railItemActive)}
-          aria-label="Home"
+          aria-label="Direct Messages"
         >
           <span className={styles.railPill} aria-hidden />
           <span className={styles.railGlyph}>
-            <HomeIcon size={20} />
+            <MessageSquareIcon size={20} />
           </span>
         </NavLink>
       </Tooltip>
@@ -273,14 +280,14 @@ function CommunityRail({
 const ROOM_ICONS: Record<string, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
+  stage: RadioIcon,
   video: VideoIcon,
-  activity: SparkleIcon,
-  stage: VideoIcon,
-  poll: SparkleIcon,
-  debate: SparkleIcon,
-  game: SparkleIcon,
+  debate: FlameIcon,
+  poll: VoteIcon,
+  game: GamepadIcon,
   confession: LockIcon,
-  quick_chat: HashIcon,
+  quick_chat: ZapIcon,
+  activity: PaletteIcon,
 }
 
 function ChannelSidebar({
@@ -298,10 +305,28 @@ function ChannelSidebar({
   loading: boolean
   onOpenSettings: () => void
 }) {
-  // Voice rooms sit apart from text ones: joining one is a commitment (a
-  // microphone opens), and mixing the two lists invites a misclick.
-  const text = rooms?.filter((room) => room.room_type === 'text') ?? []
-  const live = rooms?.filter((room) => room.room_type !== 'text') ?? []
+  const textChannels =
+    rooms?.filter(
+      (room) =>
+        room.room_type === 'text' ||
+        room.room_type === 'quick_chat' ||
+        room.room_type === 'confession',
+    ) ?? []
+  const voiceChannels =
+    rooms?.filter(
+      (room) =>
+        room.room_type === 'voice' ||
+        room.room_type === 'stage' ||
+        room.room_type === 'video',
+    ) ?? []
+  const experienceChannels =
+    rooms?.filter(
+      (room) =>
+        room.room_type === 'poll' ||
+        room.room_type === 'debate' ||
+        room.room_type === 'game' ||
+        room.room_type === 'activity',
+    ) ?? []
 
   return (
     <div className={styles.sidebar}>
@@ -376,8 +401,9 @@ function ChannelSidebar({
 
         {communityId && !loading && (
           <>
-            <RoomGroup label="Text Channels" rooms={text} communityId={communityId} />
-            <RoomGroup label="Voice & Video" rooms={live} communityId={communityId} />
+            <RoomGroup label="Text Channels" rooms={textChannels} communityId={communityId} />
+            <RoomGroup label="Voice & Stage Channels" rooms={voiceChannels} communityId={communityId} />
+            <RoomGroup label="Experience Lounges" rooms={experienceChannels} communityId={communityId} />
             {rooms?.length === 0 && (
               <p className={styles.sidebarHint}>
                 No rooms yet. Create the first one from the community page.

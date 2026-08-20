@@ -7,10 +7,14 @@ import {
   UsersIcon,
   SparklesIcon,
   XIcon,
+  SendIcon,
 } from '@/components/Icons'
 import { Badge } from '@/components/Badge'
+import { useToast } from '@/components/Toast'
 import { cx } from '@/lib/cx'
-import type { RoomWithPermissions } from '@/lib/api'
+import { messages as messagesApi, type RoomWithPermissions } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import { chatSocket } from '@/lib/ws/ChatSocket'
 import styles from './PollExperience.module.css'
 
 interface PollOption {
@@ -56,6 +60,8 @@ const INITIAL_POLLS: Poll[] = [
 ]
 
 export function PollExperience({ room }: { room: RoomWithPermissions }) {
+  const { getToken } = useAuth()
+  const toast = useToast()
   const [polls, setPolls] = useState<Poll[]>(INITIAL_POLLS)
   const [activePollIndex, setActivePollIndex] = useState(0)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -65,6 +71,30 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
   const [newOptions, setNewOptions] = useState(['', ''])
 
   const activePoll = polls[activePollIndex] ?? polls[0]
+
+  async function postPollResultsToChat() {
+    if (!activePoll) return
+    const optionsSummary = activePoll.options
+      .map((opt) => {
+        const pct =
+          activePoll.totalVotes > 0
+            ? Math.round((opt.votes / activePoll.totalVotes) * 100)
+            : 0
+        return `• **${opt.text}** — ${pct}% (${opt.votes} votes)`
+      })
+      .join('\n')
+
+    const msg = `🗳️ **LIVE POLL RESULTS** 🗳️\n❓ **${activePoll.question}**\n${optionsSummary}\n\n📊 Total Votes: **${activePoll.totalVotes}** • *Vote live on the poll card above!*`
+
+    try {
+      const token = await getToken()
+      await messagesApi.post(token, room.id, msg, room.is_anonymous)
+      chatSocket.sendMessage(room.id, msg, room.is_anonymous)
+      toast.success('Poll results posted to chat!')
+    } catch {
+      toast.error('Could not post poll to chat')
+    }
+  }
 
   function handleVote(pollId: string, optionId: string) {
     setPolls((currentPolls) =>
@@ -260,9 +290,15 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
 
           <div className={styles.pollFooter}>
             <span className={styles.pollCreator}>Started by {activePoll.creatorName}</span>
-            {activePoll.userVotedOptionId && (
-              <span className={styles.votedNotice}>✓ Your vote has been recorded</span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              {activePoll.userVotedOptionId && (
+                <span className={styles.votedNotice}>✓ Your vote recorded</span>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => void postPollResultsToChat()}>
+                <SendIcon size={13} />
+                Share Poll to Room Chat
+              </Button>
+            </div>
           </div>
         </div>
       )}
