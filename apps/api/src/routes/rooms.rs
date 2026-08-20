@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::ApiResult;
 use crate::extract::ApiJson;
 use crate::middleware::CurrentUser;
+use crate::routes::ws::ChatServerEvent;
 use crate::state::AppState;
 
 /// `POST /api/v1/communities/{id}/rooms` or `POST /api/v1/rooms` body.
@@ -104,6 +105,21 @@ pub struct RoomResponse {
     pub anonymous_identity: Option<RoomAnonymousIdentity>,
 }
 
+/// A room in the caller's own list.
+///
+/// Direct conversations carry the person they are with. The room's stored name
+/// is fixed at whoever opened it ("DM: @bob"), which is the wrong label for
+/// exactly one of the two people in it — so the client renders the peer's
+/// profile instead, and needs the id to look it up.
+#[derive(Debug, Serialize)]
+pub struct UserRoomResponse {
+    #[serde(flatten)]
+    pub room: Room,
+    /// The other participant, for direct rooms only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dm_peer_id: Option<UserId>,
+}
+
 /// Discovery payload for playground home.
 #[derive(Debug, Serialize)]
 pub struct DiscoveryResponse {
@@ -186,9 +202,19 @@ pub async fn create_standalone_room(
 pub async fn list_mine(
     State(state): State<AppState>,
     caller: CurrentUser,
-) -> ApiResult<Json<Vec<Room>>> {
+) -> ApiResult<Json<Vec<UserRoomResponse>>> {
     let rooms = state.rooms.list_user_rooms(caller.user_id).await?;
-    Ok(Json(rooms))
+    let peers = state.rooms.direct_peers(caller.user_id, &rooms).await?;
+
+    Ok(Json(
+        rooms
+            .into_iter()
+            .map(|room| UserRoomResponse {
+                dm_peer_id: peers.get(&room.id).copied(),
+                room,
+            })
+            .collect(),
+    ))
 }
 
 /// `POST /api/v1/rooms/dm/{target_user_id}` (Get or create shared direct message room)
@@ -223,10 +249,24 @@ pub async fn get_or_create_dm(
         .map(|u| u.handle.as_str())
         .unwrap_or("");
 
-    let room = state
+    let (room, created) = state
         .rooms
         .get_or_create_dm(caller.user_id, target_user_id, display_name, handle)
         .await?;
+
+    // Both sides, not just the recipient: the opener's own sidebar is built
+    // from a list they fetched before this room existed, so without this the
+    // conversation they just started is missing from it until a reload.
+    //
+    // A send error means nobody is currently listening, which is not a failure.
+    if created {
+        for user_id in [caller.user_id, target_user_id] {
+            let _ = state.chat_tx.send(ChatServerEvent::DirectRoomOpened {
+                user_id,
+                room_id: room.id,
+            });
+        }
+    }
 
     Ok((StatusCode::OK, Json(room)))
 }

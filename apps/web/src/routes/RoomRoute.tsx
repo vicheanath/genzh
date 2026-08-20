@@ -97,7 +97,8 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const [voiceChatOpen, setVoiceChatOpen] = useState(false)
   const isMediaRoom = room.room_type === 'voice' || room.room_type === 'video' || room.room_type === 'stage'
   const isDM = room.category === 'dm'
-  const Icon = isDM ? MessageSquareIcon : (ROOM_ICONS[room.room_type] ?? HashIcon)
+  // Only the non-DM header uses this; a DM is headed by an avatar.
+  const Icon = ROOM_ICONS[room.room_type] ?? HashIcon
 
   // Resolve DM partner
   const participants = useAsync(
@@ -135,29 +136,36 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
             </Button>
           )}
 
-          {isDM && partner ? (
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}
+          {isDM ? (
+            // A DM is titled by the person, never by the room: the stored name
+            // is fixed to whoever opened it, so falling back to it would show
+            // the recipient their own handle while the profile loads.
+            <button
+              type="button"
+              className={styles.dmHeader}
               onClick={() => {
                 if (partnerId) {
                   setProfileUserId(partnerId)
                   setProfileOpen(true)
                 }
               }}
-              title="View profile"
+              disabled={!partnerId}
+              title={partner ? `View ${partner.display_name}'s profile` : undefined}
             >
               <Avatar
-                name={partner.display_name}
-                src={partner.avatar_url}
-                color={partner.accent_color}
+                name={partner?.display_name ?? '?'}
+                src={partner?.avatar_url}
+                color={partner?.accent_color}
                 size="md"
                 presence="online"
               />
               <div className={styles.headerText}>
-                <h1 className={styles.roomName}>{partner.display_name}</h1>
-                <p className={styles.topic}>@{partner.handle}</p>
+                <h1 className={styles.roomName}>
+                  {partner?.display_name ?? 'Direct message'}
+                </h1>
+                {partner && <p className={styles.topic}>@{partner.handle}</p>}
               </div>
-            </div>
+            </button>
           ) : (
             <>
               <Icon size={18} className={styles.headerIcon} />

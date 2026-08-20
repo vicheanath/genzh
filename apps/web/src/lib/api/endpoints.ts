@@ -23,6 +23,7 @@ import type {
   RoomWithPermissions,
   TokenPair,
   UpdateProfileInput,
+  UserRoom,
   Uuid,
 } from './types'
 
@@ -185,7 +186,7 @@ export const rooms = {
     request<RoomWithPermissions>(`/api/v1/rooms/${id}`, { token }),
 
   mine: (token: string) =>
-    request<Room[]>('/api/v1/rooms/mine', { token }),
+    request<UserRoom[]>('/api/v1/rooms/mine', { token }),
 
   createStandalone: (
     token: string,

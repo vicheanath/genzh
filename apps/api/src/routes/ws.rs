@@ -62,6 +62,15 @@ pub enum ChatServerEvent {
         message_id: MessageId,
         reactions: Vec<ReactionSummary>,
     },
+    /// A direct conversation was opened, and this user is in it.
+    ///
+    /// Addressed to a *user*, not a room: the recipient cannot be subscribed to
+    /// a room they do not yet know exists, which is the whole reason a new DM
+    /// never reached them.
+    DirectRoomOpened {
+        user_id: UserId,
+        room_id: RoomId,
+    },
     /// User typing indicator.
     Typing {
         room_id: RoomId,
@@ -79,6 +88,9 @@ pub enum ChatServerEvent {
 
 impl ChatServerEvent {
     /// Room this event belongs to, if it is room-scoped.
+    ///
+    /// Deliberately excludes [`Self::DirectRoomOpened`]: it carries a room id,
+    /// but delivering it by subscription would mean nobody ever received it.
     pub fn room_id(&self) -> Option<RoomId> {
         match self {
             Self::MessageCreated { room_id, .. }
@@ -86,6 +98,18 @@ impl ChatServerEvent {
             | Self::MessageDeleted { room_id, .. }
             | Self::ReactionsUpdated { room_id, .. }
             | Self::Typing { room_id, .. } => Some(*room_id),
+            _ => None,
+        }
+    }
+
+    /// The one user this event is addressed to, if it is user-scoped.
+    ///
+    /// Every connection reads the same broadcast channel, so an event that is
+    /// neither room-scoped nor user-scoped goes to everybody. This is what
+    /// keeps a user-scoped one from doing that.
+    pub fn target_user(&self) -> Option<UserId> {
+        match self {
+            Self::DirectRoomOpened { user_id, .. } => Some(*user_id),
             _ => None,
         }
     }
@@ -348,6 +372,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                 if let Some(room_id) = event.room_id() {
                     if !subscribed_rooms.contains(&room_id) {
                         continue;
+                    }
+                }
+
+                // A user-scoped event reaches exactly one person, which an
+                // unauthenticated connection can never be.
+                if let Some(target) = event.target_user() {
+                    match current_user {
+                        Some(ref user) if user.user_id == target => {}
+                        _ => continue,
                     }
                 }
 

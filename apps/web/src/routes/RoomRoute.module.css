@@ -162,3 +162,25 @@
   /* Two lines on a phone rather than one squeezed one. */
   .headerText { flex-direction: column; align-items: flex-start; gap: 0; }
 }
+
+/* The DM header: a button, because it opens the other person's profile. It
+   inherits the header's own typography rather than the browser's button
+   defaults, so it reads as a title that happens to be clickable. */
+.dmHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.dmHeader:hover:not(:disabled) { background: var(--color-hover); }
+.dmHeader:disabled { cursor: default; }

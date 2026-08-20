@@ -290,6 +290,46 @@ impl RoomRepository {
         .map_err(RepositoryError::from)
     }
 
+    /// The other participant in each of the given direct rooms.
+    ///
+    /// A DM is stored with one name, chosen by whoever opened it ("DM: @bob"),
+    /// but it has two readings — showing Bob a conversation labelled "@bob" is
+    /// showing him himself. Who a conversation is *with* is therefore relative
+    /// to the caller and has to be resolved rather than read off the room.
+    ///
+    /// One query for the whole list rather than one per room, because the
+    /// sidebar renders every direct conversation at once.
+    pub async fn direct_peers(
+        &self,
+        user_id: UserId,
+        room_ids: &[RoomId],
+    ) -> RepositoryResult<Vec<(RoomId, UserId)>> {
+        if room_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ids: Vec<uuid::Uuid> = room_ids.iter().map(|id| id.as_uuid()).collect();
+
+        // DISTINCT ON keeps this correct if a room ever holds more than two
+        // people: the earliest joiner other than the caller is the peer.
+        let rows: Vec<(uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
+            "SELECT DISTINCT ON (p.room_id) p.room_id, p.user_id
+             FROM room_participants p
+             WHERE p.room_id = ANY($1) AND p.user_id <> $2
+             ORDER BY p.room_id, p.joined_at",
+        )
+        .bind(&ids)
+        .bind(user_id.as_uuid())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(room, user)| (RoomId(room), UserId(user)))
+            .collect())
+    }
+
     /// Find an existing direct message room between two users.
     pub async fn find_direct_room(
         &self,

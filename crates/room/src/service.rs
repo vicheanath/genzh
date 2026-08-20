@@ -1,5 +1,7 @@
 //! The room application service.
 
+use std::collections::HashMap;
+
 use genzh_community::CommunityService;
 use genzh_community::authorization::apply_room_overrides;
 use genzh_domain::room::{
@@ -249,16 +251,44 @@ impl RoomService {
             .map_err(ServiceError::from)
     }
 
+    /// Pair each of the caller's direct rooms with the person it is with.
+    ///
+    /// Callers render a DM as that person — their avatar and display name — so
+    /// the peer has to travel with the room rather than being inferred from a
+    /// name that was fixed when the conversation was opened.
+    pub async fn direct_peers(
+        &self,
+        user_id: UserId,
+        rooms: &[Room],
+    ) -> ServiceResult<HashMap<RoomId, UserId>> {
+        let direct: Vec<RoomId> = rooms
+            .iter()
+            .filter(|room| room.category == "dm")
+            .map(|room| room.id)
+            .collect();
+
+        Ok(self
+            .rooms
+            .direct_peers(user_id, &direct)
+            .await?
+            .into_iter()
+            .collect())
+    }
+
     /// Find or create a 1-on-1 direct message room between two users.
+    ///
+    /// The boolean says whether this call created the room. Callers use it to
+    /// announce a genuinely new conversation to both participants without
+    /// re-announcing every time somebody reopens an old one.
     pub async fn get_or_create_dm(
         &self,
         user_a: UserId,
         user_b: UserId,
         target_name: &str,
         target_handle: &str,
-    ) -> ServiceResult<Room> {
+    ) -> ServiceResult<(Room, bool)> {
         if let Some(existing) = self.rooms.find_direct_room(user_a, user_b).await? {
-            return Ok(existing);
+            return Ok((existing, false));
         }
 
         let name = if target_handle.is_empty() {
@@ -285,6 +315,7 @@ impl RoomService {
             },
         )
         .await
+        .map(|room| (room, true))
     }
 
     /// Fetch a room the caller can see.

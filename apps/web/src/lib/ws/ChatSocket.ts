@@ -46,6 +46,11 @@ export type ChatServerEvent =
       reactions: ReactionSummary[]
     }
   | {
+      type: 'direct_room_opened'
+      user_id: Uuid
+      room_id: Uuid
+    }
+  | {
       type: 'typing'
       room_id: Uuid
       user_id: Uuid
@@ -81,7 +86,15 @@ export class ChatSocket {
   }
 
   public setToken(token: string) {
-    if (this.token === token && this.socket && this.socket.readyState === WebSocket.OPEN) {
+    // CONNECTING counts as live. The shell opens the socket for the session and
+    // a room screen then sets the same token again; treating a half-open socket
+    // as absent would drop the handshake and reconnect on every room you open.
+    const live =
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN ||
+        this.socket.readyState === WebSocket.CONNECTING)
+
+    if (this.token === token && live) {
       return
     }
     this.token = token

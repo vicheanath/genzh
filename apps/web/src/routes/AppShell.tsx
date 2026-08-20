@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
@@ -40,6 +40,7 @@ import {
   rooms as roomsApi,
   type Community,
   type Room,
+  type UserRoom,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
@@ -47,7 +48,9 @@ import { useVoice } from '@/lib/media'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
+import { useProfiles } from '@/lib/useProfiles'
 import { useTheme, type Theme } from '@/lib/useTheme'
+import { chatSocket } from '@/lib/ws/ChatSocket'
 
 import { AddCommunityDialog } from './AddCommunityDialog'
 import { ProfileDialog } from './ProfileDialog'
@@ -97,6 +100,36 @@ export function AppShell() {
     async () => roomsApi.mine(await getToken()),
     [getToken],
   )
+
+  // The shell owns the socket, not the chat transcript.
+  //
+  // It used to connect only when a room was open, which meant somebody sitting
+  // on Friends or Explore had no connection at all — and so never heard that a
+  // conversation had been opened with them. The sidebar is always mounted, so
+  // this is the one place that can hold it for the whole session.
+  const reloadMyRooms = myRooms.reload
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const token = await getToken()
+        if (!cancelled) chatSocket.setToken(token)
+      } catch {
+        // Not signed in yet, or the refresh failed; the socket stays down and
+        // the sidebar falls back to what it fetched.
+      }
+    })()
+
+    // Both participants get this, so the conversation appears for the person
+    // who opened it and the person who was messaged, without either reloading.
+    const off = chatSocket.on('direct_room_opened', () => reloadMyRooms())
+
+    return () => {
+      cancelled = true
+      off()
+    }
+  }, [getToken, reloadMyRooms])
 
   const navigation = (
     <>
@@ -301,7 +334,7 @@ function ChannelSidebar({
   communityId?: string
   community?: Community
   rooms: Room[] | null
-  directRooms?: Room[]
+  directRooms?: UserRoom[]
   loading: boolean
   onOpenSettings: () => void
 }) {
@@ -380,16 +413,7 @@ function ChannelSidebar({
             {directRooms.length > 0 && (
               <div className={styles.group}>
                 <h2 className={styles.groupHeading}>Direct Messages</h2>
-                {directRooms.map((dm) => (
-                  <NavLink
-                    key={dm.id}
-                    to={`/rooms/${dm.id}`}
-                    className={({ isActive }) => cx(styles.navItem, isActive && styles.navItemActive)}
-                  >
-                    <MessageSquareIcon size={16} className={styles.navIcon} />
-                    <span className={styles.navLabel}>{dm.name.replace(/^DM:\s*/, '')}</span>
-                  </NavLink>
-                ))}
+                <DirectMessageList rooms={directRooms} />
               </div>
             )}
           </>
@@ -420,6 +444,51 @@ function ChannelSidebar({
       <VoiceConnectionBar />
       <UserBar onOpenSettings={onOpenSettings} />
     </div>
+  )
+}
+
+/**
+ * The caller's direct conversations, each shown as the person it is with.
+ *
+ * A DM's stored name is fixed to whoever opened it ("DM: @bob"), so rendering
+ * it names the wrong person for the other half of every conversation — Bob's
+ * own sidebar would list a chat with Bob. The server resolves the peer per
+ * caller as `dm_peer_id`; this looks up that profile for the avatar and the
+ * display name, and falls back to the stored name only when a room predates
+ * the field or the profile has not loaded yet.
+ */
+function DirectMessageList({ rooms }: { rooms: UserRoom[] }) {
+  const peerIds = rooms.flatMap((room) => (room.dm_peer_id ? [room.dm_peer_id] : []))
+  const lookup = useProfiles(peerIds)
+
+  return (
+    <>
+      {rooms.map((dm) => {
+        const peer = dm.dm_peer_id ? lookup(dm.dm_peer_id) : null
+        const label = peer?.display_name ?? dm.name.replace(/^DM:\s*/, '')
+
+        return (
+          <NavLink
+            key={dm.id}
+            to={`/rooms/${dm.id}`}
+            className={({ isActive }) => cx(styles.navItem, isActive && styles.navItemActive)}
+          >
+            {peer ? (
+              <Avatar
+                name={peer.display_name}
+                src={peer.avatar_url}
+                color={peer.accent_color}
+                size="xs"
+                presence="online"
+              />
+            ) : (
+              <MessageSquareIcon size={16} className={styles.navIcon} />
+            )}
+            <span className={styles.navLabel}>{label}</span>
+          </NavLink>
+        )
+      })}
+    </>
   )
 }
 

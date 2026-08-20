@@ -143,6 +143,17 @@ export interface RoomWithPermissions extends Room {
   anonymous_identity?: RoomAnonymousIdentity | null
 }
 
+/**
+ * A room from the caller's own list.
+ *
+ * `dm_peer_id` is who a direct conversation is *with*, resolved per caller. The
+ * stored `name` cannot answer that: it is fixed to whoever opened the DM, so it
+ * names the wrong person for the other half of every conversation.
+ */
+export interface UserRoom extends Room {
+  dm_peer_id?: Uuid | null
+}
+
 export interface DiscoveryResponse {
   trending: Room[]
   live_now: Room[]
