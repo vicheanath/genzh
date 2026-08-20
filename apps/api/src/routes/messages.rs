@@ -46,6 +46,12 @@ pub struct HistoryQuery {
     /// Return messages older than this timestamp.
     #[serde(default)]
     pub before: Option<DateTime<Utc>>,
+    /// Tie-breaker for `before`, from the previous page's `next_before_id`.
+    ///
+    /// Optional so a client that only sends `before` keeps working; supplying
+    /// both is what guarantees no message falls through a page boundary.
+    #[serde(default)]
+    pub before_id: Option<MessageId>,
     /// Page size.
     #[serde(default)]
     pub limit: Option<i64>,
@@ -71,6 +77,9 @@ pub struct HistoryResponse {
     pub messages: Vec<MessageView>,
     /// Cursor to pass as `before` for the next page.
     pub next_before: Option<DateTime<Utc>>,
+    /// Pass alongside it as `before_id`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_before_id: Option<MessageId>,
 }
 
 /// `GET /api/v1/rooms/{id}/messages`
@@ -84,7 +93,13 @@ pub async fn list(
 
     let page = state
         .messaging
-        .history(room_id, caller.user_id, query.before, query.limit)
+        .history(
+            room_id,
+            caller.user_id,
+            query.before,
+            query.before_id,
+            query.limit,
+        )
         .await?;
 
     let ids: Vec<_> = page.messages.iter().map(|message| message.id).collect();
@@ -125,6 +140,7 @@ pub async fn list(
             })
             .collect(),
         next_before: page.next_before,
+        next_before_id: page.next_before_id,
     }))
 }
 

@@ -290,9 +290,17 @@ export const rooms = {
 // ── messages ──────────────────────────────────────────────────────────────
 
 export const messages = {
-  history: (token: string, roomId: Uuid, before?: string, limit = 50) => {
+  /**
+   * One page of a room's messages, newest first.
+   *
+   * The cursor is both halves of the previous page's `next_before` /
+   * `next_before_id`. Sending only the timestamp still works, but can skip
+   * messages that share one.
+   */
+  history: (token: string, roomId: Uuid, before?: string, beforeId?: string, limit = 50) => {
     const params = new URLSearchParams({ limit: String(limit) })
     if (before) params.set('before', before)
+    if (beforeId) params.set('before_id', beforeId)
     return request<MessagePage>(`/api/v1/rooms/${roomId}/messages?${params}`, { token })
   },
 

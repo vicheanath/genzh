@@ -211,7 +211,10 @@ export interface Message {
 
 export interface MessagePage {
   messages: Message[]
+  /** Cursor for the next (older) page. Null at the start of the room. */
   next_before: Timestamp | null
+  /** Tie-breaker for that cursor; send both or paging can skip messages. */
+  next_before_id?: Uuid
 }
 
 export type FriendshipStatus = 'pending' | 'accepted' | 'declined'

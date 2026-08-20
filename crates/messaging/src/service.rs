@@ -58,17 +58,22 @@ impl MessagingService {
     }
 
     /// Read history.
+    ///
+    /// `before` / `before_id` are the cursor from the previous page. Both
+    /// together, because paging on the timestamp alone can skip messages that
+    /// share one — see [`crate::MessagePage::next_before_id`].
     pub async fn history(
         &self,
         room_id: RoomId,
         user_id: UserId,
         before: Option<DateTime<Utc>>,
+        before_id: Option<MessageId>,
         limit: Option<i64>,
     ) -> ServiceResult<MessagePage> {
         self.rooms.visible_access(room_id, user_id).await?;
         Ok(self
             .messages
-            .list(room_id, before, message::clamp_page_size(limit))
+            .list(room_id, before, before_id, message::clamp_page_size(limit))
             .await?)
     }
 

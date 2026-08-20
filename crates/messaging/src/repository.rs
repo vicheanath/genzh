@@ -15,6 +15,15 @@ pub struct MessagePage {
     pub messages: Vec<Message>,
     /// Cursor for the next (older) page, when more exist.
     pub next_before: Option<DateTime<Utc>>,
+    /// Tie-breaker for that cursor.
+    ///
+    /// Paging on the timestamp alone loses messages: the order is
+    /// `(created_at DESC, id DESC)`, so a page can end in the middle of a group
+    /// that shares a timestamp, and `created_at < cursor` then skips the rest of
+    /// that group entirely. Two messages posted in the same microsecond is not
+    /// exotic — a burst, a seed script, an import — and the reader would simply
+    /// never see the ones that fell in the gap.
+    pub next_before_id: Option<MessageId>,
 }
 
 /// Messages and reactions.
@@ -68,14 +77,35 @@ impl MessageRepository {
         &self,
         room_id: RoomId,
         before: Option<DateTime<Utc>>,
+        before_id: Option<MessageId>,
         limit: i64,
     ) -> RepositoryResult<MessagePage> {
         // Fetch one extra row to learn whether another page exists, without a
         // second COUNT query.
         let fetch = limit + 1;
 
-        let mut messages: Vec<Message> = match before {
-            Some(before) => {
+        let mut messages: Vec<Message> = match (before, before_id) {
+            // The full keyset. Row-value comparison matches the ORDER BY
+            // exactly, so the page boundary falls between two rows rather than
+            // between two timestamps.
+            (Some(before), Some(before_id)) => {
+                sqlx::query_as(
+                    "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
+                     FROM messages
+                     WHERE room_id = $1 AND (created_at, id) < ($2, $3)
+                     ORDER BY created_at DESC, id DESC LIMIT $4",
+                )
+                .bind(room_id)
+                .bind(before)
+                .bind(before_id)
+                .bind(fetch)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            // A timestamp with no tie-breaker: an older client, or a cursor
+            // saved before this column existed. Still correct, just able to
+            // skip a same-microsecond group at the boundary.
+            (Some(before), None) => {
                 sqlx::query_as(
                     "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
                      FROM messages WHERE room_id = $1 AND created_at < $2
@@ -87,7 +117,7 @@ impl MessageRepository {
                 .fetch_all(&self.pool)
                 .await?
             }
-            None => {
+            (None, _) => {
                 sqlx::query_as(
                     "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
                      FROM messages WHERE room_id = $1
@@ -100,24 +130,30 @@ impl MessageRepository {
             }
         };
 
-        let next_before = if messages.len() as i64 > limit {
+        let (next_before, next_before_id) = if messages.len() as i64 > limit {
             messages.truncate(limit as usize);
-            messages.last().map(|message| message.created_at)
+            match messages.last() {
+                Some(last) => (Some(last.created_at), Some(last.id)),
+                None => (None, None),
+            }
         } else {
-            None
+            (None, None)
         };
 
         Ok(MessagePage {
             messages,
             next_before,
+            next_before_id,
         })
     }
 
     /// Edit a message's body.
     pub async fn update_content(&self, id: MessageId, content: &str) -> RepositoryResult<Message> {
         sqlx::query_as(
+            // `is_anonymous` is not optional here: `Message` has the field, and
+            // omitting it from RETURNING makes every edit fail to deserialise.
             "UPDATE messages SET content = $2, edited_at = now() WHERE id = $1
-             RETURNING id, room_id, author_id, content, edited_at, created_at",
+             RETURNING id, room_id, author_id, content, is_anonymous, edited_at, created_at",
         )
         .bind(id)
         .bind(content)

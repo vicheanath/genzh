@@ -1,13 +1,43 @@
 /* ── the transcript ─────────────────────────────────────────────────────── */
 
+/*
+ * The transcript.
+ *
+ * `scroll-behavior` is deliberately *not* smooth. It applies to programmatic
+ * scrolling too, so with it set every `scrollTop` assignment animated — opening
+ * a room visibly scrolled from the top down, and loading older messages lurched
+ * instead of holding position. Both of those are meant to be instantaneous
+ * placements, not journeys. The one place a journey is wanted — the "jump to
+ * latest" button — asks for it per call with `scrollTo({ behavior: 'smooth' })`,
+ * which works regardless of this.
+ *
+ * `overflow-anchor: none` because the anchoring here is done by hand: the
+ * browser's own would fight the adjustment made when older pages are prepended.
+ */
 .list {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-anchor: none;
   padding: var(--space-4) 0 var(--space-2);
-  scroll-behavior: smooth;
 }
+
+/*
+ * Pins a short transcript to the bottom.
+ *
+ * A room with three messages should show them just above the composer, the way
+ * a full room does, rather than stranded at the top of an empty column. `auto`
+ * on the first child rather than `justify-content: flex-end` on the container:
+ * the latter makes overflowing content unreachable above the scroll origin in
+ * several browsers, which would hide the oldest messages outright.
+ */
+.list > *:first-child { margin-top: auto; }
+
+/* Flex children shrink by default, which in a scroll container squashes long
+   messages instead of letting the container scroll. */
+.list > * { flex-shrink: 0; }
 
 .listError { padding: var(--space-4) var(--space-5); }
 

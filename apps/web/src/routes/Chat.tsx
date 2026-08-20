@@ -50,6 +50,7 @@ import { useProfiles } from '@/lib/useProfiles'
 
 import { ProfileDialog } from './ProfileDialog'
 import { useAppStore } from '@/lib/store'
+import { mergeMessages, useMessageHistory } from '@/features/chat/useMessageHistory'
 import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 import styles from './Chat.module.css'
 
@@ -84,14 +85,19 @@ export function Chat({
   const { getToken, user } = useAuth()
   const toast = useToast()
 
-  const [items, setItems] = useState<Message[]>([])
+  const {
+    items,
+    setItems,
+    loading,
+    loadingOlder,
+    hasMore,
+    error,
+    loadOlder,
+    prependedAt,
+  } = useMessageHistory(room.id)
+
   const [pending, setPending] = useState<PendingMessage[]>([])
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const [olderCursor, setOlderCursor] = useState<string | null>(null)
-  const [loadingOlder, setLoadingOlder] = useState(false)
 
   const [atBottom, setAtBottom] = useState(true)
   const [unseen, setUnseen] = useState(0)
@@ -101,6 +107,8 @@ export function Chat({
 
   const listRef = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
+  // Tracks which prepend the unseen counter has already accounted for.
+  const prependedAtRef = useRef(0)
 
   const canSend = can(room.your_permissions, 'send_message')
   const canReact = can(room.your_permissions, 'add_reaction')
@@ -113,34 +121,12 @@ export function Chat({
   useEffect(() => {
     let cancelled = false
 
-    async function initSocketAndFetch() {
-      try {
-        const token = await getToken()
-        if (cancelled) return
-        chatSocket.setToken(token)
-        chatSocket.subscribe(room.id)
-
-        const page = await messagesApi.history(token, room.id)
-        if (cancelled) return
-        // The API returns newest-first; the UI reads oldest-first.
-        const fresh = [...page.messages].reverse()
-        setItems((current) => merge(current, fresh))
-        setOlderCursor((current) => current ?? page.next_before)
-        setError(null)
-      } catch (cause) {
-        if (cancelled) return
-        setItems((current) => {
-          if (current.length === 0) {
-            setError(cause instanceof ApiError ? cause.message : 'Could not load messages')
-          }
-          return current
-        })
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    void initSocketAndFetch()
+    void (async () => {
+      const token = await getToken()
+      if (cancelled) return
+      chatSocket.setToken(token)
+      chatSocket.subscribe(room.id)
+    })()
 
     // Real-time WebSocket event listeners
     const unsubs = [
@@ -151,7 +137,7 @@ export function Chat({
             reactions: event.reactions ?? [],
             anonymous_author: event.anonymous_author,
           }
-          setItems((current) => merge(current, [fullMessage]))
+          setItems((current) => mergeMessages(current, [fullMessage]))
         }
       }),
       chatSocket.on<ChatServerEvent>('message_updated', (event) => {
@@ -211,38 +197,19 @@ export function Chat({
       chatSocket.unsubscribe(room.id)
       for (const unsub of unsubs) unsub()
     }
-  }, [getToken, room.id, user?.id])
-
-  /** Fetch the page before the oldest message currently held. */
-  const loadOlder = useCallback(async () => {
-    if (!olderCursor || loadingOlder) return
-    setLoadingOlder(true)
-
-    // Capture the current scroll geometry so prepending rows can push the
-    // list down by exactly as much as they added, keeping the message the
-    // user is looking at anchored in place.
-    const list = listRef.current
-    const previousHeight = list?.scrollHeight ?? 0
-
-    try {
-      const page = await messagesApi.history(await getToken(), room.id, olderCursor)
-      const older = [...page.messages].reverse()
-      setItems((current) => merge(older, current))
-      setOlderCursor(page.next_before)
-
-      // Restore position after React has committed the new rows.
-      requestAnimationFrame(() => {
-        if (!list) return
-        list.scrollTop += list.scrollHeight - previousHeight
-      })
-    } catch {
-      toast.error('Could not load older messages')
-    } finally {
-      setLoadingOlder(false)
-    }
-  }, [getToken, room.id, olderCursor, loadingOlder, toast])
+  }, [getToken, room.id, user?.id, setItems])
 
   // ── scroll tracking ──────────────────────────────────────────────────────
+
+  // Height of the list just before older rows were prepended. Captured on the
+  // way in so the layout effect below can restore the reader's position.
+  const heightBeforePrepend = useRef(0)
+
+  const requestOlder = useCallback(() => {
+    const list = listRef.current
+    heightBeforePrepend.current = list?.scrollHeight ?? 0
+    void loadOlder()
+  }, [loadOlder])
 
   const handleScroll = useCallback(() => {
     const list = listRef.current
@@ -257,10 +224,12 @@ export function Chat({
       setUnseen(0)
     }
 
-    if (list.scrollTop < 64 && olderCursor && !loadingOlder) {
-      void loadOlder()
+    // A margin rather than the exact top: fetching just before the reader
+    // arrives is what makes the history feel continuous instead of stalling.
+    if (list.scrollTop < 200 && hasMore) {
+      requestOlder()
     }
-  }, [loadOlder, olderCursor, loadingOlder])
+  }, [requestOlder, hasMore])
 
   const scrollToBottom = useCallback((smooth = true) => {
     const list = listRef.current
@@ -273,17 +242,66 @@ export function Chat({
     setUnseen(0)
   }, [])
 
+  // Hold the reader's place when older rows appear above them.
+  //
+  // A layout effect, not a `requestAnimationFrame`: this has to run between
+  // React committing the new rows and the browser painting. In a rAF the frame
+  // is already on screen, so the transcript visibly lurches before snapping
+  // back — which is what made scrolling up feel broken.
+  useLayoutEffect(() => {
+    if (prependedAt === 0) return
+    const list = listRef.current
+    if (!list) return
+    list.scrollTop += list.scrollHeight - heightBeforePrepend.current
+  }, [prependedAt])
+
+  /** Set once the opening placement has run, for this room. */
+  const placed = useRef(false)
+  const lastCount = useRef(0)
+
+  // Open at the bottom, without travelling there.
+  //
+  // The first page renders and is placed in the same commit, before the browser
+  // paints, so the newest message is simply where the room starts — there is no
+  // frame showing the top and no scroll for the reader to watch. Everything
+  // above is reached by scrolling up, which is what fetches it.
+  useLayoutEffect(() => {
+    if (placed.current || loading || items.length === 0) return
+    const list = listRef.current
+    if (!list) return
+
+    list.scrollTop = list.scrollHeight
+    placed.current = true
+    lastCount.current = items.length + pending.length
+  }, [loading, items.length, pending.length])
+
   // Stick to the bottom as messages arrive — but only for a reader who is
   // already there. Yanking someone out of history to show a new message is the
   // single most irritating thing a chat client can do.
   useLayoutEffect(() => {
+    // The opening placement above owns the first paint; counting it here as
+    // growth would double-handle it.
+    if (!placed.current) return
+
+    const count = items.length + pending.length
+    const grew = count > lastCount.current
+    lastCount.current = count
+    if (!grew) return
+
     if (atBottomRef.current) {
       const list = listRef.current
       if (list) list.scrollTop = list.scrollHeight
-    } else {
-      setUnseen((count) => count + 1)
+      return
     }
-  }, [items.length, pending.length])
+
+    // Older pages are not new activity. Counting them made scrolling back
+    // through history inflate the "new messages" badge with messages the
+    // reader had deliberately gone looking for.
+    if (prependedAtRef.current === prependedAt) {
+      setUnseen((current) => current + 1)
+    }
+    prependedAtRef.current = prependedAt
+  }, [items.length, pending.length, prependedAt])
 
   const typingTimerRef = useRef<number | null>(null)
   const notifyTyping = useCallback(() => {
@@ -314,7 +332,7 @@ export function Chat({
       try {
         const posted = await messagesApi.post(await getToken(), room.id, content, isAnonymousPersona)
         setPending((current) => current.filter((item) => item.localId !== localId))
-        setItems((current) => merge(current, [posted]))
+        setItems((current) => mergeMessages(current, [posted]))
       } catch (cause) {
         setPending((current) =>
           current.map((item) => (item.localId === localId ? { ...item, failed: true } : item)),
@@ -325,7 +343,7 @@ export function Chat({
         )
       }
     },
-    [getToken, room.id, isAnonymousPersona, toast],
+    [getToken, room.id, isAnonymousPersona, toast, setItems],
   )
 
   const retry = useCallback(
@@ -381,7 +399,7 @@ export function Chat({
         )
       }
     },
-    [getToken, toast],
+    [getToken, toast, setItems],
   )
 
   const editMessage = useCallback(
@@ -404,7 +422,7 @@ export function Chat({
         )
       }
     },
-    [getToken, toast],
+    [getToken, toast, setItems],
   )
 
   const deleteMessage = useCallback(
@@ -415,14 +433,14 @@ export function Chat({
         await messagesApi.remove(await getToken(), messageId)
         toast.success('Message deleted')
       } catch (cause) {
-        if (removed) setItems((current) => merge(current, [removed]))
+        if (removed) setItems((current) => mergeMessages(current, [removed]))
         toast.error(
           'Could not delete',
           cause instanceof ApiError ? cause.message : undefined,
         )
       }
     },
-    [getToken, items, toast],
+    [getToken, items, toast, setItems],
   )
 
   // ── render ───────────────────────────────────────────────────────────────
@@ -437,7 +455,7 @@ export function Chat({
           </div>
         )}
 
-        {!loading && !olderCursor && items.length > 0 && (
+        {!loading && !hasMore && items.length > 0 && (
           <RoomIntro name={room.name} topic={room.topic} />
         )}
 
@@ -1136,26 +1154,6 @@ function Mentioned({ text, handle }: { text: string; handle?: string }) {
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Combine two message lists, newest state winning, ordered by time.
- *
- * Polling re-fetches messages the client already has, and a naive replace would
- * throw away an optimistic reaction a few milliseconds before the server
- * confirms it. Keying by id makes the merge idempotent.
- */
-function merge(existing: Message[], incoming: Message[]): Message[] {
-  const byId = new Map(existing.map((message) => [message.id, message]))
-  for (const message of incoming) {
-    // An API older than inline reaction tallies omits the field entirely.
-    // Defaulting here means a stale server degrades to "no reactions" instead
-    // of throwing on `.length` and blanking the whole transcript.
-    byId.set(message.id, message.reactions ? message : { ...message, reactions: [] })
-  }
-
-  return [...byId.values()].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  )
-}
 
 /** Apply a reaction toggle to a tally locally, for the optimistic update. */
 function applyLocally(

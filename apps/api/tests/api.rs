@@ -423,6 +423,80 @@ async fn text_rooms_refuse_media_joins() {
 }
 
 #[tokio::test]
+async fn paging_back_through_history_never_skips_a_message() {
+    let Some(api) = boot().await else {
+        return skip("paging_back_through_history_never_skips_a_message");
+    };
+
+    let alice = api.register("pager1").await;
+    let community_id = api.create_community(&alice, "Paging").await;
+    let room_id = api.create_room(&alice, &community_id, "general", "text").await;
+
+    // Every message shares one timestamp. That is the case a timestamp-only
+    // cursor cannot express: the page boundary falls inside the group, and
+    // `created_at < cursor` then skips the rest of it.
+    let room_uuid: uuid::Uuid = room_id.parse().expect("room id");
+    let author_uuid: uuid::Uuid = alice.user_id.parse().expect("user id");
+    let stamp = chrono::Utc::now();
+
+    for index in 0..9 {
+        sqlx::query(
+            "INSERT INTO messages (id, room_id, author_id, content, is_anonymous, created_at)
+             VALUES ($1, $2, $3, $4, FALSE, $5)",
+        )
+        .bind(uuid::Uuid::new_v4())
+        .bind(room_uuid)
+        .bind(author_uuid)
+        .bind(format!("message {index}"))
+        .bind(stamp)
+        .execute(&api.pool)
+        .await
+        .expect("insert message");
+    }
+
+    // Walk backwards two at a time, following the cursor exactly as the client
+    // does, and collect everything the reader would ever be shown.
+    let mut seen: Vec<String> = Vec::new();
+    let mut cursor: Option<(String, String)> = None;
+
+    for _ in 0..10 {
+        let query = match &cursor {
+            Some((before, before_id)) => format!(
+                "/api/v1/rooms/{room_id}/messages?limit=2&before={before}&before_id={before_id}"
+            ),
+            None => format!("/api/v1/rooms/{room_id}/messages?limit=2"),
+        };
+
+        let page = api
+            .send("GET", &query, Some(&alice.access_token), None)
+            .await
+            .expect_status(StatusCode::OK);
+
+        for message in page.json["messages"].as_array().expect("messages array") {
+            seen.push(message["content"].as_str().expect("content").to_string());
+        }
+
+        match (
+            page.json["next_before"].as_str(),
+            page.json["next_before_id"].as_str(),
+        ) {
+            (Some(before), Some(before_id)) => {
+                cursor = Some((before.to_string(), before_id.to_string()))
+            }
+            _ => break,
+        }
+    }
+
+    seen.sort();
+    seen.dedup();
+    assert_eq!(
+        seen.len(),
+        9,
+        "every message should be reachable by paging; saw {seen:?}"
+    );
+}
+
+#[tokio::test]
 async fn messages_round_trip_through_a_voice_rooms_chat() {
     let Some(api) = boot().await else {
         return skip("messages_round_trip_through_a_voice_rooms_chat");
