@@ -40,7 +40,9 @@ async fn main() -> anyhow::Result<()> {
     let communities = CommunityService::new(pool.clone());
     let social = SocialService::new(pool.clone());
     let rooms = RoomService::new(pool.clone(), communities.clone(), social.clone());
-    let messaging = MessagingService::new(pool.clone(), rooms.clone());
+    // Seeding writes a room's worth of history in a tight loop, which is
+    // exactly what the flood guard exists to refuse.
+    let messaging = MessagingService::unguarded(pool.clone(), rooms.clone());
 
     println!("--- 1. Seeding Users ---");
     let test_users = [

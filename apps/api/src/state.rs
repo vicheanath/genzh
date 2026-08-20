@@ -10,8 +10,9 @@ use genzh_auth::{AuthService, JwtService};
 use genzh_community::CommunityService;
 use genzh_graph::SocialService;
 use genzh_infrastructure::{
-    DbPool, EventBus, InMemoryEventBus, InMemoryPresenceStore, InMemoryRateLimiter, PgConfig,
-    PresenceStore, RateLimiter, RepositoryResult, connect,
+    DbPool, EventBus, FloodGuard, FloodPolicy, InMemoryEventBus, InMemoryFloodGuard,
+    InMemoryPresenceStore, InMemoryRateLimiter, PgConfig, PresenceStore, RateLimiter,
+    RepositoryResult, connect,
 };
 use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
@@ -63,6 +64,9 @@ pub struct AppState {
     pub rate_limiter: Arc<dyn RateLimiter>,
     /// Tighter budget for credential endpoints.
     pub auth_rate_limiter: Arc<dyn RateLimiter>,
+    /// Per-account posting budget, held here so the WebSocket loop can consult
+    /// it for the commands that never become a message — typing, above all.
+    pub flood: Arc<dyn FloodGuard>,
     /// Real-time fan-out to connected WebSocket clients.
     pub events: Arc<dyn EventBus<ChatServerEvent>>,
     /// Who is currently connected, derived from live WebSockets.
@@ -96,7 +100,17 @@ impl AppState {
         // invisible; everything layered on rooms inherits that.
         let social = SocialService::new(pool.clone());
         let rooms = RoomService::new(pool.clone(), communities.clone(), social.clone());
-        let messaging = MessagingService::new(pool.clone(), rooms.clone());
+        // The one guard both message paths share. Handing the same `Arc` to the
+        // service and to the socket loop is deliberate: a flood that switches
+        // from REST to WebSocket halfway through is still one flood.
+        let flood = InMemoryFloodGuard::new(FloodPolicy {
+            burst: config.message_burst_limit,
+            window: std::time::Duration::from_secs(config.message_burst_window_seconds),
+            repeat_window: std::time::Duration::from_secs(config.message_repeat_window_seconds),
+            repeats: config.message_repeat_limit,
+        });
+
+        let messaging = MessagingService::new(pool.clone(), rooms.clone(), flood.clone());
         let notifications = NotificationService::new(pool.clone());
 
         let signer = Arc::new(MediaTokenSigner::new(
@@ -152,10 +166,24 @@ impl AppState {
             social,
             notifications,
             media,
+            flood,
             events: InMemoryEventBus::new(EVENT_BUFFER),
             presence: InMemoryPresenceStore::new(),
             config: Arc::new(config),
         })
+    }
+
+    /// Swap the flood guard, in the messaging service and the socket loop
+    /// alike.
+    ///
+    /// The other volatile ports are plain fields, so a test replaces one by
+    /// assigning to it. This one is held in two places — the service enforces
+    /// it, the socket loop consults it — and a test that set only the field
+    /// would be testing a guard nothing asks. Changing both together is the
+    /// whole reason this is a method rather than a `pub` field.
+    pub fn set_flood_guard(&mut self, guard: Arc<dyn FloodGuard>) {
+        self.messaging = MessagingService::new(self.pool.clone(), self.rooms.clone(), guard.clone());
+        self.flood = guard;
     }
 
     /// Publish a real-time event to whoever is listening.

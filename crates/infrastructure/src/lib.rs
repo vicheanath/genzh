@@ -30,6 +30,7 @@
 //! |------|-------|--------------------------------|
 //! | [`PresenceStore`] | [`InMemoryPresenceStore`] | Redis hash of per-instance counters |
 //! | [`RateLimiter`] | [`InMemoryRateLimiter`] | Redis counter, or a gateway |
+//! | [`FloodGuard`] | [`InMemoryFloodGuard`] | Redis counter keyed per account |
 //! | [`EventBus`] | [`InMemoryEventBus`] | Redis pub/sub, NATS, Postgres `LISTEN` |
 //!
 //! Each in-memory implementation is correct for a single instance and wrong for
@@ -46,6 +47,7 @@
 pub mod bus;
 pub mod db;
 pub mod error;
+pub mod flood;
 pub mod presence;
 pub mod rate_limit;
 pub mod store;
@@ -53,6 +55,7 @@ pub mod store;
 pub use bus::{EventBus, EventStream, InMemoryEventBus};
 pub use db::{DbPool, PgConfig, connect, run_migrations};
 pub use error::{RepositoryError, RepositoryResult, ServiceError, ServiceResult};
+pub use flood::{FloodGuard, FloodPolicy, FloodVerdict, InMemoryFloodGuard, PermissiveFloodGuard};
 pub use presence::{
     InMemoryPresenceStore, PresenceChange, PresenceStore, UnavailablePresenceStore,
 };

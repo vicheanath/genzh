@@ -13,7 +13,7 @@ use axum::http::StatusCode;
 use genzh_domain::Permission;
 use genzh_media_core::permissions::MediaPermissions;
 use genzh_media_core::track::TrackKind;
-use harness::{boot, media_verifier, skip};
+use harness::{boot, boot_with, media_verifier, skip};
 
 /// The migration seeding `permissions` and `Permission::ALL` must agree.
 ///
@@ -694,4 +694,141 @@ async fn every_response_carries_a_request_id() {
     // `send` discards headers, so assert the observable behaviour instead: the
     // request completed through the middleware stack that sets it.
     assert_eq!(response.json["service"], "api");
+}
+
+// ── spam ───────────────────────────────────────────────────────────────────
+
+/// Post `content` and return the response.
+async fn post_message(
+    api: &harness::TestApi,
+    account: &harness::Account,
+    room_id: &str,
+    content: &str,
+) -> harness::TestResponse {
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{room_id}/messages"),
+        Some(&account.access_token),
+        Some(serde_json::json!({ "content": content })),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn a_burst_of_messages_is_refused_and_says_when_to_come_back() {
+    let guard = genzh_infrastructure::InMemoryFloodGuard::new(genzh_infrastructure::FloodPolicy {
+        burst: 2,
+        window: std::time::Duration::from_secs(60),
+        repeat_window: std::time::Duration::from_secs(60),
+        repeats: 100,
+    });
+    let Some(api) = boot_with(|state| state.set_flood_guard(guard)).await else {
+        return skip("a_burst_of_messages_is_refused_and_says_when_to_come_back");
+    };
+
+    let alice = api.register("flood1").await;
+    let community_id = api.create_community(&alice, "Fast Talkers").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    for index in 0..2 {
+        post_message(&api, &alice, &room_id, &format!("message {index}"))
+            .await
+            .expect_status(StatusCode::CREATED);
+    }
+
+    let refused = post_message(&api, &alice, &room_id, "message 3")
+        .await
+        .expect_status(StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(refused.error_code(), "RATE_LIMITED");
+    assert!(
+        refused
+            .header("retry-after")
+            .and_then(|value| value.parse::<u64>().ok())
+            .is_some_and(|seconds| seconds > 0),
+        "a refusal has to say how long to wait"
+    );
+}
+
+#[tokio::test]
+async fn the_same_message_over_and_over_is_refused() {
+    let guard = genzh_infrastructure::InMemoryFloodGuard::new(genzh_infrastructure::FloodPolicy {
+        burst: 1_000,
+        window: std::time::Duration::from_secs(60),
+        repeat_window: std::time::Duration::from_secs(60),
+        repeats: 3,
+    });
+    let Some(api) = boot_with(|state| state.set_flood_guard(guard)).await else {
+        return skip("the_same_message_over_and_over_is_refused");
+    };
+
+    let alice = api.register("flood2").await;
+    let community_id = api.create_community(&alice, "Repeaters").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    // Saying the same thing twice is conversation, not spam.
+    for _ in 0..3 {
+        post_message(&api, &alice, &room_id, "buy now")
+            .await
+            .expect_status(StatusCode::CREATED);
+    }
+
+    // Including through the cosmetic changes that would defeat a plain
+    // string comparison.
+    post_message(&api, &alice, &room_id, "  BUY   now ")
+        .await
+        .expect_status(StatusCode::TOO_MANY_REQUESTS);
+
+    // Something else to say is always allowed, and clears the run.
+    post_message(&api, &alice, &room_id, "actually, never mind")
+        .await
+        .expect_status(StatusCode::CREATED);
+    post_message(&api, &alice, &room_id, "buy now")
+        .await
+        .expect_status(StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn a_message_cannot_name_the_whole_community() {
+    let Some(api) = boot().await else {
+        return skip("a_message_cannot_name_the_whole_community");
+    };
+
+    let alice = api.register("flood3").await;
+    let community_id = api.create_community(&alice, "Mention Bombers").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    let cap = genzh_domain::spam::MAX_MENTIONS_PER_MESSAGE;
+    let within = (0..cap)
+        .map(|index| format!("@user{index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    post_message(&api, &alice, &room_id, &within)
+        .await
+        .expect_status(StatusCode::CREATED);
+
+    let over = format!("{within} @user{cap}");
+    let refused = post_message(&api, &alice, &room_id, &over)
+        .await
+        .expect_status(StatusCode::BAD_REQUEST);
+    assert_eq!(refused.error_code(), "VALIDATION_FAILED");
+
+    // The cap also has to survive an edit, or it is only a speed bump.
+    let posted = post_message(&api, &alice, &room_id, "harmless")
+        .await
+        .expect_status(StatusCode::CREATED);
+    let message_id = posted.json["id"].as_str().expect("message id");
+    api.send(
+        "PATCH",
+        &format!("/api/v1/messages/{message_id}"),
+        Some(&alice.access_token),
+        Some(serde_json::json!({ "content": over })),
+    )
+    .await
+    .expect_status(StatusCode::BAD_REQUEST);
 }

@@ -5,7 +5,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type KeyboardEvent,
 } from 'react'
 
 import { Avatar } from '@/components/Avatar'
@@ -14,13 +13,10 @@ import { Callout } from '@/components/Callout'
 import {
   ArrowDownIcon,
   CopyIcon,
-  LockIcon,
   MoreIcon,
   PencilIcon,
-  SendIcon,
   SmileIcon,
   TrashIcon,
-  UsersIcon,
 } from '@/components/Icons'
 import { Menu, MenuItem, MenuSeparator } from '@/components/Menu'
 import { Skeleton } from '@/components/Skeleton'
@@ -50,20 +46,21 @@ import { useProfiles } from '@/lib/useProfiles'
 
 import { ProfileDialog } from './ProfileDialog'
 import { useAppStore } from '@/lib/store'
+import { Composer } from '@/features/chat/Composer'
+import { MENTION } from '@/features/chat/mentions'
+import { EMOJI, QUICK_REACTIONS } from '@/features/chat/emoji'
 import { mergeMessages, useMessageHistory } from '@/features/chat/useMessageHistory'
 import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 import styles from './Chat.module.css'
 
-/** Offered in the hover bar without opening the picker. */
-const QUICK_REACTIONS = ['👍', '❤️', '😂']
-
-/** The picker's full set. Small on purpose: a searchable thousand-emoji grid is
- *  a different feature, and these cover what a room actually reaches for. */
-const EMOJI = [
-  '👍', '👎', '❤️', '🔥', '😂', '🥲', '😮', '😢',
-  '🎉', '👀', '🙏', '💯', '✅', '❌', '🤔', '🤝',
-  '😎', '🫡', '🧠', '⚡', '🌙', '☕', '🍕', '🎧',
-]
+/**
+ * Shortest gap between two "typing" frames for one room.
+ *
+ * Matches `TYPING_INTERVAL` in `apps/api/src/routes/ws.rs`, which drops
+ * anything faster: sending frames the server is going to throw away is just
+ * traffic.
+ */
+const TYPING_INTERVAL_MS = 1000
 
 /** A message the user has sent that the server has not confirmed yet. */
 interface PendingMessage {
@@ -190,6 +187,13 @@ export function Chat({
           })
         }
       }),
+      // A command the server refused — a message posted straight down the
+      // socket by one of the room experiences, usually, since those never
+      // touch the REST endpoint and so have no other way to fail visibly.
+      // Without this the message simply never appears and nobody is told why.
+      chatSocket.on<ChatServerEvent>('error', (event) => {
+        if (event.type === 'error') toast.error('Not sent', event.message)
+      }),
     ]
 
     return () => {
@@ -197,7 +201,7 @@ export function Chat({
       chatSocket.unsubscribe(room.id)
       for (const unsub of unsubs) unsub()
     }
-  }, [getToken, room.id, user?.id, setItems])
+  }, [getToken, room.id, user?.id, setItems, toast])
 
   // ── scroll tracking ──────────────────────────────────────────────────────
 
@@ -304,12 +308,32 @@ export function Chat({
   }, [items.length, pending.length, prependedAt])
 
   const typingTimerRef = useRef<number | null>(null)
+  const typingSentAtRef = useRef(0)
+
+  /**
+   * Tell the room somebody is typing — at most once a second.
+   *
+   * This fires on every keystroke, and every call used to be a frame on the
+   * wire that the server fanned out to everyone in the room: a sentence typed
+   * at speed was forty broadcasts saying the same thing. The indicator only
+   * has two states and lives for 2.5s, so one frame a second says all of it.
+   * The server enforces the same interval — this is politeness, not the
+   * defence.
+   */
   const notifyTyping = useCallback(() => {
-    chatSocket.sendTyping(room.id, true)
+    const now = Date.now()
+    if (now - typingSentAtRef.current >= TYPING_INTERVAL_MS) {
+      typingSentAtRef.current = now
+      chatSocket.sendTyping(room.id, true)
+    }
+
+    // The stop is always rescheduled, so it lands 2.5s after the *last*
+    // keystroke rather than 2.5s after the last frame that was sent.
     if (typingTimerRef.current) {
       clearTimeout(typingTimerRef.current)
     }
     typingTimerRef.current = window.setTimeout(() => {
+      typingSentAtRef.current = 0
       chatSocket.sendTyping(room.id, false)
       typingTimerRef.current = null
     }, 2500)
@@ -337,9 +361,17 @@ export function Chat({
         setPending((current) =>
           current.map((item) => (item.localId === localId ? { ...item, failed: true } : item)),
         )
+        // A throttled send is not a failure the user should read as breakage —
+        // it is the room asking them to slow down, and the one thing that
+        // makes it actionable is how long for.
+        const throttled = cause instanceof ApiError && cause.isThrottled
         toast.error(
-          'Message not sent',
-          cause instanceof ApiError ? cause.message : undefined,
+          throttled ? 'Slow down' : 'Message not sent',
+          cause instanceof ApiError
+            ? throttled && cause.retryAfterSeconds
+              ? `${cause.message} — try again in ${cause.retryAfterSeconds}s`
+              : cause.message
+            : undefined,
         )
       }
     },
@@ -541,7 +573,7 @@ export function Chat({
 
       {canSend ? (
         <Composer
-          roomName={room.name}
+          room={room}
           onSend={send}
           onTyping={notifyTyping}
           isAnonymous={isAnonymousPersona}
@@ -561,117 +593,6 @@ export function Chat({
         />
       )}
     </>
-  )
-}
-
-// ── the composer ───────────────────────────────────────────────────────────
-
-function Composer({
-  roomName,
-  onSend,
-  onTyping,
-  isAnonymous,
-  onTogglePersona,
-  anonAlias,
-  publicName,
-}: {
-  roomName: string
-  onSend: (content: string) => Promise<void>
-  onTyping?: () => void
-  isAnonymous?: boolean
-  onTogglePersona?: (isAnon: boolean) => void
-  anonAlias?: string
-  publicName: string
-}) {
-  const [draft, setDraft] = useState('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  // Grow with the content up to a ceiling. Resetting to `auto` first is what
-  // makes it shrink again when a line is deleted.
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-    textarea.style.height = 'auto'
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`
-  }, [draft])
-
-  function submit() {
-    const content = draft.trim()
-    if (!content) return
-    setDraft('')
-    void onSend(content)
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter sends, Shift+Enter breaks the line — the convention everywhere, and
-    // the reason the control is a textarea rather than an input.
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault()
-      submit()
-    }
-  }
-
-  return (
-    <form
-      className={styles.composer}
-      onSubmit={(event) => {
-        event.preventDefault()
-        submit()
-      }}
-    >
-      <div className={styles.personaBanner}>
-        <span className={styles.personaLabel}>Appear as:</span>
-        <button
-          type="button"
-          className={cx(styles.personaChip, isAnonymous && styles.personaChipActive)}
-          onClick={() => onTogglePersona?.(true)}
-          title="Post anonymously with masked identity"
-        >
-          <LockIcon size={12} />
-          <span>{anonAlias ?? 'Anonymous'}</span>
-        </button>
-        <button
-          type="button"
-          className={cx(styles.personaChip, !isAnonymous && styles.personaChipActive)}
-          onClick={() => onTogglePersona?.(false)}
-          title="Post with your public account profile"
-        >
-          <UsersIcon size={12} />
-          <span>{publicName}</span>
-        </button>
-      </div>
-
-      <div className={styles.composerField}>
-        <textarea
-          ref={textareaRef}
-          className={styles.composerInput}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value)
-            onTyping?.()
-          }}
-          onKeyDown={onKeyDown}
-          placeholder={`Message #${roomName}`}
-          aria-label={`Message ${roomName}`}
-          rows={1}
-          maxLength={4000}
-        />
-        <Button
-          type="submit"
-          size="sm"
-          iconOnly
-          round
-          disabled={!draft.trim()}
-          aria-label="Send message"
-          className={styles.sendButton}
-        >
-          <SendIcon size={16} />
-        </Button>
-      </div>
-      <p className={styles.composerHint}>
-        <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
-      </p>
-    </form>
   )
 }
 
@@ -1077,17 +998,6 @@ function MessageSkeletons() {
  * expect to work, and everything past that is a sanitising problem. Text is
  * rendered as text, so nothing here can inject markup.
  */
-/**
- * A mention, matching the server's parser in `genzh_domain::mention`.
- *
- * The two have to agree: the server decides who gets notified, and a client
- * that highlighted a different set of words would show mentions nobody was
- * told about — or fail to show one that did notify someone. `(^|[^\w.])`
- * enforces the same "must begin a word" rule that keeps `a@b.com` from being a
- * mention, and the trailing `[^.]` stops a sentence-final dot being captured.
- */
-const MENTION = /(^|[^\w.])@([a-z0-9_.]*[a-z0-9_])/gi
-
 /** Message body with links and @mentions marked up. */
 function Linkified({ text }: { text: string }) {
   const { user } = useAuth()

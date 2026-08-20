@@ -468,8 +468,9 @@ Honest list. None of these are hidden in the code.
 5. **Media server selection is a hash of the room id.** Stable and correct, but
    changing `MEDIA_SERVER_URL` reshuffles rooms, and it does not consider load.
    `MediaServerSelector` is the seam.
-6. **Rate limiting is per-process.** Two API replicas mean two budgets. The
-   `RateLimiter` trait exists precisely so this can become shared.
+6. **Rate limiting is per-process.** Two API replicas mean two budgets, and
+   the same is true of the per-account anti-spam guard. The `RateLimiter` and
+   `FloodGuard` traits exist precisely so both can become shared.
 7. **`X-Forwarded-For` is not trusted.** Rate limiting keys on the peer address,
    which behind a proxy is the proxy. Correct rather than convenient; the proxy
    should enforce it or be configured as trusted.
@@ -492,7 +493,7 @@ meaningful fraction of mobile networks cannot connect at all.
 
 **100 → 1,000.** Several API replicas behind a load balancer (they are already
 stateless). Several media servers — room-to-server mapping already exists.
-Move rate limiting behind a shared store. Add a read replica if message history
+Move rate limiting and the anti-spam guard behind a shared store. Add a read replica if message history
 becomes the hot path.
 
 **1,000 → 10,000.**

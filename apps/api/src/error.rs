@@ -12,7 +12,8 @@
 //! logs with the request id attached.
 
 use axum::Json;
-use axum::http::StatusCode;
+use axum::http::header::RETRY_AFTER;
+use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use genzh_auth::AuthError;
 use genzh_domain::DomainError;
@@ -164,6 +165,13 @@ fn domain_parts(error: &DomainError) -> (StatusCode, String, String) {
             room_access_code(permission),
             format!("You do not have permission to {}", describe(permission)),
         ),
+        // Same status and code as the per-address budget: a client that already
+        // knows how to back off does not need to learn a second way.
+        DomainError::Throttled { reason, .. } => (
+            StatusCode::TOO_MANY_REQUESTS,
+            error.code().to_owned(),
+            (*reason).to_owned(),
+        ),
     }
 }
 
@@ -233,16 +241,40 @@ fn auth_parts(error: &AuthError) -> (StatusCode, String, String) {
     }
 }
 
+impl ApiError {
+    /// How long the client should wait, when this failure says so.
+    fn retry_after_seconds(&self) -> Option<u64> {
+        match self {
+            ApiError::Domain(error) | ApiError::Service(ServiceError::Domain(error)) => {
+                error.retry_after_seconds()
+            }
+            _ => None,
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        let retry_after = self.retry_after_seconds();
         let (status, code, message) = self.parts();
-        (
+        let mut response = (
             status,
             Json(ErrorBody {
                 error: ErrorDetail { code, message },
             }),
         )
-            .into_response()
+            .into_response();
+
+        // The refusal is only half the answer; a client that is told to slow
+        // down still has to be told for how long, or it guesses — and guesses
+        // short.
+        if let Some(seconds) = retry_after
+            && let Ok(value) = HeaderValue::from_str(&seconds.to_string())
+        {
+            response.headers_mut().insert(RETRY_AFTER, value);
+        }
+
+        response
     }
 }
 

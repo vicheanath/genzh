@@ -24,6 +24,7 @@ pub mod notification;
 pub mod permission;
 pub mod room;
 pub mod social;
+pub mod spam;
 pub mod user;
 
 pub use error::{DomainError, DomainResult};

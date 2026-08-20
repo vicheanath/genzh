@@ -38,11 +38,27 @@ generic message and the real cause goes to the logs under the request id.
 | `PERMISSION_DENIED_<PERMISSION>`                        | 403    | Any other capability refused.                                            |
 | `NOT_FOUND`                                             | 404    | No such entity, or not visible to you.                                   |
 | `CONFLICT` / `ALREADY_REGISTERED`                       | 409    | Uniqueness violated.                                                     |
-| `RATE_LIMITED`                                          | 429    | Slow down.                                                               |
+| `RATE_LIMITED`                                          | 429    | Slow down — carries `Retry-After`. Either the per-address budget or the per-account anti-spam guard. |
 | `INTERNAL_ERROR`                                        | 500    | Our fault.                                                               |
 
 Every response carries `x-request-id`, echoed from the request when present.
 Quote it in a bug report and the whole request is one log query away.
+
+### Being told to slow down
+
+Two different rules answer with `RATE_LIMITED`, and both set `Retry-After` in
+seconds:
+
+* the **per-address budget**, which every endpoint draws from
+  (`RATE_LIMIT_PER_MINUTE`, and a tighter one on `/auth/*`);
+* the **per-account anti-spam guard** on posting and reacting — a burst limit
+  and a repeat limit, per room. Its message says which one fired, and it applies
+  to messages sent over the WebSocket too, where the address budget does not
+  reach.
+
+A message can also be refused outright with `VALIDATION_FAILED` for naming too
+many people or carrying too many links; those caps are content rules, not
+timing, so waiting does not help.
 
 ---
 

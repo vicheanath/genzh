@@ -45,9 +45,46 @@ pub enum DomainError {
     /// A permission key arrived that is not in the catalogue.
     #[error("unknown permission: {0}")]
     UnknownPermission(String),
+
+    /// The caller is acting faster than the rules allow, or repeating
+    /// themselves.
+    ///
+    /// Deliberately not a [`Self::PermissionDenied`]: nothing about who they
+    /// are is wrong, and waiting fixes it. Carrying the wait here rather than
+    /// only in the HTTP layer is what lets the WebSocket path say the same
+    /// thing — a flood is refused identically whichever way it arrives.
+    #[error("{reason}")]
+    Throttled {
+        /// What was too fast, phrased for a person.
+        reason: &'static str,
+        /// How long until it is worth trying again.
+        retry_after_seconds: u64,
+    },
 }
 
 impl DomainError {
+    /// Build a [`DomainError::Throttled`] from a wait.
+    ///
+    /// Rounded up so a sub-second wait advertises one second rather than zero,
+    /// which a client would read as "retry immediately".
+    pub fn throttled(reason: &'static str, retry_after: std::time::Duration) -> Self {
+        DomainError::Throttled {
+            reason,
+            retry_after_seconds: retry_after.as_secs_f64().ceil().max(1.0) as u64,
+        }
+    }
+
+    /// How long to wait, for a failure that is worth retrying.
+    pub fn retry_after_seconds(&self) -> Option<u64> {
+        match self {
+            DomainError::Throttled {
+                retry_after_seconds,
+                ..
+            } => Some(*retry_after_seconds),
+            _ => None,
+        }
+    }
+
     /// Build an [`DomainError::Invalid`] without ceremony at call sites.
     pub fn invalid(field: &'static str, reason: impl Into<String>) -> Self {
         DomainError::Invalid {
@@ -66,6 +103,10 @@ impl DomainError {
             DomainError::NotAMember => "NOT_A_MEMBER",
             DomainError::UnsupportedRoomType(_) => "UNSUPPORTED_ROOM_TYPE",
             DomainError::UnknownPermission(_) => "UNKNOWN_PERMISSION",
+            // The same code the per-address budget returns: to a client both
+            // mean "you are going too fast", and branching on which limiter
+            // fired is not something a client can act on differently.
+            DomainError::Throttled { .. } => "RATE_LIMITED",
         }
     }
 }

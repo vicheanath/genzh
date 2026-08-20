@@ -2,9 +2,22 @@
 //!
 //! Provides sub-millisecond instant message delivery, live reactions, typing
 //! indicators, and presence updates for connected clients.
+//!
+//! ## Abuse, over a socket
+//!
+//! Nothing that arrives here passed the per-address rate-limit middleware: the
+//! HTTP layer saw one upgrade request and has not looked since. Two defences
+//! stand in for it, and they are in different places for a reason.
+//!
+//! Anything that becomes a row — a message, a reaction — is refused inside
+//! `genzh_messaging`, so the rule is the same whichever transport carried it.
+//! What is left is [`ChatClientCommand::Typing`], which writes nothing and is
+//! therefore invisible to that guard while still fanning out to every
+//! subscriber in the room. It is throttled here, per connection, because "how
+//! often may this socket say someone is typing" is a fact about this socket.
 
-use std::collections::HashSet;
-use std::time::Duration;
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
@@ -13,11 +26,21 @@ use futures::{SinkExt, StreamExt};
 use genzh_domain::message::{Message, ReactionSummary};
 use genzh_domain::room::RoomAnonymousIdentity;
 use genzh_domain::{MessageId, RoomId, UserId};
+use genzh_infrastructure::ServiceError;
 use serde::{Deserialize, Serialize};
 use tokio::time::interval;
 
 use crate::middleware::CurrentUser;
 use crate::state::AppState;
+
+/// Shortest gap between two "X is typing" broadcasts from one connection for
+/// one room.
+///
+/// The client sends a keystroke's worth of intent; the room needs an indicator
+/// that is either on or off. A second is well inside the 2.5s the indicator
+/// lives for, so nothing flickers, and it turns a per-keystroke fan-out into at
+/// most one broadcast per second per room.
+const TYPING_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Events broadcasted by the server to clients over WebSocket.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,6 +238,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
     // undo exactly what the connect did even if the token is swapped later.
     let mut counted_as: Option<UserId> = None;
 
+    // When this connection last told a room somebody was typing. Per socket
+    // rather than in the shared flood guard: this is throttling, not a budget,
+    // and the state dies with the connection that owns it.
+    let mut typing_sent: HashMap<RoomId, Instant> = HashMap::new();
+
     if let Some(ref user) = current_user {
         let auth_event = ChatServerEvent::Authenticated {
             user_id: user.user_id,
@@ -324,6 +352,22 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                 let Some(ref user) = current_user else { continue; };
                                 if !subscribed_rooms.contains(&room_id) { continue; }
 
+                                // "Still typing" is throttled; "stopped" always
+                                // goes through, and only when this connection
+                                // said "typing" first. Dropping a stop would
+                                // strand the indicator on every screen in the
+                                // room until the sender happened to type again.
+                                let now = Instant::now();
+                                if is_typing {
+                                    let due = typing_sent
+                                        .get(&room_id)
+                                        .is_none_or(|last| now.duration_since(*last) >= TYPING_INTERVAL);
+                                    if !due { continue; }
+                                    typing_sent.insert(room_id, now);
+                                } else if typing_sent.remove(&room_id).is_none() {
+                                    continue;
+                                }
+
                                 // Resolve display name or anonymous alias
                                 let mut name = "Someone".to_string();
                                 if let Ok(Some(participant)) = state.rooms.repository().find_participant(room_id, user.user_id).await {
@@ -360,7 +404,22 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                         .unwrap_or(false),
                                 };
 
-                                if let Ok(message) = state.messaging.post(room_id, user.user_id, &content, is_anon).await {
+                                let posted = state.messaging.post(room_id, user.user_id, &content, is_anon).await;
+
+                                // Dropping a refusal here would leave the
+                                // sender watching for a message that is never
+                                // coming — and a throttled client with no
+                                // feedback retries, which is the opposite of
+                                // what the guard is asking of it.
+                                if let Err(ref error) = posted {
+                                    let _ = sender.send(WsMessage::Text(
+                                        serde_json::to_string(&ChatServerEvent::Error {
+                                            message: refusal(error),
+                                        }).unwrap_or_default().into()
+                                    )).await;
+                                }
+
+                                if let Ok(message) = posted {
                                     let anonymous_author = if is_anon {
                                         state.rooms.repository().get_or_create_anonymous_identity(room_id, user.user_id).await.ok()
                                     } else {
@@ -388,7 +447,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                             }
                             ChatClientCommand::React { room_id, message_id, reaction } => {
                                 let Some(ref user) = current_user else { continue; };
-                                if let Ok(_) = state.messaging.react(message_id, user.user_id, &reaction).await {
+                                let reacted = state.messaging.react(message_id, user.user_id, &reaction).await;
+
+                                if let Err(ref error) = reacted {
+                                    let _ = sender.send(WsMessage::Text(
+                                        serde_json::to_string(&ChatServerEvent::Error {
+                                            message: refusal(error),
+                                        }).unwrap_or_default().into()
+                                    )).await;
+                                }
+
+                                if reacted.is_ok() {
                                     if let Ok(reactions) = state.messaging.reactions_for(room_id, user.user_id, &[message_id]).await {
                                         let summary = reactions.get(&message_id).cloned().unwrap_or_default();
                                         state.broadcast(ChatServerEvent::ReactionsUpdated {
@@ -454,6 +523,23 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
     // disconnect is observed — every exit path funnels through it.
     if let Some(user_id) = counted_as {
         announce_presence(&state, user_id, Connection::Closed).await;
+    }
+}
+
+/// What to tell a client whose command was refused.
+///
+/// A rule violation is the sender's business and is repeated verbatim — being
+/// told "you are sending messages too quickly" is the entire point of refusing.
+/// A storage failure is not: it says nothing the sender can act on and would
+/// describe how the inside is built, so it becomes one flat sentence and the
+/// detail goes to the log.
+fn refusal(error: &ServiceError) -> String {
+    match error {
+        ServiceError::Domain(domain) => domain.to_string(),
+        ServiceError::Repository(inner) => {
+            tracing::error!(error = %inner, "repository failure on a socket command");
+            "Something went wrong on our side".to_owned()
+        }
     }
 }
 

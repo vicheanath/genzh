@@ -117,6 +117,15 @@ fn api_config(database_url: String) -> api::Config {
         rate_limit_per_minute: 100_000,
         auth_rate_limit_per_minute: 100_000,
 
+        // Likewise for the anti-spam budgets: a test that posts ten messages to
+        // set up a scenario is not a flood, and a suite that had to sleep to
+        // avoid one would be a slow suite. The tests that care about the guard
+        // set their own policy.
+        message_burst_limit: 100_000,
+        message_burst_window_seconds: 60,
+        message_repeat_window_seconds: 0,
+        message_repeat_limit: 100_000,
+
         app_env: "test".to_owned(),
         allow_password_signup: true,
         frontend_url: "http://localhost:5173".to_owned(),
@@ -137,6 +146,9 @@ pub struct TestResponse {
     pub status: StatusCode,
     /// Body, parsed as JSON when it is JSON.
     pub json: Value,
+    /// Response headers, for the assertions a body cannot make — `Retry-After`
+    /// on a refusal, above all.
+    pub headers: axum::http::HeaderMap,
 }
 
 impl TestResponse {
@@ -155,6 +167,11 @@ impl TestResponse {
     /// The `error.code` of an error response.
     pub fn error_code(&self) -> &str {
         self.json["error"]["code"].as_str().unwrap_or_default()
+    }
+
+    /// One header, as a string.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name)?.to_str().ok()
     }
 }
 
@@ -196,6 +213,7 @@ impl TestApi {
             .await
             .expect("router responds");
         let status = response.status();
+        let headers = response.headers().clone();
         let bytes = response
             .into_body()
             .collect()
@@ -204,7 +222,11 @@ impl TestApi {
             .to_bytes();
         let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
 
-        TestResponse { status, json }
+        TestResponse {
+            status,
+            json,
+            headers,
+        }
     }
 
     /// Register a fresh account.

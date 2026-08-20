@@ -58,6 +58,15 @@ pub struct Config {
     /// Requests per minute per client address on `/auth/*`.
     pub auth_rate_limit_per_minute: u32,
 
+    /// Messages one account may post to one room per burst window.
+    pub message_burst_limit: u32,
+    /// The burst window, in seconds.
+    pub message_burst_window_seconds: u64,
+    /// How long an identical message is remembered, in seconds.
+    pub message_repeat_window_seconds: u64,
+    /// How many identical messages within that window are tolerated.
+    pub message_repeat_limit: u32,
+
     /// Deployment environment: "development", "production", "test".
     pub app_env: String,
     /// Whether password-based registration is allowed.
@@ -161,6 +170,14 @@ impl Config {
             cors_allowed_origins: optional("CORS_ALLOWED_ORIGINS").unwrap_or_default(),
             rate_limit_per_minute: number("RATE_LIMIT_PER_MINUTE", 600)?,
             auth_rate_limit_per_minute: number("AUTH_RATE_LIMIT_PER_MINUTE", 20)?,
+
+            // Faster than anybody types, slower than anything automated
+            // bothers to be. Configurable because a room full of a game's
+            // spectators and a support channel want different answers.
+            message_burst_limit: number("MESSAGE_BURST_LIMIT", 10)?,
+            message_burst_window_seconds: number("MESSAGE_BURST_WINDOW_SECONDS", 10)?,
+            message_repeat_window_seconds: number("MESSAGE_REPEAT_WINDOW_SECONDS", 30)?,
+            message_repeat_limit: number("MESSAGE_REPEAT_LIMIT", 3)?,
 
             app_env: {
                 let env = optional("APP_ENV")
