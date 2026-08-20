@@ -30,6 +30,11 @@ export interface VoiceContextValue extends VoiceState {
   leave: () => Promise<void>
   setMuted: (muted: boolean) => void
   toggleMute: () => void
+  startScreenShare: () => Promise<MediaStream | null>
+  stopScreenShare: () => Promise<void>
+  toggleScreenShare: () => Promise<void>
+  raiseHand: (raised: boolean) => void
+  setStageRole: (role: 'host' | 'speaker' | 'audience') => void
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null)
@@ -149,6 +154,15 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
   }, [user, activeSession?.roomId, client])
 
+  const startScreenShare = useCallback(() => client.startScreenShare(), [client])
+  const stopScreenShare = useCallback(() => client.stopScreenShare(), [client])
+  const toggleScreenShare = useCallback(() => client.toggleScreenShare(), [client])
+  const raiseHand = useCallback((raised: boolean) => client.raiseHand(raised), [client])
+  const setStageRole = useCallback(
+    (role: 'host' | 'speaker' | 'audience') => client.setStageRole(role),
+    [client],
+  )
+
   const value: VoiceContextValue = {
     ...state,
     activeRoomId: activeSession?.roomId ?? null,
@@ -158,6 +172,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     leave,
     setMuted,
     toggleMute,
+    startScreenShare,
+    stopScreenShare,
+    toggleScreenShare,
+    raiseHand,
+    setStageRole,
   }
 
   return (

@@ -6,12 +6,18 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
+  FlameIcon,
+  GamepadIcon,
   HashIcon,
   LockIcon,
   MicIcon,
+  PaletteIcon,
+  RadioIcon,
   SparkleIcon,
   VideoIcon,
+  VoteIcon,
   XIcon,
+  ZapIcon,
 } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
@@ -39,13 +45,15 @@ interface CreatePlaygroundRoomDialogProps {
 
 const ROOM_TYPES: Array<{ type: RoomType; label: string; icon: typeof HashIcon }> = [
   { type: 'text', label: 'Chat', icon: HashIcon },
-  { type: 'voice', label: 'Voice Hangout', icon: MicIcon },
+  { type: 'voice', label: 'Voice & Screen', icon: MicIcon },
+  { type: 'stage', label: 'Stage (Discord-like)', icon: RadioIcon },
   { type: 'video', label: 'Video', icon: VideoIcon },
-  { type: 'debate', label: 'Debate', icon: SparkleIcon },
-  { type: 'poll', label: 'Live Poll', icon: SparkleIcon },
+  { type: 'debate', label: 'Debate Arena', icon: FlameIcon },
+  { type: 'poll', label: 'Live Poll', icon: VoteIcon },
+  { type: 'game', label: 'Party Games', icon: GamepadIcon },
   { type: 'confession', label: 'Confessions', icon: LockIcon },
-  { type: 'game', label: 'Mini-Game', icon: SparkleIcon },
-  { type: 'quick_chat', label: 'Quick Chat', icon: HashIcon },
+  { type: 'quick_chat', label: 'Speed Chat', icon: ZapIcon },
+  { type: 'activity', label: 'Activity Lounge', icon: PaletteIcon },
 ]
 
 export function CreatePlaygroundRoomDialog({

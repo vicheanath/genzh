@@ -7,13 +7,18 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
   ArrowLeftIcon,
+  FlameIcon,
+  GamepadIcon,
   HashIcon,
   LockIcon,
   MessageSquareIcon,
   MicIcon,
-  SparkleIcon,
+  PaletteIcon,
+  RadioIcon,
   UsersIcon,
   VideoIcon,
+  VoteIcon,
+  ZapIcon,
 } from '@/components/Icons'
 import { LoadingPanel } from '@/components/Spinner'
 import { Tooltip } from '@/components/Tooltip'
@@ -25,6 +30,13 @@ import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { useProfiles } from '@/lib/useProfiles'
 
+import { ActivityExperience } from '@/features/experiences/ActivityExperience'
+import { ConfessionExperience } from '@/features/experiences/ConfessionExperience'
+import { DebateExperience } from '@/features/experiences/DebateExperience'
+import { GameExperience } from '@/features/experiences/GameExperience'
+import { PollExperience } from '@/features/experiences/PollExperience'
+import { QuickChatExperience } from '@/features/experiences/QuickChatExperience'
+
 import { Chat } from './Chat'
 import { MemberList } from './MemberList'
 import { ProfileDialog } from './ProfileDialog'
@@ -35,13 +47,13 @@ const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
-  activity: SparkleIcon,
-  stage: VideoIcon,
-  poll: SparkleIcon,
-  debate: SparkleIcon,
-  game: SparkleIcon,
+  stage: RadioIcon,
+  activity: PaletteIcon,
+  poll: VoteIcon,
+  debate: FlameIcon,
+  game: GamepadIcon,
   confession: LockIcon,
-  quick_chat: HashIcon,
+  quick_chat: ZapIcon,
 }
 
 export function RoomRoute() {
@@ -200,6 +212,13 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
           )}
         </header>
 
+        {/* Experience Type Interactive feature engines */}
+        {room.room_type === 'debate' && <DebateExperience room={room} />}
+        {room.room_type === 'poll' && <PollExperience room={room} />}
+        {room.room_type === 'game' && <GameExperience room={room} />}
+        {room.room_type === 'confession' && <ConfessionExperience room={room} />}
+        {room.room_type === 'quick_chat' && <QuickChatExperience room={room} />}
+        {room.room_type === 'activity' && <ActivityExperience room={room} />}
         {isMediaRoom && <VoicePanel room={room} />}
 
         <Chat

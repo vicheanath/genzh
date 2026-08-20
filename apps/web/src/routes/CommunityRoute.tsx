@@ -8,16 +8,21 @@ import { Callout } from '@/components/Callout'
 import {
   CompassIcon,
   CopyIcon,
+  FlameIcon,
+  GamepadIcon,
   HashIcon,
   LockIcon,
   MessageSquareIcon,
   MicIcon,
+  PaletteIcon,
   PlusIcon,
+  RadioIcon,
   SettingsIcon,
   ShieldIcon,
-  SparkleIcon,
   UsersIcon,
   VideoIcon,
+  VoteIcon,
+  ZapIcon,
 } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
@@ -44,23 +49,29 @@ import styles from './CommunityRoute.module.css'
 type CommunityTab = 'channels' | 'members' | 'about'
 
 const ROOM_TYPES = [
-  { value: 'text', label: 'Text Channel' },
-  { value: 'voice', label: 'Voice Channel' },
-  { value: 'video', label: 'Video Stage' },
-  { value: 'activity', label: 'Playground Activity' },
+  { value: 'text', label: '💬 Text Channel' },
+  { value: 'voice', label: '🎙️ Voice & Screen Channel' },
+  { value: 'stage', label: '📻 Stage Channel (Discord-like)' },
+  { value: 'video', label: '📹 Video Stage' },
+  { value: 'debate', label: '🔥 Debate Arena' },
+  { value: 'poll', label: '🗳️ Live Poll' },
+  { value: 'game', label: '🎮 Party Mini-Games' },
+  { value: 'confession', label: '🤫 Confessions Wall' },
+  { value: 'quick_chat', label: '⚡ Speed Chat' },
+  { value: 'activity', label: '🎨 Activity Lounge' },
 ] as const satisfies ReadonlyArray<{ value: RoomType; label: string }>
 
 const ROOM_ICONS: Record<string, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
-  activity: SparkleIcon,
-  stage: VideoIcon,
-  poll: SparkleIcon,
-  debate: SparkleIcon,
-  game: SparkleIcon,
+  stage: RadioIcon,
+  activity: PaletteIcon,
+  poll: VoteIcon,
+  debate: FlameIcon,
+  game: GamepadIcon,
   confession: LockIcon,
-  quick_chat: HashIcon,
+  quick_chat: ZapIcon,
 }
 
 export function CommunityRoute() {

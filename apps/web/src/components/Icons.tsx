@@ -5,42 +5,62 @@ import {
   Ban,
   Bell,
   Check,
+  CheckCircle2,
   ChevronDown,
   Compass,
   Copy,
   Crown,
+  Flame,
+  Gamepad2,
   Globe,
+  Hand,
   Hash,
   Headphones,
   Heart,
+  HelpCircle,
   Home,
   Lock,
   LogOut,
   Mail,
+  Maximize2,
   Menu as MenuLucide,
   MessageSquare,
   Mic,
   MicOff,
+  Minimize2,
   Moon,
   MoreHorizontal,
+  Music,
+  Palette,
   Pencil,
   PhoneOff,
+  Play,
   Plus,
+  Radio,
+  RotateCcw,
+  ScreenShare,
+  ScreenShareOff,
   Search,
   Send,
   Settings,
   Shield,
+  Shuffle,
   Smile,
   Sparkles,
   Sun,
+  Timer,
   Trash2,
+  Trophy,
   Tv,
   UserMinus,
   UserPlus,
   Users,
   Video,
+  Vote,
   Volume2,
+  VolumeX,
   X,
+  Zap,
 } from 'lucide-react'
 
 export interface IconProps extends LucideProps {
@@ -65,8 +85,30 @@ export const MicIcon: IconComponent = (props: IconProps) => <Mic size={18} {...p
 export const MicOffIcon: IconComponent = (props: IconProps) => <MicOff size={18} {...props} />
 export const VideoIcon: IconComponent = (props: IconProps) => <Video size={18} {...props} />
 export const SparkleIcon: IconComponent = (props: IconProps) => <Sparkles size={18} {...props} />
+export const SparklesIcon: IconComponent = (props: IconProps) => <Sparkles size={18} {...props} />
 export const HeadphonesIcon: IconComponent = (props: IconProps) => <Headphones size={18} {...props} />
 export const PhoneOffIcon: IconComponent = (props: IconProps) => <PhoneOff size={18} {...props} />
+export const ScreenShareIcon: IconComponent = (props: IconProps) => <ScreenShare size={18} {...props} />
+export const ScreenShareOffIcon: IconComponent = (props: IconProps) => <ScreenShareOff size={18} {...props} />
+export const RadioIcon: IconComponent = (props: IconProps) => <Radio size={18} {...props} />
+export const HandIcon: IconComponent = (props: IconProps) => <Hand size={18} {...props} />
+export const MaximizeIcon: IconComponent = (props: IconProps) => <Maximize2 size={18} {...props} />
+export const MinimizeIcon: IconComponent = (props: IconProps) => <Minimize2 size={18} {...props} />
+
+/* ── Experience Types & Actions ─────────────────────────────────────────── */
+export const FlameIcon: IconComponent = (props: IconProps) => <Flame size={18} {...props} />
+export const TrophyIcon: IconComponent = (props: IconProps) => <Trophy size={18} {...props} />
+export const GamepadIcon: IconComponent = (props: IconProps) => <Gamepad2 size={18} {...props} />
+export const ShuffleIcon: IconComponent = (props: IconProps) => <Shuffle size={18} {...props} />
+export const TimerIcon: IconComponent = (props: IconProps) => <Timer size={18} {...props} />
+export const PaletteIcon: IconComponent = (props: IconProps) => <Palette size={18} {...props} />
+export const MusicIcon: IconComponent = (props: IconProps) => <Music size={18} {...props} />
+export const VoteIcon: IconComponent = (props: IconProps) => <Vote size={18} {...props} />
+export const HelpCircleIcon: IconComponent = (props: IconProps) => <HelpCircle size={18} {...props} />
+export const CheckCircleIcon: IconComponent = (props: IconProps) => <CheckCircle2 size={18} {...props} />
+export const PlayIcon: IconComponent = (props: IconProps) => <Play size={18} {...props} />
+export const RotateCcwIcon: IconComponent = (props: IconProps) => <RotateCcw size={18} {...props} />
+export const ZapIcon: IconComponent = (props: IconProps) => <Zap size={18} {...props} />
 
 /* ── Actions & Entities ─────────────────────────────────────────────────── */
 export const PlusIcon: IconComponent = (props: IconProps) => <Plus size={18} {...props} />
@@ -91,6 +133,7 @@ export const MessageSquareIcon: IconComponent = (props: IconProps) => <MessageSq
 export const CrownIcon: IconComponent = (props: IconProps) => <Crown size={18} {...props} />
 export const LockIcon: IconComponent = (props: IconProps) => <Lock size={18} {...props} />
 export const Volume2Icon: IconComponent = (props: IconProps) => <Volume2 size={18} {...props} />
+export const VolumeXIcon: IconComponent = (props: IconProps) => <VolumeX size={18} {...props} />
 export const BanIcon: IconComponent = (props: IconProps) => <Ban size={18} {...props} />
 export const MailIcon: IconComponent = (props: IconProps) => <Mail size={18} {...props} />
 export const HeartIcon: IconComponent = (props: IconProps) => <Heart size={18} {...props} />

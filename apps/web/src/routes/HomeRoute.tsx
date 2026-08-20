@@ -6,13 +6,19 @@ import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import {
   CompassIcon,
+  FlameIcon,
+  GamepadIcon,
   HashIcon,
   LockIcon,
   MicIcon,
+  PaletteIcon,
   PlusIcon,
+  RadioIcon,
   SparkleIcon,
   UsersIcon,
   VideoIcon,
+  VoteIcon,
+  ZapIcon,
 } from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
@@ -30,13 +36,13 @@ const ROOM_TYPE_ICONS: Record<string, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
-  activity: SparkleIcon,
-  stage: VideoIcon,
-  poll: SparkleIcon,
-  debate: SparkleIcon,
-  game: SparkleIcon,
+  stage: RadioIcon,
+  activity: PaletteIcon,
+  poll: VoteIcon,
+  debate: FlameIcon,
+  game: GamepadIcon,
   confession: LockIcon,
-  quick_chat: HashIcon,
+  quick_chat: ZapIcon,
 }
 
 export function HomeRoute() {

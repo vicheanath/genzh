@@ -22,8 +22,13 @@ export interface RemoteParticipant {
   displayName: string
   muted: boolean
   speaking: boolean
+  screenSharing?: boolean
+  handRaised?: boolean
+  stageRole?: 'host' | 'speaker' | 'audience'
   /** Populated once the SFU starts forwarding this participant's audio. */
   stream: MediaStream | null
+  /** Populated once the SFU starts forwarding this participant's video/screen track. */
+  screenStream?: MediaStream | null
 }
 
 export interface VoiceState {
@@ -32,6 +37,10 @@ export interface VoiceState {
   participants: RemoteParticipant[]
   muted: boolean
   speaking: boolean
+  isScreenSharing: boolean
+  screenStream: MediaStream | null
+  handRaised: boolean
+  stageRole: 'host' | 'speaker' | 'audience'
   error: string | null
 }
 
@@ -45,6 +54,10 @@ const INITIAL_STATE: VoiceState = {
   participants: [],
   muted: true,
   speaking: false,
+  isScreenSharing: false,
+  screenStream: null,
+  handRaised: false,
+  stageRole: 'speaker',
   error: null,
 }
 
@@ -69,6 +82,8 @@ export class VoiceClient {
   private subscriber: RTCPeerConnection | null = null
 
   private localStream: MediaStream | null = null
+  private screenTrack: MediaStreamTrack | null = null
+  private screenSender: RTCRtpSender | null = null
   private audioContext: AudioContext | null = null
   private vadFrame: number | null = null
 
@@ -108,6 +123,7 @@ export class VoiceClient {
   async leave(): Promise<void> {
     this.closing = true
     this.clearReconnect()
+    await this.stopScreenShare()
     this.send({ type: 'leave' })
     this.teardown()
     this.patch({ ...INITIAL_STATE })
@@ -126,6 +142,90 @@ export class VoiceClient {
     } else {
       this.patch({ muted })
     }
+  }
+
+  async startScreenShare(): Promise<MediaStream | null> {
+    try {
+      if (this.state.isScreenSharing && this.state.screenStream) {
+        return this.state.screenStream
+      }
+
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: 'monitor',
+          frameRate: { ideal: 30, max: 60 },
+        },
+        audio: true,
+      })
+
+      const track = screenStream.getVideoTracks()[0]
+      if (!track) return null
+      this.screenTrack = track
+
+      track.onended = () => {
+        void this.stopScreenShare()
+      }
+
+      if (this.publisher && this.publisher.connectionState !== 'closed') {
+        this.send({ type: 'publish_intent', kind: 'screen_share', client_track_id: track.id })
+        this.screenSender = this.publisher.addTrack(track, screenStream)
+        const offer = await this.publisher.createOffer()
+        await this.publisher.setLocalDescription(offer)
+        this.send({ type: 'offer', target: 'publisher', sdp: offer.sdp ?? '' })
+      }
+
+      this.send({ type: 'screen_share', enabled: true })
+      this.patch({ isScreenSharing: true, screenStream })
+      return screenStream
+    } catch (err) {
+      console.warn('Screen share cancelled or failed:', err)
+      return null
+    }
+  }
+
+  async stopScreenShare(): Promise<void> {
+    if (!this.state.isScreenSharing && !this.state.screenStream) return
+
+    if (this.screenTrack) {
+      this.screenTrack.stop()
+      this.screenTrack = null
+    }
+    if (this.state.screenStream) {
+      for (const t of this.state.screenStream.getTracks()) {
+        t.stop()
+      }
+    }
+
+    if (this.publisher && this.screenSender && this.publisher.connectionState !== 'closed') {
+      try {
+        this.publisher.removeTrack(this.screenSender)
+        const offer = await this.publisher.createOffer()
+        await this.publisher.setLocalDescription(offer)
+        this.send({ type: 'offer', target: 'publisher', sdp: offer.sdp ?? '' })
+      } catch {
+        // Ignored
+      }
+      this.screenSender = null
+    }
+
+    this.send({ type: 'screen_share', enabled: false })
+    this.patch({ isScreenSharing: false, screenStream: null })
+  }
+
+  async toggleScreenShare(): Promise<void> {
+    if (this.state.isScreenSharing) {
+      await this.stopScreenShare()
+    } else {
+      await this.startScreenShare()
+    }
+  }
+
+  raiseHand(raised: boolean): void {
+    this.patch({ handRaised: raised })
+  }
+
+  setStageRole(role: 'host' | 'speaker' | 'audience'): void {
+    this.patch({ stageRole: role })
   }
 
   // ── connection ──────────────────────────────────────────────────────────
@@ -325,8 +425,21 @@ export class VoiceClient {
         }
         break
       }
+      case 'screen_share_started':
+      case 'screen_share_stopped': {
+        const index = indexOf(message.participant_id)
+        const existing = participants[index]
+        if (existing) {
+          const isSharing = message.event === 'screen_share_started'
+          participants[index] = {
+            ...existing,
+            screenSharing: isSharing,
+            screenStream: isSharing ? existing.screenStream : null,
+          }
+        }
+        break
+      }
       default:
-        // Track and camera events do not change the voice-only UI.
         return
     }
 
@@ -348,10 +461,15 @@ export class VoiceClient {
       const participantId = participantIdFromTrack(event)
       if (!participantId) return
 
+      const isVideo = event.track.kind === 'video'
       const stream = event.streams[0] ?? new MediaStream([event.track])
-      const participants = this.state.participants.map((p) =>
-        p.id === participantId ? { ...p, stream } : p,
-      )
+      const participants = this.state.participants.map((p) => {
+        if (p.id !== participantId) return p
+        if (isVideo) {
+          return { ...p, screenStream: stream, screenSharing: true }
+        }
+        return { ...p, stream }
+      })
       this.patch({ participants })
     })
 

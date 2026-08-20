@@ -102,6 +102,18 @@ fn api_config(database_url: String) -> api::Config {
         // High enough that a test run cannot trip it.
         rate_limit_per_minute: 100_000,
         auth_rate_limit_per_minute: 100_000,
+
+        app_env: "test".to_owned(),
+        allow_password_signup: true,
+        frontend_url: "http://localhost:5173".to_owned(),
+
+        google_client_id: None,
+        google_client_secret: None,
+        google_redirect_uri: None,
+
+        discord_client_id: None,
+        discord_client_secret: None,
+        discord_redirect_uri: None,
     }
 }
 
