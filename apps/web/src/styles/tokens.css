@@ -10,8 +10,20 @@
  *   2. no choice + OS dark  → prefers-color-scheme
  *   3. no choice + OS light → the :root defaults below
  *
- * The palette is defined twice — once as light, once as dark — and nothing
- * else in the app knows which one is active.
+ * ## The identity: "dusk"
+ *
+ * The layout borrows the rail → sidebar → stage arrangement that every chat
+ * app converged on, because it is the arrangement people already know. The
+ * *look* deliberately does not: no blurple, no neutral slate greys. The ground
+ * is a violet-black — every dark surface carries a purple cast rather than
+ * being desaturated — and the accent is a violet→magenta gradient rather than
+ * a flat brand fill. Three signatures carry that through the app:
+ *
+ *   --gradient-accent   selection, active nav, primary buttons, speaking rings
+ *   --glow-accent       what "active" means here, instead of a heavier fill
+ *   --font-display      a wider, geometric face for titles against the UI face
+ *
+ * If you are adding a surface and reaching for a hex, you want a token below.
  */
 
 :root {
@@ -19,57 +31,100 @@
      Four levels, and they are ordered: sunken sits behind the page, bg is the
      page, surface is a panel on it, raised is a popup above that. A component
      picks the level it belongs to rather than a colour. */
-  --color-sunken: #f1f2f7;
-  --color-bg: #fbfbfd;
+  --color-sunken: #f1ecfb;
+  --color-bg: #faf8ff;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-overlay: rgb(15 18 25 / 0.45);
+  --color-overlay: rgb(24 16 43 / 0.5);
+  /* Interaction states for a *filled* surface. Distinct from --color-hover,
+     which is the translucent wash a transparent element gets. */
+  --color-surface-hover: #f6f2fd;
+  --color-surface-active: #efe8fb;
+  --color-surface-muted: #f5f1fc;
 
   /* A wash used for hover on transparent things — tinted rather than grey, so
      hovering feels connected to the accent instead of dirty. */
-  --color-hover: rgb(79 70 229 / 0.07);
-  --color-active: rgb(79 70 229 / 0.12);
+  --color-hover: rgb(124 58 237 / 0.08);
+  --color-active: rgb(124 58 237 / 0.14);
 
   /* text */
-  --color-text: #14171f;
-  --color-text-muted: #5b6172;
-  --color-text-subtle: #878da0;
+  --color-text: #1a1330;
+  --color-text-muted: #584d78;
+  --color-text-subtle: #8a7fae;
   --color-text-inverted: #ffffff;
 
   /* lines */
-  --color-border: #e3e5ec;
-  --color-border-strong: #c9ccd8;
+  --color-border: #e7e0f5;
+  --color-border-strong: #cdc2e6;
+  --color-border-hover: #d9cef0;
+  --color-border-subtle: #f0eaf9;
 
   /* accent */
-  --color-accent: #5b53e8;
-  --color-accent-hover: #4a41dd;
-  --color-accent-active: #3d34c4;
-  --color-accent-subtle: #eef0ff;
-  --color-accent-text: #4a41dd;
-  --color-accent-ring: rgb(91 83 232 / 0.35);
+  --color-accent: #7c3aed;
+  --color-accent-hover: #6d28d9;
+  --color-accent-active: #5b21b6;
+  --color-accent-subtle: #f1eafe;
+  --color-accent-text: #6d28d9;
+  --color-accent-ring: rgb(124 58 237 / 0.35);
   --color-accent-contrast: #ffffff;
 
   /* A second hue, used only where two accents must be told apart —
      the voice panel against the composer, a live badge against a link. */
-  --color-mint: #0ea5a5;
-  --color-mint-subtle: #e4f7f6;
+  --color-mint: #0fa47f;
+  --color-mint-subtle: #e0f8f1;
 
   /* status */
-  --color-danger: #dc2626;
-  --color-danger-subtle: #fee6e6;
-  --color-success: #16a34a;
+  --color-danger: #e11d48;
+  --color-danger-subtle: #ffe4ea;
+  --color-success: #0fa47f;
   --color-warning: #d97706;
 
   /* presence — the dot on an avatar */
-  --color-online: #22c55e;
-  --color-idle: #eab308;
-  --color-busy: #ef4444;
-  --color-offline: #9aa0b0;
+  --color-online: #17b981;
+  --color-idle: #f5a524;
+  --color-busy: #f43f5e;
+  --color-offline: #a09bb5;
+
+  /* ── signatures ──────────────────────────────────────────────────────────
+     The three things that make a screen recognisably this app rather than a
+     re-skin. Used sparingly: an accent that is a gradient everywhere is just a
+     background. */
+  --gradient-accent: linear-gradient(135deg, #a855f7 0%, #7c3aed 48%, #ec4899 100%);
+  --gradient-live: linear-gradient(135deg, #0fa47f 0%, #06b6d4 100%);
+  --gradient-danger: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+
+  /* "Active" reads as a glow here rather than as a heavier fill, which is what
+     lets nav rows stay quiet until they matter. */
+  --glow-accent: 0 6px 20px rgb(124 58 237 / 0.28);
+  --glow-live: 0 6px 20px rgb(15 164 127 / 0.3);
+  --glow-danger: 0 6px 20px rgb(225 29 72 / 0.28);
+
+  /* The stage — the voice viewport — is its own environment: darker than the
+     page in both themes, so a call feels like a place you entered. */
+  --stage-bg: #17122a;
+  --stage-surface: #221b3d;
+  --stage-surface-raised: #2c2450;
+  --stage-border: rgb(255 255 255 / 0.09);
+  --stage-text: #f3f0ff;
+  --stage-text-subtle: #a99fc8;
+  /* Two off-centre pools of colour behind the tiles. Cheap (no blur filter,
+     no extra element) and the one thing that stops a dark grid reading flat. */
+  --stage-aurora:
+    radial-gradient(80rem 40rem at 12% -10%, rgb(168 85 247 / 0.22), transparent 60%),
+    radial-gradient(60rem 36rem at 96% 108%, rgb(236 72 153 / 0.16), transparent 62%);
+
+  /* Panels that float over content: controls pill, overlays on video. */
+  --glass-bg: rgb(23 18 42 / 0.72);
+  --glass-border: rgb(255 255 255 / 0.12);
 
   /* type */
   --font-sans:
     'Inter var', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
     Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Wider and more geometric than the UI face — titles, empty states, the
+     brand mark. Never body copy. */
+  --font-display:
+    'Space Grotesk', 'Inter var', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   --text-2xs: 0.6875rem;
   --text-xs: 0.75rem;
@@ -87,21 +142,27 @@
   --space-4: 1rem;
   --space-5: 1.5rem;
   --space-6: 2rem;
+  --space-7: 2.5rem;
   --space-8: 3rem;
 
   /* shape */
+  --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
+  /* Alias. Both names are in use; keeping them equal is cheaper than a rename
+     across every stylesheet. */
+  --radius-pill: 9999px;
 
   /* elevation */
-  --shadow-sm: 0 1px 2px rgb(15 18 25 / 0.06);
-  --shadow-md: 0 4px 12px rgb(15 18 25 / 0.08);
-  --shadow-lg: 0 12px 32px rgb(15 18 25 / 0.14);
-  --shadow-xl: 0 24px 56px rgb(15 18 25 / 0.18);
+  --shadow-sm: 0 1px 2px rgb(24 16 43 / 0.07);
+  --shadow-md: 0 4px 14px rgb(24 16 43 / 0.09);
+  --shadow-lg: 0 14px 36px rgb(24 16 43 / 0.15);
+  --shadow-xl: 0 26px 60px rgb(24 16 43 / 0.2);
+  --shadow-2xl: 0 36px 80px rgb(24 16 43 / 0.26);
 
   /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -117,96 +178,152 @@
   --mobile-nav-height: 3.75rem;
 }
 
-/* The dark palette, tuned to Discord's iconic color hierarchy */
+/*
+ * The dark palette.
+ *
+ * Defined once here as a reusable block and applied twice below — once for the
+ * OS preference, once for an explicit choice — because a custom property can
+ * only be redefined by a selector, not shared by one.
+ */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --color-sunken: #1e1f22;
-    --color-surface: #2b2d31;
-    --color-surface-raised: #313338;
-    --color-bg: #313338;
-    --color-overlay: rgba(0, 0, 0, 0.7);
+    --color-sunken: #0c0916;
+    --color-bg: #12101d;
+    --color-surface: #191527;
+    --color-surface-raised: #211c33;
+    --color-overlay: rgb(6 4 12 / 0.72);
+    --color-surface-hover: #1f1a30;
+    --color-surface-active: #272040;
+    --color-surface-muted: #1b1729;
 
-    --color-hover: rgba(255, 255, 255, 0.06);
-    --color-active: rgba(255, 255, 255, 0.1);
+    --color-hover: rgb(255 255 255 / 0.07);
+    --color-active: rgb(157 124 255 / 0.18);
 
-    --color-text: #f2f3f5;
-    --color-text-muted: #dbdee1;
-    --color-text-subtle: #949ba4;
-    --color-text-inverted: #1e1f22;
+    --color-text: #f3f0ff;
+    --color-text-muted: #c6bee0;
+    --color-text-subtle: #8d84a8;
+    --color-text-inverted: #12101d;
 
-    --color-border: #1f2023;
-    --color-border-strong: #35373c;
+    --color-border: #241f38;
+    --color-border-strong: #3a3255;
+    --color-border-hover: #332b4d;
+    --color-border-subtle: #201b31;
 
-    --color-accent: #5865f2;
-    --color-accent-hover: #4752c4;
-    --color-accent-active: #3c45a5;
-    --color-accent-subtle: rgba(88, 101, 242, 0.15);
-    --color-accent-text: #5865f2;
-    --color-accent-ring: rgba(88, 101, 242, 0.4);
+    --color-accent: #8b5cf6;
+    --color-accent-hover: #7c3aed;
+    --color-accent-active: #6d28d9;
+    --color-accent-subtle: rgb(139 92 246 / 0.18);
+    --color-accent-text: #b9a2ff;
+    --color-accent-ring: rgb(139 92 246 / 0.45);
     --color-accent-contrast: #ffffff;
 
-    --color-mint: #23a55a;
-    --color-mint-subtle: rgba(35, 165, 90, 0.15);
+    --color-mint: #2fe6a7;
+    --color-mint-subtle: rgb(47 230 167 / 0.14);
 
-    --color-danger: #f23f43;
-    --color-danger-subtle: rgba(242, 63, 67, 0.15);
-    --color-success: #23a55a;
-    --color-warning: #f0b232;
+    --color-danger: #ff5d73;
+    --color-danger-subtle: rgb(255 93 115 / 0.16);
+    --color-success: #2fe6a7;
+    --color-warning: #ffb340;
 
-    --color-online: #23a55a;
-    --color-idle: #f0b232;
-    --color-busy: #f23f43;
-    --color-offline: #80848e;
+    --color-online: #2fe6a7;
+    --color-idle: #ffb340;
+    --color-busy: #ff5d73;
+    --color-offline: #6f6789;
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
-    --shadow-xl: 0 24px 56px rgba(0, 0, 0, 0.65);
+    --gradient-accent: linear-gradient(135deg, #c084fc 0%, #8b5cf6 48%, #f472b6 100%);
+    --gradient-live: linear-gradient(135deg, #2fe6a7 0%, #22d3ee 100%);
+    --gradient-danger: linear-gradient(135deg, #ff7a8a 0%, #ff5d73 100%);
+
+    --glow-accent: 0 6px 22px rgb(139 92 246 / 0.4);
+    --glow-live: 0 6px 22px rgb(47 230 167 / 0.32);
+    --glow-danger: 0 6px 22px rgb(255 93 115 / 0.34);
+
+    /* In dark the stage is only a shade away from the page, so the aurora and
+       the border do the separating rather than a brightness step. */
+    --stage-bg: #0e0b19;
+    --stage-surface: #191430;
+    --stage-surface-raised: #221b3d;
+    --stage-border: rgb(255 255 255 / 0.08);
+    --stage-text: #f3f0ff;
+    --stage-text-subtle: #9c93bb;
+
+    --glass-bg: rgb(14 11 25 / 0.78);
+    --glass-border: rgb(255 255 255 / 0.1);
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+    --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 14px 36px rgb(0 0 0 / 0.55);
+    --shadow-xl: 0 26px 60px rgb(0 0 0 / 0.68);
+    --shadow-2xl: 0 36px 80px rgb(0 0 0 / 0.75);
   }
 }
 
 /* An explicit dark choice wins in both directions. */
 :root[data-theme='dark'] {
-  --color-sunken: #1e1f22;
-  --color-surface: #2b2d31;
-  --color-surface-raised: #313338;
-  --color-bg: #313338;
-  --color-overlay: rgba(0, 0, 0, 0.7);
+  --color-sunken: #0c0916;
+  --color-bg: #12101d;
+  --color-surface: #191527;
+  --color-surface-raised: #211c33;
+  --color-overlay: rgb(6 4 12 / 0.72);
+  --color-surface-hover: #1f1a30;
+  --color-surface-active: #272040;
+  --color-surface-muted: #1b1729;
 
-  --color-hover: rgba(255, 255, 255, 0.06);
-  --color-active: rgba(255, 255, 255, 0.1);
+  --color-hover: rgb(255 255 255 / 0.07);
+  --color-active: rgb(157 124 255 / 0.18);
 
-  --color-text: #f2f3f5;
-  --color-text-muted: #dbdee1;
-  --color-text-subtle: #949ba4;
-  --color-text-inverted: #1e1f22;
+  --color-text: #f3f0ff;
+  --color-text-muted: #c6bee0;
+  --color-text-subtle: #8d84a8;
+  --color-text-inverted: #12101d;
 
-  --color-border: #1f2023;
-  --color-border-strong: #35373c;
+  --color-border: #241f38;
+  --color-border-strong: #3a3255;
+  --color-border-hover: #332b4d;
+  --color-border-subtle: #201b31;
 
-  --color-accent: #5865f2;
-  --color-accent-hover: #4752c4;
-  --color-accent-active: #3c45a5;
-  --color-accent-subtle: rgba(88, 101, 242, 0.15);
-  --color-accent-text: #5865f2;
-  --color-accent-ring: rgba(88, 101, 242, 0.4);
+  --color-accent: #8b5cf6;
+  --color-accent-hover: #7c3aed;
+  --color-accent-active: #6d28d9;
+  --color-accent-subtle: rgb(139 92 246 / 0.18);
+  --color-accent-text: #b9a2ff;
+  --color-accent-ring: rgb(139 92 246 / 0.45);
   --color-accent-contrast: #ffffff;
 
-  --color-mint: #23a55a;
-  --color-mint-subtle: rgba(35, 165, 90, 0.15);
+  --color-mint: #2fe6a7;
+  --color-mint-subtle: rgb(47 230 167 / 0.14);
 
-  --color-danger: #f23f43;
-  --color-danger-subtle: rgba(242, 63, 67, 0.15);
-  --color-success: #23a55a;
-  --color-warning: #f0b232;
+  --color-danger: #ff5d73;
+  --color-danger-subtle: rgb(255 93 115 / 0.16);
+  --color-success: #2fe6a7;
+  --color-warning: #ffb340;
 
-  --color-online: #23a55a;
-  --color-idle: #f0b232;
-  --color-busy: #f23f43;
-  --color-offline: #80848e;
+  --color-online: #2fe6a7;
+  --color-idle: #ffb340;
+  --color-busy: #ff5d73;
+  --color-offline: #6f6789;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --shadow-xl: 0 24px 56px rgba(0, 0, 0, 0.65);
+  --gradient-accent: linear-gradient(135deg, #c084fc 0%, #8b5cf6 48%, #f472b6 100%);
+  --gradient-live: linear-gradient(135deg, #2fe6a7 0%, #22d3ee 100%);
+  --gradient-danger: linear-gradient(135deg, #ff7a8a 0%, #ff5d73 100%);
+
+  --glow-accent: 0 6px 22px rgb(139 92 246 / 0.4);
+  --glow-live: 0 6px 22px rgb(47 230 167 / 0.32);
+  --glow-danger: 0 6px 22px rgb(255 93 115 / 0.34);
+
+  --stage-bg: #0e0b19;
+  --stage-surface: #191430;
+  --stage-surface-raised: #221b3d;
+  --stage-border: rgb(255 255 255 / 0.08);
+  --stage-text: #f3f0ff;
+  --stage-text-subtle: #9c93bb;
+
+  --glass-bg: rgb(14 11 25 / 0.78);
+  --glass-border: rgb(255 255 255 / 0.1);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 14px 36px rgb(0 0 0 / 0.55);
+  --shadow-xl: 0 26px 60px rgb(0 0 0 / 0.68);
+  --shadow-2xl: 0 36px 80px rgb(0 0 0 / 0.75);
 }

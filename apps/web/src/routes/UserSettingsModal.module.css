@@ -353,7 +353,7 @@
   width: 2.5rem;
   height: 1.35rem;
   appearance: none;
-  background: var(--color-border-subtle, #4b5563);
+  background: var(--color-border-strong);
   border-radius: var(--radius-full);
   position: relative;
   cursor: pointer;
@@ -362,7 +362,7 @@
 }
 
 .switchInput:checked {
-  background: var(--color-success, #23a55a);
+  background: var(--color-success);
 }
 
 .switchInput::before {

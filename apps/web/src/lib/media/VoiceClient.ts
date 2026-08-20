@@ -7,6 +7,7 @@ import {
   type ClientMessage,
   type ParticipantInfo,
   type ServerMessage,
+  type TrackInfo,
 } from './protocol'
 
 export type VoiceStatus =
@@ -27,8 +28,10 @@ export interface RemoteParticipant {
   stageRole?: 'host' | 'speaker' | 'audience'
   /** Populated once the SFU starts forwarding this participant's audio. */
   stream: MediaStream | null
-  /** Populated once the SFU starts forwarding this participant's video/screen track. */
+  /** Populated once the SFU starts forwarding this participant's screen track. */
   screenStream?: MediaStream | null
+  /** The SFU's id for that screen track, needed to unsubscribe from it. */
+  screenTrackId?: string | null
 }
 
 export interface VoiceState {
@@ -87,6 +90,17 @@ export class VoiceClient {
   private audioContext: AudioContext | null = null
   private vadFrame: number | null = null
 
+  /**
+   * Every remote track we have asked the SFU to forward, keyed by its
+   * server-assigned track id.
+   *
+   * `ontrack` gives us a `MediaStreamTrack` and nothing else — SDP cannot say
+   * whether a video track is a camera or a screen. The SFU names the track
+   * `<participant>:<kind>`, so looking the arriving id up here is what turns an
+   * anonymous video track into "Ana's screen".
+   */
+  private readonly remoteTracks = new Map<string, TrackInfo>()
+
   private state: VoiceState = INITIAL_STATE
   private readonly listeners = new Set<(state: VoiceState) => void>()
 
@@ -144,72 +158,109 @@ export class VoiceClient {
     }
   }
 
+  /**
+   * Start sharing a screen, window or tab.
+   *
+   * Publishing is a renegotiation of the *publisher* connection: declare what
+   * the track is for, add it, re-offer. The declaration has to come first —
+   * the server correlates `client_track_id` with the `msid` in the offer that
+   * follows, and an offer that arrives with no matching intent is guessed at.
+   */
   async startScreenShare(): Promise<MediaStream | null> {
-    try {
-      if (this.state.isScreenSharing && this.state.screenStream) {
-        return this.state.screenStream
-      }
-
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: 'monitor',
-          frameRate: { ideal: 30, max: 60 },
-        },
-        audio: true,
-      })
-
-      const track = screenStream.getVideoTracks()[0]
-      if (!track) return null
-      this.screenTrack = track
-
-      track.onended = () => {
-        void this.stopScreenShare()
-      }
-
-      if (this.publisher && this.publisher.connectionState !== 'closed') {
-        this.send({ type: 'publish_intent', kind: 'screen_share', client_track_id: track.id })
-        this.screenSender = this.publisher.addTrack(track, screenStream)
-        const offer = await this.publisher.createOffer()
-        await this.publisher.setLocalDescription(offer)
-        this.send({ type: 'offer', target: 'publisher', sdp: offer.sdp ?? '' })
-      }
-
-      this.send({ type: 'screen_share', enabled: true })
-      this.patch({ isScreenSharing: true, screenStream })
-      return screenStream
-    } catch (err) {
-      console.warn('Screen share cancelled or failed:', err)
+    if (this.state.isScreenSharing && this.state.screenStream) {
+      return this.state.screenStream
+    }
+    if (this.state.status !== 'connected' || !this.publisher) {
+      this.patch({ error: 'Join the room before sharing your screen' })
       return null
     }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      this.patch({ error: 'This browser cannot share a screen' })
+      return null
+    }
+
+    let display: MediaStream
+    try {
+      display = await navigator.mediaDevices.getDisplayMedia({
+        // No `displaySurface` hint: constraining it to 'monitor' makes some
+        // browsers pre-select the whole screen, and sharing one window or one
+        // tab is the common case.
+        video: { frameRate: { ideal: 30, max: 60 } },
+        // The SFU carries one audio track per participant — the microphone —
+        // so asking for system audio would capture something we cannot send.
+        audio: false,
+      })
+    } catch (error) {
+      // Dismissing the picker is a cancellation, not a failure; only a real
+      // fault is worth putting in front of the user.
+      if (!isUserCancellation(error)) {
+        this.patch({ error: 'Could not start the screen share' })
+      }
+      return null
+    }
+
+    const track = display.getVideoTracks()[0]
+    if (!track) {
+      for (const t of display.getTracks()) t.stop()
+      return null
+    }
+
+    // One track per stream. The SFU labels every track it forwards with the
+    // *publisher's* id as the stream id, so a shared stream object would put
+    // somebody's microphone and their screen in the same MediaStream.
+    const screenStream = new MediaStream([track])
+    this.screenTrack = track
+    // "Stop sharing" in the browser's own bar ends the track behind our back.
+    track.addEventListener('ended', () => void this.stopScreenShare())
+
+    try {
+      this.send({ type: 'publish_intent', kind: 'screen_share', client_track_id: track.id })
+      this.screenSender = this.publisher.addTrack(track, screenStream)
+      await this.renegotiatePublisher()
+    } catch {
+      track.stop()
+      this.screenTrack = null
+      this.screenSender = null
+      this.patch({ error: 'Could not publish your screen to the room' })
+      return null
+    }
+
+    this.send({ type: 'screen_share', enabled: true })
+    this.patch({ isScreenSharing: true, screenStream, error: null })
+    return screenStream
   }
 
   async stopScreenShare(): Promise<void> {
-    if (!this.state.isScreenSharing && !this.state.screenStream) return
+    // The track outliving the flag is the case that matters: the browser's own
+    // "stop sharing" bar ends it before any of our state has moved.
+    if (!this.state.isScreenSharing && !this.screenTrack) return
 
-    if (this.screenTrack) {
-      this.screenTrack.stop()
-      this.screenTrack = null
-    }
-    if (this.state.screenStream) {
-      for (const t of this.state.screenStream.getTracks()) {
-        t.stop()
-      }
-    }
+    this.screenTrack?.stop()
+    this.screenTrack = null
+    for (const t of this.state.screenStream?.getTracks() ?? []) t.stop()
 
     if (this.publisher && this.screenSender && this.publisher.connectionState !== 'closed') {
       try {
         this.publisher.removeTrack(this.screenSender)
-        const offer = await this.publisher.createOffer()
-        await this.publisher.setLocalDescription(offer)
-        this.send({ type: 'offer', target: 'publisher', sdp: offer.sdp ?? '' })
+        await this.renegotiatePublisher()
       } catch {
-        // Ignored
+        // The connection is going away anyway; the server drops the track when
+        // it sees the `screen_share` flag below regardless.
       }
-      this.screenSender = null
     }
+    this.screenSender = null
 
     this.send({ type: 'screen_share', enabled: false })
     this.patch({ isScreenSharing: false, screenStream: null })
+  }
+
+  /** Re-offer on the publisher connection after its track set changed. */
+  private async renegotiatePublisher(): Promise<void> {
+    const publisher = this.publisher
+    if (!publisher || publisher.connectionState === 'closed') return
+    const offer = await publisher.createOffer()
+    await publisher.setLocalDescription(offer)
+    this.send({ type: 'offer', target: 'publisher', sdp: offer.sdp ?? '' })
   }
 
   async toggleScreenShare(): Promise<void> {
@@ -335,6 +386,7 @@ export class VoiceClient {
           return
         }
         this.reconnectAttempts = 0
+        this.remoteTracks.clear()
         this.patch({
           status: 'connected',
           selfId: message.participant_id,
@@ -342,6 +394,11 @@ export class VoiceClient {
           error: null,
         })
         await this.negotiate(message.ice_servers ?? session.ice_servers)
+        // Somebody may already have been presenting before we walked in. The
+        // server only auto-subscribes audio, so their screen needs asking for.
+        for (const participant of message.participants) {
+          for (const track of participant.tracks ?? []) this.subscribeToVideo(track)
+        }
         break
       }
 
@@ -434,7 +491,40 @@ export class VoiceClient {
           participants[index] = {
             ...existing,
             screenSharing: isSharing,
+            // The flag arrives before the track does; the tile shows a
+            // "starting…" state until `track_published` brings the pixels.
             screenStream: isSharing ? existing.screenStream : null,
+            screenTrackId: isSharing ? existing.screenTrackId : null,
+          }
+        }
+        break
+      }
+      case 'track_published': {
+        const info = message.track
+        const index = indexOf(info.participant_id)
+        const existing = participants[index]
+        if (existing && info.kind === 'screen_share') {
+          participants[index] = {
+            ...existing,
+            screenSharing: true,
+            screenTrackId: info.track_id,
+          }
+        }
+        // Video is never auto-subscribed — a twenty-person room must not push
+        // nineteen video streams at a phone — so asking is the whole mechanism.
+        this.subscribeToVideo(info)
+        break
+      }
+      case 'track_unpublished': {
+        this.remoteTracks.delete(message.track_id)
+        const index = indexOf(message.participant_id)
+        const existing = participants[index]
+        if (existing && message.kind !== 'audio') {
+          participants[index] = {
+            ...existing,
+            screenSharing: false,
+            screenStream: null,
+            screenTrackId: null,
           }
         }
         break
@@ -444,6 +534,27 @@ export class VoiceClient {
     }
 
     this.patch({ participants })
+  }
+
+  /**
+   * Ask the SFU to start forwarding one remote video track.
+   *
+   * Audio is skipped because the server subscribes everyone to it on join, and
+   * our own tracks are skipped because a participant is not a subscriber to
+   * themselves — the server would reject it and we would render our own screen
+   * twice.
+   */
+  private subscribeToVideo(track: TrackInfo): void {
+    if (track.kind === 'audio') return
+    if (track.participant_id === this.state.selfId) return
+    if (this.remoteTracks.has(track.track_id)) return
+
+    this.remoteTracks.set(track.track_id, track)
+    this.send({
+      type: 'subscribe',
+      participant_id: track.participant_id,
+      track_id: track.track_id,
+    })
   }
 
   // ── WebRTC ──────────────────────────────────────────────────────────────
@@ -458,11 +569,25 @@ export class VoiceClient {
     })
 
     subscriber.addEventListener('track', (event) => {
-      const participantId = participantIdFromTrack(event)
+      const info = this.remoteTracks.get(event.track.id)
+      const participantId = info?.participant_id ?? participantIdFromTrack(event)
       if (!participantId) return
 
-      const isVideo = event.track.kind === 'video'
-      const stream = event.streams[0] ?? new MediaStream([event.track])
+      // The registry is authoritative when it has an entry; the track's own
+      // media kind is the fallback for a stack that renumbered the msid.
+      const isVideo = info ? info.kind !== 'audio' : event.track.kind === 'video'
+
+      // A stream per track: the SFU uses the publisher's id as the stream id
+      // for *all* of their tracks, so `event.streams[0]` is one object holding
+      // both the microphone and the screen.
+      const stream = new MediaStream([event.track])
+
+      if (isVideo) {
+        // The publisher hanging up mid-share ends the track without any room
+        // event arriving, so the tile has to clear itself.
+        event.track.addEventListener('ended', () => this.clearRemoteScreen(participantId))
+      }
+
       const participants = this.state.participants.map((p) => {
         if (p.id !== participantId) return p
         if (isVideo) {
@@ -490,6 +615,22 @@ export class VoiceClient {
     // msid in the offer.
     this.send({ type: 'publish_intent', kind: 'audio', client_track_id: track.id })
     publisher.addTrack(track, this.localStream)
+
+    // A reconnect builds a fresh publisher, so a share that survived the drop
+    // has to be put back on it — in this same offer, not a second one.
+    const screenTrack = this.screenTrack
+    if (screenTrack && screenTrack.readyState === 'live') {
+      this.send({
+        type: 'publish_intent',
+        kind: 'screen_share',
+        client_track_id: screenTrack.id,
+      })
+      this.screenSender = publisher.addTrack(
+        screenTrack,
+        this.state.screenStream ?? new MediaStream([screenTrack]),
+      )
+      this.send({ type: 'screen_share', enabled: true })
+    }
 
     const offer = await publisher.createOffer()
     await publisher.setLocalDescription(offer)
@@ -554,6 +695,16 @@ export class VoiceClient {
 
   // ── plumbing ────────────────────────────────────────────────────────────
 
+  /** Drop a remote share from the UI without waiting for a room event. */
+  private clearRemoteScreen(participantId: string): void {
+    const participants = this.state.participants.map((p) =>
+      p.id === participantId
+        ? { ...p, screenSharing: false, screenStream: null, screenTrackId: null }
+        : p,
+    )
+    this.patch({ participants })
+  }
+
   private sendCandidate(target: 'publisher' | 'subscriber', candidate: RTCIceCandidate): void {
     this.send({
       type: 'ice_candidate',
@@ -588,6 +739,10 @@ export class VoiceClient {
     this.subscriber?.close()
     this.publisher = null
     this.subscriber = null
+    // The sender belonged to the closed publisher; the *track* deliberately
+    // survives, so `negotiate` can put the share back on the new connection.
+    this.screenSender = null
+    this.remoteTracks.clear()
 
     if (this.socket) {
       this.socket.onclose = null
@@ -611,14 +766,31 @@ export class VoiceClient {
 }
 
 function toRemote(info: ParticipantInfo): RemoteParticipant {
+  const screen = info.tracks?.find((track) => track.kind === 'screen_share')
   return {
     id: info.participant_id,
     userId: info.user_id,
     displayName: info.display_name,
     muted: info.audio_muted,
     speaking: false,
+    screenSharing: info.screen_sharing || screen !== undefined,
+    screenTrackId: screen?.track_id ?? null,
     stream: null,
+    screenStream: null,
   }
+}
+
+/**
+ * Did the user dismiss the picker, rather than something going wrong?
+ *
+ * Both come back as an exception from `getDisplayMedia`, and only one of them
+ * deserves an error message.
+ */
+function isUserCancellation(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'NotAllowedError' || error.name === 'AbortError')
+  )
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

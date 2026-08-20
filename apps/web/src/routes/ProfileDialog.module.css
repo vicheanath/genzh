@@ -140,7 +140,7 @@
 }
 
 .switch:checked {
-  background: var(--color-success, #23a55a);
+  background: var(--color-success);
 }
 
 .switch::before {

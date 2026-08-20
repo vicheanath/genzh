@@ -52,9 +52,12 @@ textarea {
 }
 
 h1, h2, h3, h4 {
-  font-weight: 650;
+  /* Titles run on the display face; everything else stays on the UI stack.
+     The tighter tracking is what keeps the wider face from reading loose. */
+  font-family: var(--font-display);
+  font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 a { color: var(--color-accent-text); }
@@ -62,6 +65,16 @@ a { color: var(--color-accent-text); }
 ::selection {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
+}
+
+/* A utility, not a component: anything that wants the signature gradient as
+   text — the brand mark, an empty-state headline — asks for it here rather
+   than repeating the four-property incantation. */
+.gradientText {
+  background: var(--gradient-accent);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 /* Keyboard users get a ring; pointer users do not. */

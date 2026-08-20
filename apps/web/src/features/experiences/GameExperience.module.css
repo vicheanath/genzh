@@ -223,7 +223,7 @@
 
 .timerWarning {
   background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  color: var(--color-danger);
   animation: pulse 1s infinite;
 }
 
@@ -292,13 +292,13 @@
 
 .triviaOptionCorrect {
   background: rgba(16, 185, 129, 0.15) !important;
-  border-color: #10b981 !important;
-  color: #10b981;
+  border-color: var(--color-success) !important;
+  color: var(--color-success);
 }
 
 .triviaOptionWrong {
   background: rgba(239, 68, 68, 0.15) !important;
-  border-color: #ef4444 !important;
+  border-color: var(--color-danger) !important;
 }
 
 .explanationCard {

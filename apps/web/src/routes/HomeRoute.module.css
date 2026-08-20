@@ -74,7 +74,7 @@
   font-size: var(--text-base);
   font-weight: 700;
   background: var(--color-accent);
-  color: var(--color-accent-contrast, #ffffff);
+  color: var(--color-accent-contrast);
   border-radius: var(--radius-full);
   border: none;
   cursor: pointer;

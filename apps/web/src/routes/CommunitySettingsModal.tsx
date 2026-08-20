@@ -377,7 +377,7 @@ export function CommunitySettingsModal({
                     <Avatar name={name || community.name} src={iconUrl || community.icon_url} size="xl" />
                     <div>
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{name || community.name}</h3>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
                         Created {new Date(community.created_at).toLocaleDateString()}
                       </p>
                     </div>
@@ -419,7 +419,7 @@ export function CommunitySettingsModal({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Server Invite ID</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
                           {community.id}
                         </div>
                       </div>
@@ -477,7 +477,7 @@ export function CommunitySettingsModal({
                           <div key={perm.id} className={styles.permItem}>
                             <div>
                               <div className={styles.permLabel}>{perm.label}</div>
-                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
                                 {perm.description}
                               </div>
                             </div>
@@ -562,7 +562,7 @@ export function CommunitySettingsModal({
                               <span style={{ fontWeight: 600 }}>{prof?.display_name ?? 'Loading…'}</span>
                               {isMemOwner && <CrownIcon size={14} style={{ color: '#f59e0b' }} />}
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
                               @{prof?.handle ?? m.user_id.slice(0, 8)}
                             </div>
                           </div>
@@ -645,7 +645,7 @@ export function CommunitySettingsModal({
                           <span style={{ fontWeight: 600 }}>{room.name}</span>
                           <Badge tone="mint">{room.room_type}</Badge>
                           {room.topic && (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>
                               {room.topic}
                             </span>
                           )}

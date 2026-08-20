@@ -64,11 +64,11 @@
 }
 
 .proLabel {
-  color: #10b981;
+  color: var(--color-success);
 }
 
 .conLabel {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .progressBar {
@@ -81,12 +81,12 @@
 }
 
 .proFill {
-  background: linear-gradient(90deg, #059669, #10b981);
+  background: linear-gradient(90deg, var(--color-success), var(--color-success));
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .conFill {
-  background: linear-gradient(90deg, #ef4444, #dc2626);
+  background: linear-gradient(90deg, var(--color-danger), var(--color-danger));
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -113,7 +113,7 @@
 
 .proBtn {
   background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
+  color: var(--color-success);
   border-color: rgba(16, 185, 129, 0.3);
 }
 
@@ -123,7 +123,7 @@
 
 .conBtn {
   background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  color: var(--color-danger);
   border-color: rgba(239, 68, 68, 0.3);
 }
 
@@ -239,14 +239,14 @@
 
 .sidePickActivePro {
   background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border-color: #10b981;
+  color: var(--color-success);
+  border-color: var(--color-success);
 }
 
 .sidePickActiveCon {
   background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border-color: #ef4444;
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
 .inputRow {
@@ -286,11 +286,11 @@
 }
 
 .proPointCard {
-  border-left: 4px solid #10b981;
+  border-left: 4px solid var(--color-success);
 }
 
 .conPointCard {
-  border-left: 4px solid #ef4444;
+  border-left: 4px solid var(--color-danger);
 }
 
 .pointHeader {

@@ -55,8 +55,8 @@
 
 .timerExpiring {
   background: rgba(239, 68, 68, 0.15);
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--color-danger);
+  color: var(--color-danger);
   animation: flash 1s infinite;
 }
 

@@ -331,7 +331,11 @@ function ChannelSidebar({
   return (
     <div className={styles.sidebar}>
       <header className={styles.sidebarHeader}>
-        <span className={styles.sidebarTitle}>{community?.name ?? 'genzh'}</span>
+        {/* Outside a community the header is the wordmark, so it gets the
+            gradient; a community's own name stays plain text. */}
+        <span className={cx(styles.sidebarTitle, !community && styles.sidebarBrand)}>
+          {community?.name ?? 'genzh'}
+        </span>
         {community && (
           <NavLink
             to={`/c/${community.id}`}
@@ -547,7 +551,7 @@ function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
         iconOnly
         onClick={toggleMute}
         aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-        style={isMuted ? { color: 'var(--color-danger, #ed4245)' } : undefined}
+        style={isMuted ? { color: 'var(--color-danger)' } : undefined}
       >
         {isMuted ? <MicOffIcon size={16} /> : <MicIcon size={16} />}
       </Button>
@@ -558,7 +562,7 @@ function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
         iconOnly
         onClick={toggleDeafen}
         aria-label={isDeafened ? 'Undeafen audio' : 'Deafen audio'}
-        style={isDeafened ? { color: 'var(--color-danger, #ed4245)' } : undefined}
+        style={isDeafened ? { color: 'var(--color-danger)' } : undefined}
       >
         {isDeafened ? <PhoneOffIcon size={16} /> : <HeadphonesIcon size={16} />}
       </Button>
