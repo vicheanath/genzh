@@ -1,6 +1,6 @@
 //! Persistence for communities, members and roles.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use genzh_domain::community::{Community, CommunityMember, Role, RoleTemplate};
 use genzh_domain::{CommunityId, Permission, RoleId, UserId};
@@ -16,6 +16,22 @@ struct PermissionKeyRow {
 #[derive(Debug, sqlx::FromRow)]
 struct RoleIdRow {
     id: RoleId,
+}
+
+/// Row shape for "which member holds which role".
+///
+/// A joined row rather than `Role` plus a separate id, because the whole point
+/// of the query is the pairing.
+#[derive(Debug, sqlx::FromRow)]
+struct MemberRoleRow {
+    user_id: UserId,
+    id: RoleId,
+    community_id: CommunityId,
+    name: String,
+    color: Option<String>,
+    position: i32,
+    is_default: bool,
+    created_at: genzh_domain::Timestamp,
 }
 
 /// Everything that reads or writes community-shaped rows.
@@ -453,5 +469,69 @@ impl CommunityRepository {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Take a role away from a member.
+    ///
+    /// Reports whether a row was actually removed, so the service can tell
+    /// "they no longer have it" from "they never did" — the second is a 404,
+    /// and silently returning success would let a mistyped id read as a
+    /// completed demotion.
+    pub async fn remove_role(
+        &self,
+        community_id: CommunityId,
+        user_id: UserId,
+        role_id: RoleId,
+    ) -> RepositoryResult<bool> {
+        let result = sqlx::query(
+            "DELETE FROM member_roles
+             WHERE community_id = $1 AND user_id = $2 AND role_id = $3",
+        )
+        .bind(community_id)
+        .bind(user_id)
+        .bind(role_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// The roles explicitly assigned in this community, keyed by member.
+    ///
+    /// One query for the whole community rather than one per member: the member
+    /// list is what asks for this, and a lookup per row would turn opening it
+    /// into a hundred round trips.
+    ///
+    /// `@everyone` is deliberately absent. It is implicit — everyone holds it,
+    /// nothing assigns it — so listing it against every member would be a
+    /// column of identical badges saying nothing.
+    pub async fn roles_by_member(
+        &self,
+        community_id: CommunityId,
+    ) -> RepositoryResult<HashMap<UserId, Vec<Role>>> {
+        let rows: Vec<MemberRoleRow> = sqlx::query_as(
+            "SELECT mr.user_id, r.id, r.community_id, r.name, r.color, r.position,
+                    r.is_default, r.created_at
+             FROM member_roles mr
+             JOIN roles r ON r.id = mr.role_id
+             WHERE mr.community_id = $1 AND NOT r.is_default
+             ORDER BY r.position DESC, r.name ASC",
+        )
+        .bind(community_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut out: HashMap<UserId, Vec<Role>> = HashMap::new();
+        for row in rows {
+            out.entry(row.user_id).or_default().push(Role {
+                id: row.id,
+                community_id: row.community_id,
+                name: row.name,
+                color: row.color,
+                position: row.position,
+                is_default: row.is_default,
+                created_at: row.created_at,
+            });
+        }
+        Ok(out)
     }
 }

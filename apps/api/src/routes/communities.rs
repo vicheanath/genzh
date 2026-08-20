@@ -3,7 +3,9 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use genzh_domain::community::{Community, CommunityMember, RoleWithPermissions};
+use genzh_domain::community::{
+    Community, CommunityMember, MemberWithRoles, Role, RoleWithPermissions,
+};
 use genzh_domain::{CommunityId, Permission, RoleId, UserId};
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +47,50 @@ pub struct AddMemberRequest {
     /// Who to add. Absent means "me", i.e. accepting an invite.
     #[serde(default)]
     pub user_id: Option<UserId>,
+}
+
+/// A role as clients see it.
+///
+/// The permission mask is expanded into the same lower-case keys the create and
+/// update bodies accept. Serialising `PermissionSet` directly puts a bitflags
+/// debug string on the wire — `"VIEW_ROOM | SEND_MESSAGE"` — which no client can
+/// round-trip back into a request, and which every other endpoint contradicts
+/// by sending `your_permissions` as keys.
+#[derive(Debug, Serialize)]
+pub struct RoleView {
+    /// The role itself.
+    #[serde(flatten)]
+    pub role: Role,
+    /// What it grants, as permission keys.
+    pub permissions: Vec<Permission>,
+}
+
+impl From<RoleWithPermissions> for RoleView {
+    fn from(value: RoleWithPermissions) -> Self {
+        Self {
+            permissions: value.permissions.to_permissions(),
+            role: value.role,
+        }
+    }
+}
+
+/// A member, with the roles they hold.
+#[derive(Debug, Serialize)]
+pub struct MemberView {
+    /// The membership.
+    #[serde(flatten)]
+    pub member: CommunityMember,
+    /// Roles explicitly assigned to them, `@everyone` excluded.
+    pub roles: Vec<Role>,
+}
+
+impl From<MemberWithRoles> for MemberView {
+    fn from(value: MemberWithRoles) -> Self {
+        Self {
+            member: value.member,
+            roles: value.roles,
+        }
+    }
 }
 
 /// `POST /api/v1/communities/{id}/roles` body.
@@ -227,12 +273,12 @@ pub async fn list_members(
     caller: CurrentUser,
     Path(community_id): Path<CommunityId>,
     Query(query): Query<MemberListQuery>,
-) -> ApiResult<Json<Vec<CommunityMember>>> {
+) -> ApiResult<Json<Vec<MemberView>>> {
     let members = state
         .communities
-        .list_members(community_id, caller.user_id, query.limit.unwrap_or(100))
+        .list_members_with_roles(community_id, caller.user_id, query.limit.unwrap_or(100))
         .await?;
-    Ok(Json(members))
+    Ok(Json(members.into_iter().map(MemberView::from).collect()))
 }
 
 /// `POST /api/v1/communities/{id}/members`
@@ -266,18 +312,30 @@ pub async fn remove_member(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// `DELETE /api/v1/communities/{id}/members/{user_id}/roles/{role_id}`
+pub async fn remove_role(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path((community_id, user_id, role_id)): Path<(CommunityId, UserId, RoleId)>,
+) -> ApiResult<StatusCode> {
+    state
+        .communities
+        .remove_role(community_id, caller.user_id, user_id, role_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// `GET /api/v1/communities/{id}/roles`
 pub async fn list_roles(
     State(state): State<AppState>,
     caller: CurrentUser,
     Path(community_id): Path<CommunityId>,
-) -> ApiResult<Json<Vec<RoleWithPermissions>>> {
-    Ok(Json(
-        state
-            .communities
-            .list_roles(community_id, caller.user_id)
-            .await?,
-    ))
+) -> ApiResult<Json<Vec<RoleView>>> {
+    let roles = state
+        .communities
+        .list_roles(community_id, caller.user_id)
+        .await?;
+    Ok(Json(roles.into_iter().map(RoleView::from).collect()))
 }
 
 /// `POST /api/v1/communities/{id}/roles`
@@ -286,7 +344,7 @@ pub async fn create_role(
     caller: CurrentUser,
     Path(community_id): Path<CommunityId>,
     ApiJson(body): ApiJson<CreateRoleRequest>,
-) -> ApiResult<(StatusCode, Json<RoleWithPermissions>)> {
+) -> ApiResult<(StatusCode, Json<RoleView>)> {
     let role = state
         .communities
         .create_role(
@@ -300,7 +358,7 @@ pub async fn create_role(
             },
         )
         .await?;
-    Ok((StatusCode::CREATED, Json(role)))
+    Ok((StatusCode::CREATED, Json(RoleView::from(role))))
 }
 
 /// `PATCH /api/v1/communities/{id}/roles/{role_id}`
@@ -309,7 +367,7 @@ pub async fn update_role(
     caller: CurrentUser,
     Path((community_id, role_id)): Path<(CommunityId, RoleId)>,
     ApiJson(body): ApiJson<UpdateRoleRequest>,
-) -> ApiResult<Json<RoleWithPermissions>> {
+) -> ApiResult<Json<RoleView>> {
     let permissions = body
         .permissions
         .as_deref()
@@ -330,7 +388,7 @@ pub async fn update_role(
             },
         )
         .await?;
-    Ok(Json(role))
+    Ok(Json(RoleView::from(role)))
 }
 
 /// `POST /api/v1/communities/{id}/members/{user_id}/roles`

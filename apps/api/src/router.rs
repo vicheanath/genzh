@@ -58,6 +58,10 @@ pub fn build(state: AppState) -> Router {
             "/communities/{id}/members/{user_id}/roles",
             post(routes::communities::assign_role),
         )
+        .route(
+            "/communities/{id}/members/{user_id}/roles/{role_id}",
+            delete(routes::communities::remove_role),
+        )
         // ---- roles ----
         .route(
             "/communities/{id}/roles",

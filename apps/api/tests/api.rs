@@ -832,3 +832,213 @@ async fn a_message_cannot_name_the_whole_community() {
     .await
     .expect_status(StatusCode::BAD_REQUEST);
 }
+
+// ── roles on members ───────────────────────────────────────────────────────
+
+/// The member list is where an assignment becomes visible.
+///
+/// It did not used to be: assigning succeeded, returned 204, and every screen
+/// showing members kept displaying exactly what it had before, because the
+/// listing carried no roles at all. There was also no way to undo one.
+#[tokio::test]
+async fn a_members_roles_are_listed_assignable_and_removable() {
+    let Some(api) = boot().await else {
+        return skip("a_members_roles_are_listed_assignable_and_removable");
+    };
+
+    let alice = api.register("roles1").await;
+    let bob = api.register("roles2").await;
+    let community_id = api.create_community(&alice, "Role Test").await;
+
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&bob.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+
+    let role = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/roles"),
+            Some(&alice.access_token),
+            Some(serde_json::json!({
+                "name": "moderator",
+                "color": "#7c3aed",
+                "permissions": ["view_room", "send_message", "mute_members"],
+            })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+    let role_id = role.json["id"].as_str().expect("role id").to_owned();
+
+    // Permissions come back as the keys they went in as, not as a bitfield.
+    assert_eq!(
+        role.json["permissions"],
+        serde_json::json!(["view_room", "send_message", "mute_members"]),
+        "a role must round-trip through the API unchanged"
+    );
+
+    let roles_before = members_named(&api, &alice, &community_id, &bob.user_id).await;
+    assert!(
+        roles_before.is_empty(),
+        "a member with no assignment has no roles, and `@everyone` is implicit"
+    );
+
+    api.send(
+        "POST",
+        &format!(
+            "/api/v1/communities/{community_id}/members/{}/roles",
+            bob.user_id
+        ),
+        Some(&alice.access_token),
+        Some(serde_json::json!({ "role_id": role_id })),
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    assert_eq!(
+        members_named(&api, &alice, &community_id, &bob.user_id).await,
+        vec!["moderator".to_owned()],
+        "the assignment has to show up where members are listed"
+    );
+
+    api.send(
+        "DELETE",
+        &format!(
+            "/api/v1/communities/{community_id}/members/{}/roles/{role_id}",
+            bob.user_id
+        ),
+        Some(&alice.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    assert!(
+        members_named(&api, &alice, &community_id, &bob.user_id)
+            .await
+            .is_empty(),
+        "removing a role has to take it off the member"
+    );
+
+    // Removing it twice is a 404 rather than a silent success: the second call
+    // did not do what it says it did.
+    api.send(
+        "DELETE",
+        &format!(
+            "/api/v1/communities/{community_id}/members/{}/roles/{role_id}",
+            bob.user_id
+        ),
+        Some(&alice.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_member_cannot_strip_a_role_they_could_not_grant() {
+    let Some(api) = boot().await else {
+        return skip("a_member_cannot_strip_a_role_they_could_not_grant");
+    };
+
+    let owner = api.register("roles3").await;
+    let deputy = api.register("roles4").await;
+    let community_id = api.create_community(&owner, "Hierarchy").await;
+
+    for account in [&deputy] {
+        api.send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/members"),
+            Some(&account.access_token),
+            Some(serde_json::json!({})),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+    }
+
+    // A role that can manage roles, and an administrator role it must not be
+    // able to touch.
+    let manager = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/roles"),
+            Some(&owner.access_token),
+            Some(serde_json::json!({
+                "name": "role-manager",
+                "permissions": ["view_room", "manage_roles"],
+            })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+    let admin = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/roles"),
+            Some(&owner.access_token),
+            Some(serde_json::json!({ "name": "admin", "permissions": ["administrator"] })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+
+    api.send(
+        "POST",
+        &format!(
+            "/api/v1/communities/{community_id}/members/{}/roles",
+            deputy.user_id
+        ),
+        Some(&owner.access_token),
+        Some(serde_json::json!({ "role_id": manager.json["id"].as_str().expect("role id") })),
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    // The deputy may manage roles, but not this one: taking `administrator`
+    // off somebody is a power that needs `administrator`.
+    api.send(
+        "DELETE",
+        &format!(
+            "/api/v1/communities/{community_id}/members/{}/roles/{}",
+            owner.user_id,
+            admin.json["id"].as_str().expect("role id")
+        ),
+        Some(&deputy.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::FORBIDDEN);
+}
+
+/// The role names the member list reports for one member.
+async fn members_named(
+    api: &harness::TestApi,
+    caller: &harness::Account,
+    community_id: &str,
+    user_id: &str,
+) -> Vec<String> {
+    let response = api
+        .send(
+            "GET",
+            &format!("/api/v1/communities/{community_id}/members"),
+            Some(&caller.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK);
+
+    response
+        .json
+        .as_array()
+        .expect("members array")
+        .iter()
+        .find(|member| member["user_id"].as_str() == Some(user_id))
+        .expect("the member is listed")["roles"]
+        .as_array()
+        .expect("roles array")
+        .iter()
+        .map(|role| role["name"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}

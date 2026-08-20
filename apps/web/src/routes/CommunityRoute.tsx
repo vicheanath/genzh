@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
@@ -40,8 +40,10 @@ import { cx } from '@/lib/cx'
 import { useAsync } from '@/lib/useAsync'
 import { can } from '@/lib/permissions'
 
+import { CommunitySettingsModal } from '@/features/community-settings'
+import { useIsMobile } from '@/lib/useMediaQuery'
+
 import type { ShellContext } from './AppShell'
-import { CommunitySettingsModal } from './CommunitySettingsModal'
 import { MemberList } from './MemberList'
 
 import styles from './CommunityRoute.module.css'
@@ -82,7 +84,14 @@ export function CommunityRoute() {
   const toast = useToast()
 
   const [activeTab, setActiveTab] = useState<CommunityTab>('channels')
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const isMobile = useIsMobile()
+  // A desktop visitor sent here from `/c/:id/settings` — a shared link, or a
+  // window that grew past the breakpoint — arrives wanting settings, not the
+  // server page they were redirected onto.
+  const location = useLocation()
+  const [settingsOpen, setSettingsOpen] = useState(
+    () => (location.state as { openSettings?: boolean } | null)?.openSettings === true,
+  )
   const [showCreateRoom, setShowCreateRoom] = useState(false)
 
   const community = useAsync(
@@ -208,7 +217,14 @@ export function CommunityRoute() {
                     size="sm"
                     variant="ghost"
                     iconOnly
-                    onClick={() => setSettingsOpen(true)}
+                    // A phone gets the settings *screen*; the dialog is a
+                    // desktop shape, and on one column it is a page pretending
+                    // not to be one.
+                    onClick={() =>
+                      isMobile
+                        ? void navigate(`/c/${communityId}/settings`)
+                        : setSettingsOpen(true)
+                    }
                     aria-label="Server Settings"
                   >
                     <SettingsIcon size={16} />
@@ -441,19 +457,22 @@ export function CommunityRoute() {
         )}
       </div>
 
-      <CommunitySettingsModal
-        open={settingsOpen}
-        community={community.data}
-        onClose={() => setSettingsOpen(false)}
-        onCommunityUpdated={() => {
-          community.reload()
-          reloadCommunities()
-        }}
-        onCommunityDeleted={() => {
-          reloadCommunities()
-          void navigate('/')
-        }}
-      />
+      {!isMobile && (
+        <CommunitySettingsModal
+          open={settingsOpen}
+          community={community.data}
+          onClose={() => setSettingsOpen(false)}
+          onCommunityUpdated={() => {
+            community.reload()
+            reloadCommunities()
+            reloadRooms()
+          }}
+          onCommunityDeleted={() => {
+            reloadCommunities()
+            void navigate('/')
+          }}
+        />
+      )}
     </div>
   )
 }

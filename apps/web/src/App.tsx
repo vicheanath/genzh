@@ -12,6 +12,7 @@ import { PresenceProvider } from '@/lib/usePresence'
 import { AccountRoute } from './routes/AccountRoute'
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
+import { CommunitySettingsRoute } from './routes/CommunitySettingsRoute'
 import { ExploreRoute } from './routes/ExploreRoute'
 import { FriendsRoute } from './routes/FriendsRoute'
 import { HomeRoute } from './routes/HomeRoute'
@@ -104,6 +105,11 @@ function Router() {
         <Route path="/notifications" element={<MobileOnly to="/"><NotificationsRoute /></MobileOnly>} />
         <Route path="/me" element={<MobileOnly to="/"><AccountRoute /></MobileOnly>} />
         <Route path="/c/:communityId" element={<CommunityRoute />} />
+        {/* Settings is a screen on a phone and a dialog on a desktop, where the
+            route redirects onto the server it belongs to and opens the dialog
+            there — it does its own redirect rather than using `MobileOnly`,
+            which cannot know the community in the URL. */}
+        <Route path="/c/:communityId/settings" element={<CommunitySettingsRoute />} />
         <Route path="/c/:communityId/r/:roomId" element={<RoomRoute />} />
         <Route path="/rooms/:roomId" element={<RoomRoute />} />
       </Route>

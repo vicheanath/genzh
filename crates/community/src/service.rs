@@ -1,6 +1,8 @@
 //! The community application service.
 
-use genzh_domain::community::{self, Community, CommunityMember, Role, RoleWithPermissions};
+use genzh_domain::community::{
+    self, Community, CommunityMember, MemberWithRoles, Role, RoleWithPermissions,
+};
 use genzh_domain::{CommunityId, DomainError, Permission, PermissionSet, RoleId, UserId, now};
 use genzh_infrastructure::{DbPool, ServiceError, ServiceResult};
 
@@ -302,6 +304,30 @@ impl CommunityService {
             .await?)
     }
 
+    /// List members, each with the roles they hold.
+    ///
+    /// Separate from [`Self::list_members`] rather than replacing it: the
+    /// authorization path asks "is this person a member" far more often than
+    /// any screen asks "what does everyone here have", and that question should
+    /// not pay for a second query.
+    pub async fn list_members_with_roles(
+        &self,
+        community_id: CommunityId,
+        user_id: UserId,
+        limit: i64,
+    ) -> ServiceResult<Vec<MemberWithRoles>> {
+        let members = self.list_members(community_id, user_id, limit).await?;
+        let mut by_member = self.repository.roles_by_member(community_id).await?;
+
+        Ok(members
+            .into_iter()
+            .map(|member| MemberWithRoles {
+                roles: by_member.remove(&member.user_id).unwrap_or_default(),
+                member,
+            })
+            .collect())
+    }
+
     /// Create a role.
     pub async fn create_role(
         &self,
@@ -428,6 +454,50 @@ impl CommunityService {
         self.repository
             .assign_role(community_id, target_id, role_id)
             .await?;
+        Ok(())
+    }
+
+    /// Take a role away from a member.
+    ///
+    /// Guarded like assigning, and for a related reason: the escalation check
+    /// stops someone with `manage_roles` from stripping powers they do not
+    /// themselves hold — demoting the owner out of their own community would
+    /// otherwise be one request away.
+    pub async fn remove_role(
+        &self,
+        community_id: CommunityId,
+        actor_id: UserId,
+        target_id: UserId,
+        role_id: RoleId,
+    ) -> ServiceResult<()> {
+        let context = self.member_context(community_id, actor_id).await?;
+        context.require(Permission::ManageRoles)?;
+
+        let role = self
+            .repository
+            .find_role(community_id, role_id)
+            .await?
+            .ok_or_else(|| ServiceError::not_found("role"))?;
+
+        // `@everyone` is not held by assignment, so it cannot be taken away;
+        // removing it would mean removing the membership.
+        if role.is_default {
+            return Err(ServiceError::Domain(DomainError::invalid(
+                "role_id",
+                "the default role cannot be removed from a member",
+            )));
+        }
+
+        let granted = self.repository.role_permissions(role_id).await?;
+        guard_privilege_escalation(&context, granted)?;
+
+        if !self
+            .repository
+            .remove_role(community_id, target_id, role_id)
+            .await?
+        {
+            return Err(ServiceError::not_found("member_role"));
+        }
         Ok(())
     }
 

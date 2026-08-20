@@ -96,6 +96,13 @@ export interface CommunityMember {
   user_id: Uuid
   nickname: string | null
   joined_at: Timestamp
+  /**
+   * Roles explicitly assigned to this member, highest position first.
+   *
+   * `@everyone` is not in here: every member holds it, so a badge for it would
+   * appear against all of them and distinguish nobody.
+   */
+  roles: Role[]
 }
 
 export interface RoomAnonymousIdentity {
@@ -245,7 +252,7 @@ export interface Role {
   created_at: Timestamp
 }
 
-export interface RoleWithPermissions {
+export interface Role {
   id: Uuid
   community_id: Uuid
   name: string
@@ -253,7 +260,16 @@ export interface RoleWithPermissions {
   position: number
   is_default: boolean
   created_at: Timestamp
-  permissions: number
+}
+
+export interface RoleWithPermissions extends Role {
+  /**
+   * What the role grants, as permission keys.
+   *
+   * The same vocabulary `your_permissions` uses and the same the create/update
+   * bodies take, so a role can be read, edited and sent back unchanged.
+   */
+  permissions: Permission[]
 }
 
 export interface CreateRoleInput {

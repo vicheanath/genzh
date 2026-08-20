@@ -148,6 +148,12 @@ export const communities = {
       token,
     }),
 
+  removeRole: (token: string, id: Uuid, userId: Uuid, roleId: Uuid) =>
+    request<void>(`/api/v1/communities/${id}/members/${userId}/roles/${roleId}`, {
+      method: 'DELETE',
+      token,
+    }),
+
   assignRole: (token: string, id: Uuid, userId: Uuid, roleId: Uuid) =>
     request<void>(`/api/v1/communities/${id}/members/${userId}/roles`, {
       method: 'POST',

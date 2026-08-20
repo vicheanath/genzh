@@ -152,6 +152,23 @@ pub struct RoleWithPermissions {
     pub permissions: PermissionSet,
 }
 
+/// A member together with the roles they have been given.
+///
+/// The member row and their roles are two tables, and every screen that lists
+/// members wants both — who is here, and what they can do. Pairing them here
+/// keeps that from being two requests and a join in the client.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemberWithRoles {
+    /// The membership itself.
+    #[serde(flatten)]
+    pub member: CommunityMember,
+    /// Roles explicitly assigned, highest position first.
+    ///
+    /// Excludes `@everyone`: every member holds it by definition, so listing it
+    /// would say nothing about anyone.
+    pub roles: Vec<Role>,
+}
+
 /// Validate a community name.
 pub fn validate_community_name(raw: &str) -> DomainResult<String> {
     let name = raw.trim().to_owned();
