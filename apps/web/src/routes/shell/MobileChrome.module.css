@@ -1,0 +1,71 @@
+/*
+ * The phone frame: a title bar at the top and a tab bar at the bottom.
+ *
+ * Separate from AppShell.module.css because these rules belong to a layout the
+ * desktop shell never renders — keeping them together made it hard to see which
+ * half of the file applied to which frame.
+ */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 3.25rem;
+  flex-shrink: 0;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.topBarTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileNav {
+  display: flex;
+  flex-shrink: 0;
+  height: var(--mobile-nav-height);
+  /* The home-indicator strip on a phone would otherwise sit on top of the
+     labels. */
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.mobileNavItem {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--color-text-subtle);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.mobileNavItem:hover { color: var(--color-text); }
+
+.mobileNavItemActive { color: var(--color-accent-text); }
+
+/* Anchors the unread badge to the icon rather than to the whole tab, so it
+   sits on the bell instead of floating over the label. */
+.iconSlot {
+  position: relative;
+  display: grid;
+  place-items: center;
+}

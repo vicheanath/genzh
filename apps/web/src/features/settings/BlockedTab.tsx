@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
-import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
+import { UserRow } from '@/components/UserRow'
 import { useToast } from '@/components/Toast'
 import { ApiError, blocks as blocksApi, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -95,25 +95,19 @@ export function BlockedTab() {
         {current.map((id) => {
           const profile = lookup(id)
           return (
-            <div key={id} className={styles.blockedRow}>
-              <div className={styles.blockedWho}>
-                <Avatar
-                  name={profile?.display_name ?? '?'}
-                  src={profile?.avatar_url}
-                  color={profile?.accent_color}
-                  size="sm"
-                />
-                <div>
-                  <div className={styles.blockedName}>{profile?.display_name ?? id}</div>
-                  <div className={styles.accountKey}>
-                    @{profile?.handle ?? id.slice(0, 8)}
-                  </div>
-                </div>
-              </div>
-              <Button size="sm" variant="secondary" onClick={() => void handleUnblock(id)}>
-                Unblock
-              </Button>
-            </div>
+            <UserRow
+              key={id}
+              name={profile?.display_name ?? id}
+              avatarUrl={profile?.avatar_url}
+              accentColor={profile?.accent_color}
+              secondary={`@${profile?.handle ?? id.slice(0, 8)}`}
+              size="sm"
+              actions={
+                <Button size="sm" variant="secondary" onClick={() => void handleUnblock(id)}>
+                  Unblock
+                </Button>
+              }
+            />
           )
         })}
       </div>

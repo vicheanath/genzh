@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { Avatar } from '@/components/Avatar'
+import { UserRow } from '@/components/UserRow'
 import { Skeleton } from '@/components/Skeleton'
 import {
   communities as communitiesApi,
@@ -58,30 +58,25 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
             const profile = lookup(member.user_id)
             const name = member.nickname ?? profile?.display_name ?? 'Loading…'
             return (
-              <div
+              <UserRow
                 key={member.user_id}
-                className={styles.member}
-                style={{ cursor: 'pointer' }}
-                onClick={() => {
+                name={name}
+                avatarUrl={profile?.avatar_url}
+                accentColor={profile?.accent_color}
+                presence={isOnline(member.user_id) ? 'online' : 'offline'}
+                secondary={profile ? `@${profile.handle}` : undefined}
+                tintName
+                size="sm"
+                onSelect={() => {
                   setSelectedUserId(member.user_id)
                   setDialogOpen(true)
                 }}
-              >
-                <Avatar
-                  name={name}
-                  src={profile?.avatar_url}
-                  color={profile?.accent_color}
-                  size="sm"
-                  presence={isOnline(member.user_id) ? 'online' : 'offline'}
-                />
-                <div className={styles.identity}>
-                  <div className={styles.name} style={{ color: profile?.accent_color ?? undefined }}>
-                    {name}
-                  </div>
-                  {profile && <div className={styles.handle}>@{profile.handle}</div>}
-                </div>
-                {member.user_id === user?.id && <span className={styles.youTag}>you</span>}
-              </div>
+                actions={
+                  member.user_id === user?.id ? (
+                    <span className={styles.youTag}>you</span>
+                  ) : undefined
+                }
+              />
             )
           })}
         </div>

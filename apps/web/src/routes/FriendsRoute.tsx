@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 
-import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -23,6 +22,7 @@ import { Menu, MenuItem } from '@/components/Menu'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
+import { UserRow } from '@/components/UserRow'
 import {
   ApiError,
   blocks as blocksApi,
@@ -270,7 +270,7 @@ export function FriendsRoute() {
             {friends.loading && (
               <div className={styles.list}>
                 {Array.from({ length: 3 }, (_, i) => (
-                  <div key={i} className={styles.row}>
+                  <div key={i} className={styles.skeletonRow}>
                     <Skeleton circle width="2.4rem" height="2.4rem" />
                     <Skeleton width="45%" height="1rem" />
                   </div>
@@ -300,64 +300,57 @@ export function FriendsRoute() {
                 {filteredFriends.map((friendId) => {
                   const prof = lookup(friendId)
                   return (
-                    <div key={friendId} className={styles.row}>
-                      <Avatar
-                        name={prof?.display_name ?? '?'}
-                        src={prof?.avatar_url}
-                        color={prof?.accent_color}
-                        size="md"
-                        presence={isOnline(friendId) ? 'online' : 'offline'}
-                      />
-                      <div
-                        className={styles.identity}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => {
-                          setSelectedUserId(friendId)
-                          setProfileDialogOpen(true)
-                        }}
-                      >
-                        <div className={styles.name}>{prof?.display_name ?? 'Loading…'}</div>
-                        <div className={styles.meta}>@{prof?.handle ?? friendId.slice(0, 8)}</div>
-                      </div>
+                    <UserRow
+                      key={friendId}
+                      name={prof?.display_name ?? 'Loading…'}
+                      avatarUrl={prof?.avatar_url}
+                      accentColor={prof?.accent_color}
+                      presence={isOnline(friendId) ? 'online' : 'offline'}
+                      secondary={`@${prof?.handle ?? friendId.slice(0, 8)}`}
+                      onSelect={() => {
+                        setSelectedUserId(friendId)
+                        setProfileDialogOpen(true)
+                      }}
+                      actions={
+                        <>
+                          <button
+                            type="button"
+                            className={styles.actionButton}
+                            onClick={() => void openDM(friendId)}
+                            aria-label="Direct message"
+                            title="Send a direct message"
+                          >
+                            <MessageSquareIcon size={16} />
+                          </button>
 
-                      <div className={styles.actions}>
-                        <button
-                          type="button"
-                          className={styles.actionButton}
-                          onClick={() => void openDM(friendId)}
-                          aria-label="Direct message"
-                          title="Send Direct Message"
-                        >
-                          <MessageSquareIcon size={16} />
-                        </button>
-
-                        <Menu
-                          trigger={
-                            <button
-                              type="button"
-                              className={styles.actionButton}
-                              aria-label="More options"
+                          <Menu
+                            trigger={
+                              <button
+                                type="button"
+                                className={styles.actionButton}
+                                aria-label="More options"
+                              >
+                                <MoreIcon size={16} />
+                              </button>
+                            }
+                          >
+                            <MenuItem
+                              icon={<TrashIcon size={15} />}
+                              onClick={() => void removeFriend(friendId)}
                             >
-                              <MoreIcon size={16} />
-                            </button>
-                          }
-                        >
-                          <MenuItem
-                            icon={<TrashIcon size={15} />}
-                            onClick={() => void removeFriend(friendId)}
-                          >
-                            Remove Friend
-                          </MenuItem>
-                          <MenuItem
-                            tone="danger"
-                            icon={<ShieldIcon size={15} />}
-                            onClick={() => void blockUser(friendId)}
-                          >
-                            Block User
-                          </MenuItem>
-                        </Menu>
-                      </div>
-                    </div>
+                              Remove friend
+                            </MenuItem>
+                            <MenuItem
+                              tone="danger"
+                              icon={<ShieldIcon size={15} />}
+                              onClick={() => void blockUser(friendId)}
+                            >
+                              Block user
+                            </MenuItem>
+                          </Menu>
+                        </>
+                      }
+                    />
                   )
                 })}
               </div>
@@ -373,7 +366,7 @@ export function FriendsRoute() {
             {requests.loading && (
               <div className={styles.list}>
                 {Array.from({ length: 2 }, (_, i) => (
-                  <div key={i} className={styles.row}>
+                  <div key={i} className={styles.skeletonRow}>
                     <Skeleton circle width="2.4rem" height="2.4rem" />
                     <Skeleton width="40%" height="1rem" />
                   </div>
@@ -392,39 +385,31 @@ export function FriendsRoute() {
                 {requests.data.map((req) => {
                   const prof = lookup(req.requester_id)
                   return (
-                    <div key={req.requester_id} className={styles.row}>
-                      <Avatar
-                        name={prof?.display_name ?? '?'}
-                        src={prof?.avatar_url}
-                        color={prof?.accent_color}
-                        size="md"
-                      />
-                      <div className={styles.identity}>
-                        <div className={styles.name}>{prof?.display_name ?? 'Loading…'}</div>
-                        <div className={styles.meta}>
-                          Incoming Friend Request · asked {formatRelative(req.created_at)}
-                        </div>
-                      </div>
-
-                      <div className={styles.actions}>
-                        <Button
-                          size="sm"
-                          onClick={() => void respond(req.requester_id, true)}
-                        >
-                          <CheckIcon size={15} />
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => void respond(req.requester_id, false)}
-                          aria-label="Decline request"
-                        >
-                          <XIcon size={15} />
-                          Decline
-                        </Button>
-                      </div>
-                    </div>
+                    <UserRow
+                      key={req.requester_id}
+                      name={prof?.display_name ?? 'Loading…'}
+                      avatarUrl={prof?.avatar_url}
+                      accentColor={prof?.accent_color}
+                      presence={isOnline(req.requester_id) ? 'online' : 'offline'}
+                      secondary={`Wants to be friends · ${formatRelative(req.created_at)}`}
+                      actions={
+                        <>
+                          <Button size="sm" onClick={() => void respond(req.requester_id, true)}>
+                            <CheckIcon size={15} />
+                            Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void respond(req.requester_id, false)}
+                            aria-label="Decline request"
+                          >
+                            <XIcon size={15} />
+                            Decline
+                          </Button>
+                        </>
+                      }
+                    />
                   )
                 })}
               </div>
@@ -437,24 +422,16 @@ export function FriendsRoute() {
                   {sent.data.map((req) => {
                     const prof = lookup(req.addressee_id)
                     return (
-                      <div key={req.addressee_id} className={styles.row}>
-                        <Avatar
-                          name={prof?.display_name ?? '?'}
-                          src={prof?.avatar_url}
-                          color={prof?.accent_color}
-                          size="md"
-                          presence={isOnline(req.addressee_id) ? 'online' : 'offline'}
-                        />
-                        <div className={styles.identity}>
-                          <div className={styles.name}>{prof?.display_name ?? 'Loading…'}</div>
-                          <div className={styles.meta}>
-                            Awaiting their reply · sent {formatRelative(req.created_at)}
-                          </div>
-                        </div>
-
-                        <div className={styles.actions}>
-                          {/* Withdrawing is the same operation as unfriending:
-                              it deletes the row either way. */}
+                      <UserRow
+                        key={req.addressee_id}
+                        name={prof?.display_name ?? 'Loading…'}
+                        avatarUrl={prof?.avatar_url}
+                        accentColor={prof?.accent_color}
+                        presence={isOnline(req.addressee_id) ? 'online' : 'offline'}
+                        secondary={`Awaiting their reply · sent ${formatRelative(req.created_at)}`}
+                        actions={
+                          // Withdrawing is the same operation as unfriending:
+                          // it deletes the row either way.
                           <Button
                             size="sm"
                             variant="ghost"
@@ -463,8 +440,8 @@ export function FriendsRoute() {
                             <XIcon size={15} />
                             Cancel
                           </Button>
-                        </div>
-                      </div>
+                        }
+                      />
                     )
                   })}
                 </div>
@@ -490,26 +467,22 @@ export function FriendsRoute() {
                 {blockedUsers.map((blockedId) => {
                   const prof = lookup(blockedId)
                   return (
-                    <div key={blockedId} className={styles.row}>
-                      <Avatar
-                        name={prof?.display_name ?? '?'}
-                        src={prof?.avatar_url}
-                        color={prof?.accent_color}
-                        size="md"
-                      />
-                      <div className={styles.identity}>
-                        <div className={styles.name}>{prof?.display_name ?? blockedId}</div>
-                        <div className={styles.meta}>@{prof?.handle ?? blockedId.slice(0, 8)}</div>
-                      </div>
-
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void unblockUser(blockedId)}
-                      >
-                        Unblock
-                      </Button>
-                    </div>
+                    <UserRow
+                      key={blockedId}
+                      name={prof?.display_name ?? blockedId}
+                      avatarUrl={prof?.avatar_url}
+                      accentColor={prof?.accent_color}
+                      secondary={`@${prof?.handle ?? blockedId.slice(0, 8)}`}
+                      actions={
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => void unblockUser(blockedId)}
+                        >
+                          Unblock
+                        </Button>
+                      }
+                    />
                   )
                 })}
               </div>

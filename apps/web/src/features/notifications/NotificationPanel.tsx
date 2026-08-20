@@ -1,17 +1,15 @@
-import { Popover } from '@base-ui/react/popover'
 import { useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { AtSignIcon, BellIcon, MessageSquareIcon, UserPlusIcon } from '@/components/Icons'
 import { Spinner } from '@/components/Spinner'
-import { Tooltip } from '@/components/Tooltip'
 import type { AppNotification, NotificationKind } from '@/lib/api'
 import { cx } from '@/lib/cx'
 import { formatRelative } from '@/lib/time'
 import { useNotifications } from '@/lib/useNotifications'
 import { useProfiles } from '@/lib/useProfiles'
 
-import styles from './NotificationBell.module.css'
+import styles from './notifications.module.css'
 
 const ICONS: Record<NotificationKind, typeof BellIcon> = {
   mention: AtSignIcon,
@@ -40,7 +38,7 @@ function describe(kind: NotificationKind, actor: string): string {
 /**
  * The unread count, as a badge.
  *
- * Shared by both triggers so the desktop bell and the mobile tab can never
+ * Shared by every trigger, so the desktop bell and the mobile tab can never
  * disagree about how many there are.
  */
 export function NotificationBadge({ count }: { count: number }) {
@@ -53,12 +51,13 @@ export function NotificationBadge({ count }: { count: number }) {
 }
 
 /**
- * The list itself, without any chrome around it.
+ * The list of notifications, without any chrome around it.
  *
- * Rendered inside a popover on desktop and a bottom sheet on mobile — the panel
- * is the same either way, only the container that holds it differs.
+ * The one piece both platforms share. Desktop hangs it in a popover off the
+ * user bar; mobile renders it as a whole page. Which container it lands in is
+ * the caller's decision, and the only thing that differs between them.
  */
-export function NotificationPanel({ onNavigate }: { onNavigate?: () => void }) {
+export function NotificationPanel({ showHeader = true }: { showHeader?: boolean }) {
   const { items, unread, loading, markRead, markAllRead } = useNotifications()
   const navigate = useNavigate()
 
@@ -72,20 +71,24 @@ export function NotificationPanel({ onNavigate }: { onNavigate?: () => void }) {
     } else if (item.kind === 'friend_request' || item.kind === 'friend_accepted') {
       void navigate('/friends')
     }
-    // The sheet has to close itself; the popover closes on its own.
-    onNavigate?.()
   }
 
   return (
     <>
-      <header className={styles.header}>
-        <span className={styles.title}>Notifications</span>
-        {unread > 0 && (
-          <button type="button" className={styles.markAll} onClick={() => void markAllRead()}>
-            Mark all read
-          </button>
-        )}
-      </header>
+      {showHeader && (
+        <header className={styles.header}>
+          <span className={styles.title}>Notifications</span>
+          {unread > 0 && (
+            <button
+              type="button"
+              className={styles.markAll}
+              onClick={() => void markAllRead()}
+            >
+              Mark all read
+            </button>
+          )}
+        </header>
+      )}
 
       <div className={styles.list}>
         {loading && items.length === 0 && (
@@ -142,29 +145,5 @@ export function NotificationPanel({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </div>
     </>
-  )
-}
-
-/** The desktop trigger: a bell in the user bar, opening a popover. */
-export function NotificationBell() {
-  const { unread } = useNotifications()
-
-  return (
-    <Popover.Root>
-      <Tooltip content="Notifications">
-        <Popover.Trigger className={styles.trigger} aria-label="Notifications">
-          <BellIcon size={16} />
-          <NotificationBadge count={unread} />
-        </Popover.Trigger>
-      </Tooltip>
-
-      <Popover.Portal>
-        <Popover.Positioner side="top" align="end" sideOffset={8}>
-          <Popover.Popup className={styles.popup}>
-            <NotificationPanel />
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
   )
 }
