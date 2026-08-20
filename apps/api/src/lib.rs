@@ -22,13 +22,19 @@
 //!        ↓
 //!   PostgreSQL
 //! ```
+//!
+//! Alongside that column sits the volatile state — who is online, how much of a
+//! request budget is left, and the fan-out of real-time events. None of it is
+//! held here directly: each is a trait in `genzh_infrastructure` with an
+//! in-memory implementation chosen once, in [`AppState::build`]. Handlers see
+//! only the trait, so the day one process is not enough, the shared-store
+//! implementations drop in underneath them.
 
 pub mod config;
 pub mod error;
 pub mod extract;
 pub mod middleware;
 pub mod notify;
-pub mod presence;
 pub mod router;
 pub mod routes;
 pub mod state;

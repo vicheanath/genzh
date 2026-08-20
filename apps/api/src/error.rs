@@ -16,7 +16,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use genzh_auth::AuthError;
 use genzh_domain::DomainError;
-use genzh_infrastructure::ServiceError;
+use genzh_infrastructure::{ServiceError, StoreError};
 use serde::Serialize;
 
 /// The body of every error response.
@@ -65,6 +65,15 @@ pub enum ApiError {
     /// Too many requests.
     #[error("too many requests")]
     RateLimited,
+
+    /// A volatile store — presence, request budgets, real-time fan-out —
+    /// could not answer.
+    ///
+    /// Separate from [`Self::Service`] because it means something different to
+    /// the caller: the request was valid and a dependency is degraded, so
+    /// retrying is reasonable in a way that retrying a rejected write is not.
+    #[error(transparent)]
+    Store(#[from] StoreError),
 }
 
 impl ApiError {
@@ -98,6 +107,16 @@ impl ApiError {
                 "RATE_LIMITED".to_owned(),
                 "Too many requests, slow down".to_owned(),
             ),
+            // 503 rather than 500: nothing is broken, something is briefly
+            // unreachable, and a client is right to try again shortly.
+            ApiError::Store(error) => {
+                tracing::error!(%error, backend = error.backend_name(), "volatile store failure");
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "STORE_UNAVAILABLE".to_owned(),
+                    "That information is briefly unavailable, try again".to_owned(),
+                )
+            }
         }
     }
 }

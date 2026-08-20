@@ -257,14 +257,14 @@ pub async fn get_or_create_dm(
     // Both sides, not just the recipient: the opener's own sidebar is built
     // from a list they fetched before this room existed, so without this the
     // conversation they just started is missing from it until a reload.
-    //
-    // A send error means nobody is currently listening, which is not a failure.
     if created {
         for user_id in [caller.user_id, target_user_id] {
-            let _ = state.chat_tx.send(ChatServerEvent::DirectRoomOpened {
-                user_id,
-                room_id: room.id,
-            });
+            state
+                .broadcast(ChatServerEvent::DirectRoomOpened {
+                    user_id,
+                    room_id: room.id,
+                })
+                .await;
         }
     }
 

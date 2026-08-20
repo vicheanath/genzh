@@ -87,7 +87,6 @@ dependencies = [
  "genzh-room",
  "http",
  "http-body-util",
- "parking_lot",
  "reqwest",
  "serde",
  "serde_json",
@@ -1118,7 +1117,9 @@ dependencies = [
 name = "genzh-infrastructure"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "genzh-domain",
+ "parking_lot",
  "sqlx",
  "thiserror 2.0.20",
  "tokio",

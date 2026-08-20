@@ -9,19 +9,36 @@ use std::sync::Arc;
 use genzh_auth::{AuthService, JwtService};
 use genzh_community::CommunityService;
 use genzh_graph::SocialService;
-use genzh_infrastructure::{DbPool, PgConfig, RepositoryResult, connect};
+use genzh_infrastructure::{
+    DbPool, EventBus, InMemoryEventBus, InMemoryPresenceStore, InMemoryRateLimiter, PgConfig,
+    PresenceStore, RateLimiter, RepositoryResult, connect,
+};
 use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
 use genzh_notification::NotificationService;
 use genzh_room::{MediaSessionService, RoomService, StaticMediaServers};
 
 use crate::config::Config;
-use crate::middleware::rate_limit::{InMemoryRateLimiter, RateLimiter};
+use crate::routes::ws::ChatServerEvent;
+
+/// Events a WebSocket subscriber may fall behind by before it starts losing
+/// them.
+///
+/// Sized for a burst — a busy room while a client is briefly stalled — not for a
+/// backlog. Anything that must not be lost is written to PostgreSQL before it is
+/// published.
+const EVENT_BUFFER: usize = 4096;
 
 /// Everything a handler can reach.
 ///
 /// Cheap to clone: every field is either an `Arc` or a handle that is itself
 /// `Arc`-backed, so Axum cloning this per request costs a few refcount bumps.
+///
+/// The volatile state — presence, request budgets, real-time fan-out — is held
+/// as `Arc<dyn …>` rather than as the concrete in-memory types. Nothing that
+/// reads these fields can tell what is behind them, which is the point:
+/// [`AppState::build`] is the only code in the process that knows, so pointing
+/// them at a shared store is a change to one constructor.
 #[derive(Clone)]
 pub struct AppState {
     /// Connection pool, for health checks.
@@ -46,10 +63,10 @@ pub struct AppState {
     pub rate_limiter: Arc<dyn RateLimiter>,
     /// Tighter budget for credential endpoints.
     pub auth_rate_limiter: Arc<dyn RateLimiter>,
-    /// Broadcast channel for real-time WebSocket chat interactions.
-    pub chat_tx: tokio::sync::broadcast::Sender<crate::routes::ws::ChatServerEvent>,
+    /// Real-time fan-out to connected WebSocket clients.
+    pub events: Arc<dyn EventBus<ChatServerEvent>>,
     /// Who is currently connected, derived from live WebSockets.
-    pub presence: crate::presence::PresenceRegistry,
+    pub presence: Arc<dyn PresenceStore>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -111,6 +128,11 @@ impl AppState {
             config.ice.clone(),
         ));
 
+        // ── volatile state ──────────────────────────────────────────────────
+        // The only place in the process that names a concrete implementation of
+        // these ports. Running more than one API instance means swapping these
+        // three constructors for shared-store equivalents; every call site
+        // already talks to the trait.
         Ok(Self {
             rate_limiter: InMemoryRateLimiter::new(
                 config.rate_limit_per_minute,
@@ -130,9 +152,22 @@ impl AppState {
             social,
             notifications,
             media,
-            chat_tx: tokio::sync::broadcast::channel(4096).0,
-            presence: crate::presence::PresenceRegistry::new(),
+            events: InMemoryEventBus::new(EVENT_BUFFER),
+            presence: InMemoryPresenceStore::new(),
             config: Arc::new(config),
         })
+    }
+
+    /// Publish a real-time event to whoever is listening.
+    ///
+    /// Fan-out is a courtesy, not part of the request: a client that misses an
+    /// event refetches and sees the truth, whereas failing the write because a
+    /// broadcast did not land would lose the thing the user actually asked for.
+    /// So a failure is logged here and goes no further — and it is decided in
+    /// one place rather than at each of the dozen call sites that publish.
+    pub async fn broadcast(&self, event: ChatServerEvent) {
+        if let Err(error) = self.events.publish(event).await {
+            tracing::warn!(%error, "could not publish a real-time event");
+        }
     }
 }

@@ -146,11 +146,13 @@ async fn deliver(state: &AppState, planned: Vec<NewNotification>) {
     };
 
     for notification in created {
-        // No receivers means nobody is connected to tell; the row is already
-        // safe and they will see it on their next load.
-        let _ = state.chat_tx.send(ChatServerEvent::NotificationCreated {
-            user_id: notification.user_id,
-            notification,
-        });
+        // Reaching nobody is not a failure: the row is already safe, and they
+        // will see it on their next load.
+        state
+            .broadcast(ChatServerEvent::NotificationCreated {
+                user_id: notification.user_id,
+                notification,
+            })
+            .await;
     }
 }

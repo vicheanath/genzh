@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::ApiResult;
 use crate::extract::ApiJson;
 use crate::middleware::CurrentUser;
+use crate::routes::ws::ChatServerEvent;
 use crate::state::AppState;
 
 /// `POST /api/v1/rooms/{id}/messages` body.
@@ -183,12 +184,14 @@ pub async fn post(
         None
     };
 
-    let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageCreated {
-        room_id,
-        message: message.clone(),
-        reactions: Vec::new(),
-        anonymous_author: anonymous_author.clone(),
-    });
+    state
+        .broadcast(ChatServerEvent::MessageCreated {
+            room_id,
+            message: message.clone(),
+            reactions: Vec::new(),
+            anonymous_author: anonymous_author.clone(),
+        })
+        .await;
 
     // An anonymous message still notifies — being mentioned is the point — but
     // names no actor, so it cannot unmask who wrote it.
@@ -237,12 +240,14 @@ pub async fn edit(
         .and_then(|mut map| map.remove(&message_id))
         .unwrap_or_default();
 
-    let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageUpdated {
-        room_id: updated.room_id,
-        message: updated.clone(),
-        reactions,
-        anonymous_author,
-    });
+    state
+        .broadcast(ChatServerEvent::MessageUpdated {
+            room_id: updated.room_id,
+            message: updated.clone(),
+            reactions,
+            anonymous_author,
+        })
+        .await;
 
     Ok(Json(updated))
 }
@@ -263,10 +268,12 @@ pub async fn delete(
 
     state.messaging.delete(message_id, caller.user_id).await?;
 
-    let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageDeleted {
-        room_id: msg.room_id,
-        message_id,
-    });
+    state
+        .broadcast(ChatServerEvent::MessageDeleted {
+            room_id: msg.room_id,
+            message_id,
+        })
+        .await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -284,11 +291,13 @@ pub async fn react(
         .await?;
 
     if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
-        let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::ReactionsUpdated {
-            room_id: msg.room_id,
-            message_id,
-            reactions: reactions.clone(),
-        });
+        state
+            .broadcast(ChatServerEvent::ReactionsUpdated {
+                room_id: msg.room_id,
+                message_id,
+                reactions: reactions.clone(),
+            })
+            .await;
     }
 
     Ok(Json(reactions))
@@ -307,11 +316,13 @@ pub async fn unreact(
         .await?;
 
     if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
-        let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::ReactionsUpdated {
-            room_id: msg.room_id,
-            message_id,
-            reactions: reactions.clone(),
-        });
+        state
+            .broadcast(ChatServerEvent::ReactionsUpdated {
+                room_id: msg.room_id,
+                message_id,
+                reactions: reactions.clone(),
+            })
+            .await;
     }
 
     Ok(Json(reactions))

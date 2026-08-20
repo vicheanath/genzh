@@ -49,10 +49,15 @@ pub async fn online(
                 .filter_map(|id| id.trim().parse::<uuid::Uuid>().ok())
                 .map(UserId)
                 .collect();
-            state.presence.online_among(&ids)
+            state.presence.online_among(&ids).await
         }
-        None => state.presence.online(),
-    };
+        None => state.presence.online().await,
+    }
+    // Unlike the fan-out paths, this *is* the answer the caller asked for.
+    // Returning an empty list on failure would be indistinguishable from
+    // "nobody is online", and a client would render everyone offline and
+    // believe it — so a store that cannot answer says so.
+    ?;
 
     Ok(Json(PresenceResponse { online }))
 }

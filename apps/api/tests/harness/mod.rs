@@ -41,6 +41,18 @@ pub struct TestApi {
 /// Returns `None` when no database is available, which the caller turns into
 /// a skip.
 pub async fn boot() -> Option<TestApi> {
+    boot_with(|_| {}).await
+}
+
+/// Build the API, with a chance to replace the volatile-state implementations
+/// first.
+///
+/// Presence, request budgets and real-time fan-out are `Arc<dyn …>` on
+/// [`api::AppState`], so a test can swap in an implementation that behaves
+/// differently — one that is down, or one with a budget of a single request —
+/// and drive the real router against it. Nothing but this closure changes,
+/// which is the property the ports exist to provide.
+pub async fn boot_with(configure: impl FnOnce(&mut api::AppState)) -> Option<TestApi> {
     let url = std::env::var("TEST_DATABASE_URL")
         .or_else(|_| std::env::var("DATABASE_URL"))
         .ok()?;
@@ -63,7 +75,9 @@ pub async fn boot() -> Option<TestApi> {
         return None;
     }
 
-    let state = api::AppState::build(api_config(url)).await.ok()?;
+    let mut state = api::AppState::build(api_config(url)).await.ok()?;
+    configure(&mut state);
+
     Some(TestApi {
         router: api::router::build(state),
         pool,

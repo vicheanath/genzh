@@ -1,9 +1,25 @@
 //! The room registry.
 //!
-//! Every lookup, creation and destruction of a room goes through here. That is
-//! the whole point: the map behind it is an implementation detail, so swapping
-//! in a shared directory (Redis, or a gossip layer between media servers) later
-//! is a change to this file and nothing else.
+//! Every lookup, creation and destruction of a room goes through here, and the
+//! map behind it is an implementation detail.
+//!
+//! # Why this is not behind a trait
+//!
+//! The volatile state in the control plane — presence, request budgets,
+//! real-time fan-out — is defined as a trait in `genzh-infrastructure` with an
+//! in-memory implementation, so a shared store can replace it. This registry
+//! deliberately is not, and the difference is worth being explicit about.
+//!
+//! What this map holds is not *data about* rooms; it is the rooms themselves —
+//! live peer connections, DTLS sessions and RTP fan-out tasks owned by this
+//! process. None of that can be moved to Redis, because a socket cannot be
+//! serialised. A trait here would be a seam nothing could ever be plugged into.
+//!
+//! Scaling the media plane is therefore a different problem, and it is already
+//! solved a layer up: `MediaServerSelector` in `genzh-room` decides which media
+//! server hosts a room, and every participant of a room is sent to the same
+//! one. More capacity is more media servers behind that selector, not a shared
+//! registry behind this one.
 
 use std::collections::HashMap;
 use std::sync::Arc;

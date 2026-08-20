@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use tokio::time::interval;
 
 use crate::middleware::CurrentUser;
-use crate::presence::PresenceChange;
 use crate::state::AppState;
 
 /// Events broadcasted by the server to clients over WebSocket.
@@ -208,7 +207,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
     }
 
     let mut subscribed_rooms = HashSet::<RoomId>::new();
-    let mut rx = state.chat_tx.subscribe();
+    // Subscribing before the presence announcement below, so this connection
+    // hears about its own arrival like everyone else.
+    let mut events = state.events.subscribe();
 
     // Tracks whoever this connection is counted against, so the disconnect can
     // undo exactly what the connect did even if the token is swapped later.
@@ -222,7 +223,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
             let _ = sender.send(WsMessage::Text(json.into())).await;
         }
         counted_as = Some(user.user_id);
-        announce_presence(&state, user.user_id, state.presence.connect(user.user_id));
+        announce_presence(&state, user.user_id, Connection::Opened).await;
     }
 
     let mut ping_interval = interval(Duration::from_secs(30));
@@ -274,15 +275,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                             announce_presence(
                                                 &state,
                                                 previous,
-                                                state.presence.disconnect(previous),
-                                            );
+                                                Connection::Closed,
+                                            )
+                                            .await;
                                         }
                                         counted_as = Some(uid);
-                                        announce_presence(
-                                            &state,
-                                            uid,
-                                            state.presence.connect(uid),
-                                        );
+                                        announce_presence(&state, uid, Connection::Opened).await;
                                     }
                                     let _ = sender.send(WsMessage::Text(
                                         serde_json::to_string(&ChatServerEvent::Authenticated {
@@ -338,12 +336,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                     }
                                 }
 
-                                let _ = state.chat_tx.send(ChatServerEvent::Typing {
+                                state.broadcast(ChatServerEvent::Typing {
                                     room_id,
                                     user_id: user.user_id,
                                     display_name: name,
                                     is_typing,
-                                });
+                                }).await;
                             }
                             ChatClientCommand::SendMessage { room_id, content, is_anonymous } => {
                                 let Some(ref user) = current_user else { continue; };
@@ -369,12 +367,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                         None
                                     };
 
-                                    let _ = state.chat_tx.send(ChatServerEvent::MessageCreated {
+                                    state.broadcast(ChatServerEvent::MessageCreated {
                                         room_id,
                                         message: message.clone(),
                                         reactions: vec![],
                                         anonymous_author,
-                                    });
+                                    }).await;
 
                                     // The same notification path as the REST
                                     // endpoint, so a mention lands whichever way
@@ -393,11 +391,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                 if let Ok(_) = state.messaging.react(message_id, user.user_id, &reaction).await {
                                     if let Ok(reactions) = state.messaging.reactions_for(room_id, user.user_id, &[message_id]).await {
                                         let summary = reactions.get(&message_id).cloned().unwrap_or_default();
-                                        let _ = state.chat_tx.send(ChatServerEvent::ReactionsUpdated {
+                                        state.broadcast(ChatServerEvent::ReactionsUpdated {
                                             room_id,
                                             message_id,
                                             reactions: summary,
-                                        });
+                                        }).await;
                                     }
                                 }
                             }
@@ -406,11 +404,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                 if let Ok(_) = state.messaging.unreact(message_id, user.user_id, &reaction).await {
                                     if let Ok(reactions) = state.messaging.reactions_for(room_id, user.user_id, &[message_id]).await {
                                         let summary = reactions.get(&message_id).cloned().unwrap_or_default();
-                                        let _ = state.chat_tx.send(ChatServerEvent::ReactionsUpdated {
+                                        state.broadcast(ChatServerEvent::ReactionsUpdated {
                                             room_id,
                                             message_id,
                                             reactions: summary,
-                                        });
+                                        }).await;
                                     }
                                 }
                             }
@@ -421,9 +419,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                 }
             }
 
-            // Outbound events broadcasted from across the application
-            event = rx.recv() => {
-                let Ok(event) = event else { continue; };
+            // Outbound events published from across the application
+            event = events.recv() => {
+                // `None` means the bus is gone, which only happens on shutdown.
+                // Continuing would spin on a closed stream forever.
+                let Some(event) = event else { break; };
 
                 // Only deliver events for rooms this connection is actively subscribed to
                 if let Some(room_id) = event.room_id() {
@@ -453,24 +453,48 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
     // The loop only ends when the socket is gone, so this is the one place a
     // disconnect is observed — every exit path funnels through it.
     if let Some(user_id) = counted_as {
-        announce_presence(&state, user_id, state.presence.disconnect(user_id));
+        announce_presence(&state, user_id, Connection::Closed).await;
     }
 }
 
-/// Broadcast an online-state transition, and only a transition.
+/// Which way a connection just went, for [`announce_presence`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Connection {
+    /// A socket authenticated as this user.
+    Opened,
+    /// A socket that was counted for this user has gone.
+    Closed,
+}
+
+/// Record a connection change and announce it — if it is a transition.
 ///
-/// [`PresenceChange::Unchanged`] is the common case — a second tab opening or
-/// closing — and announcing it would put a message on every connection in the
-/// process for something nobody can see.
-fn announce_presence(state: &AppState, user_id: UserId, change: PresenceChange) {
-    let online = match change {
-        PresenceChange::CameOnline => true,
-        PresenceChange::WentOffline => false,
-        PresenceChange::Unchanged => return,
+/// `Unchanged` is the common case — a second tab opening or closing — and
+/// announcing it would put a message on every connection in the process for
+/// something nobody can see.
+///
+/// A presence store that cannot answer costs this user their online badge and
+/// nothing else, so the failure is logged and the socket carries on. Tearing
+/// down a working chat connection because a counter was unreachable would be
+/// the worse trade.
+async fn announce_presence(state: &AppState, user_id: UserId, connection: Connection) {
+    let change = match connection {
+        Connection::Opened => state.presence.connect(user_id).await,
+        Connection::Closed => state.presence.disconnect(user_id).await,
     };
 
-    // No receivers is not a failure; it means nobody is connected to tell.
-    let _ = state
-        .chat_tx
-        .send(ChatServerEvent::PresenceChanged { user_id, online });
+    let change = match change {
+        Ok(change) => change,
+        Err(error) => {
+            tracing::warn!(%error, %user_id, ?connection, "could not record presence");
+            return;
+        }
+    };
+
+    let Some(online) = change.announced_state() else {
+        return;
+    };
+
+    state
+        .broadcast(ChatServerEvent::PresenceChanged { user_id, online })
+        .await;
 }

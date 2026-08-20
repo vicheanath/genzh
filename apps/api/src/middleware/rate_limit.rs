@@ -1,163 +1,16 @@
-//! Rate limiting.
+//! Turning a spent budget into a 429.
 //!
-//! The important part here is the [`RateLimiter`] trait, not the
-//! implementation behind it. Rate limiting is one of the few things that
-//! genuinely has to become distributed the moment there are two API instances
-//! — a per-process bucket lets an attacker multiply their allowance by the
-//! number of replicas — so the seam exists from the start even though the only
-//! implementation today is in-memory.
-//!
-//! [`InMemoryRateLimiter`] is a fixed-window counter: cheap, obvious, and
-//! honest about its edge (a caller can spend two windows' worth across a
-//! boundary). That is fine for the abuse this defends against; when it stops
-//! being fine, the replacement implements the same trait.
-
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
-use parking_lot::Mutex;
-
-/// Decides whether a caller may proceed.
-pub trait RateLimiter: Send + Sync + 'static {
-    /// Record one request and report whether it is allowed.
-    fn check(&self, key: &str) -> bool;
-}
-
-/// A fixed-window, in-memory limiter.
-#[derive(Debug)]
-pub struct InMemoryRateLimiter {
-    window: Duration,
-    max_requests: u32,
-    buckets: Mutex<HashMap<String, Bucket>>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Bucket {
-    window_started: Instant,
-    count: u32,
-}
-
-impl InMemoryRateLimiter {
-    /// Allow `max_requests` per `window` per key.
-    pub fn new(max_requests: u32, window: Duration) -> Arc<Self> {
-        Arc::new(Self {
-            window,
-            max_requests,
-            buckets: Mutex::new(HashMap::new()),
-        })
-    }
-
-    /// Drop buckets whose window has passed.
-    ///
-    /// Called opportunistically rather than on a timer: the map only grows
-    /// while traffic is arriving, so the sweep can ride along with it.
-    fn sweep(buckets: &mut HashMap<String, Bucket>, now: Instant, window: Duration) {
-        buckets.retain(|_, bucket| now.duration_since(bucket.window_started) < window);
-    }
-}
-
-impl RateLimiter for InMemoryRateLimiter {
-    fn check(&self, key: &str) -> bool {
-        let now = Instant::now();
-        let mut buckets = self.buckets.lock();
-
-        // Amortised cleanup: sweeping once the map is large keeps a long-lived
-        // process from accumulating a bucket per key ever seen.
-        if buckets.len() > 10_000 {
-            Self::sweep(&mut buckets, now, self.window);
-        }
-
-        let bucket = buckets.entry(key.to_owned()).or_insert(Bucket {
-            window_started: now,
-            count: 0,
-        });
-
-        if now.duration_since(bucket.window_started) >= self.window {
-            *bucket = Bucket {
-                window_started: now,
-                count: 0,
-            };
-        }
-
-        bucket.count += 1;
-        bucket.count <= self.max_requests
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn requests_within_the_limit_are_allowed() {
-        let limiter = InMemoryRateLimiter::new(3, Duration::from_secs(60));
-        for _ in 0..3 {
-            assert!(limiter.check("user-a"));
-        }
-    }
-
-    #[test]
-    fn the_request_after_the_limit_is_refused() {
-        let limiter = InMemoryRateLimiter::new(3, Duration::from_secs(60));
-        for _ in 0..3 {
-            limiter.check("user-a");
-        }
-        assert!(!limiter.check("user-a"));
-        assert!(!limiter.check("user-a"), "still refused");
-    }
-
-    #[test]
-    fn callers_do_not_share_an_allowance() {
-        let limiter = InMemoryRateLimiter::new(1, Duration::from_secs(60));
-        assert!(limiter.check("user-a"));
-        assert!(!limiter.check("user-a"));
-        assert!(
-            limiter.check("user-b"),
-            "one caller must not exhaust another's budget"
-        );
-    }
-
-    #[test]
-    fn the_window_resets() {
-        let limiter = InMemoryRateLimiter::new(1, Duration::from_millis(20));
-        assert!(limiter.check("user-a"));
-        assert!(!limiter.check("user-a"));
-
-        std::thread::sleep(Duration::from_millis(30));
-        assert!(limiter.check("user-a"), "a new window starts fresh");
-    }
-
-    #[test]
-    fn stale_buckets_are_swept() {
-        let mut buckets = HashMap::from([
-            (
-                "fresh".to_owned(),
-                Bucket {
-                    window_started: Instant::now(),
-                    count: 1,
-                },
-            ),
-            (
-                "stale".to_owned(),
-                Bucket {
-                    window_started: Instant::now() - Duration::from_secs(120),
-                    count: 1,
-                },
-            ),
-        ]);
-
-        InMemoryRateLimiter::sweep(&mut buckets, Instant::now(), Duration::from_secs(60));
-
-        assert!(buckets.contains_key("fresh"));
-        assert!(!buckets.contains_key("stale"));
-    }
-}
-
-// ─────────────────────────── axum integration ───────────────────────────
+//! The counting lives in `genzh_infrastructure::rate_limit`, behind the
+//! `RateLimiter` trait; this file is only the HTTP half — which budget a path
+//! draws from, what a refusal looks like on the wire, and what to do when the
+//! limiter itself cannot answer. Keeping the two apart is what lets the counter
+//! move to Redis without touching the response shape, and the response shape
+//! change without touching the counter.
 
 use axum::extract::Request;
 use axum::extract::{ConnectInfo, State};
+use axum::http::header::RETRY_AFTER;
+use axum::http::HeaderValue;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use std::net::SocketAddr;
@@ -190,10 +43,31 @@ pub async fn enforce(
     };
 
     let key = format!("{scope}:{}", peer.ip());
-    if !limiter.check(&key) {
-        tracing::warn!(peer = %peer.ip(), scope, "rate limited");
-        return ApiError::RateLimited.into_response();
+    match limiter.check(&key).await {
+        Ok(decision) if decision.allowed => next.run(request).await,
+        Ok(decision) => {
+            tracing::warn!(peer = %peer.ip(), scope, "rate limited");
+            refuse(decision.retry_after)
+        }
+        // A limiter that cannot answer fails open. The alternative — refusing
+        // every request because a counter is unreachable — turns a degraded
+        // dependency into a total outage, and the budget defends against abuse
+        // rather than protecting correctness.
+        Err(error) => {
+            tracing::error!(%error, scope, "rate limiter unavailable; allowing request");
+            next.run(request).await
+        }
     }
+}
 
-    next.run(request).await
+/// A 429 that says when to come back.
+fn refuse(retry_after: std::time::Duration) -> Response {
+    let mut response = ApiError::RateLimited.into_response();
+    // Rounded up so a sub-second wait advertises one second rather than zero,
+    // which a client would read as "retry immediately".
+    let seconds = retry_after.as_secs_f64().ceil().max(1.0) as u64;
+    if let Ok(value) = HeaderValue::from_str(&seconds.to_string()) {
+        response.headers_mut().insert(RETRY_AFTER, value);
+    }
+    response
 }
