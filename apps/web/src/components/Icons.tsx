@@ -56,6 +56,7 @@ import {
   UserPlus,
   Users,
   Video,
+  VideoOff,
   Vote,
   Volume2,
   VolumeX,
@@ -84,6 +85,7 @@ export const HashIcon: IconComponent = (props: IconProps) => <Hash size={18} {..
 export const MicIcon: IconComponent = (props: IconProps) => <Mic size={18} {...props} />
 export const MicOffIcon: IconComponent = (props: IconProps) => <MicOff size={18} {...props} />
 export const VideoIcon: IconComponent = (props: IconProps) => <Video size={18} {...props} />
+export const VideoOffIcon: IconComponent = (props: IconProps) => <VideoOff size={18} {...props} />
 export const SparkleIcon: IconComponent = (props: IconProps) => <Sparkles size={18} {...props} />
 export const SparklesIcon: IconComponent = (props: IconProps) => <Sparkles size={18} {...props} />
 export const HeadphonesIcon: IconComponent = (props: IconProps) => <Headphones size={18} {...props} />

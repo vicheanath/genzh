@@ -105,11 +105,19 @@ impl RoomService {
             })
         } else {
             // Standalone playground room.
+            //
+            // There are no roles here, so a permission withheld now can never
+            // be granted later — which is why a guest gets screen share on top
+            // of the default set. Inside a community that grant is a role's job
+            // and stays off by default; in a room two people opened to hang out
+            // in, withholding it makes sharing a screen unreachable for
+            // everyone but the creator. A guest may already publish a camera,
+            // so this is the consistent line rather than a wider one.
             let is_owner = room.owner_id == Some(user_id);
             let permissions = if is_owner {
                 PermissionSet::ADMINISTRATOR
             } else {
-                PermissionSet::default_member()
+                PermissionSet::default_member() | PermissionSet::SCREEN_SHARE
             };
 
             Ok(RoomAccess {

@@ -30,6 +30,9 @@ export interface VoiceContextValue extends VoiceState {
   leave: () => Promise<void>
   setMuted: (muted: boolean) => void
   toggleMute: () => void
+  startCamera: (deviceId?: string) => Promise<MediaStream | null>
+  stopCamera: () => Promise<void>
+  toggleCamera: () => Promise<void>
   startScreenShare: () => Promise<MediaStream | null>
   stopScreenShare: () => Promise<void>
   toggleScreenShare: () => Promise<void>
@@ -154,6 +157,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
   }, [user, activeSession?.roomId, client])
 
+  const startCamera = useCallback(
+    (deviceId?: string) => client.startCamera(deviceId),
+    [client],
+  )
+  const stopCamera = useCallback(() => client.stopCamera(), [client])
+  const toggleCamera = useCallback(() => client.toggleCamera(), [client])
   const startScreenShare = useCallback(() => client.startScreenShare(), [client])
   const stopScreenShare = useCallback(() => client.stopScreenShare(), [client])
   const toggleScreenShare = useCallback(() => client.toggleScreenShare(), [client])
@@ -172,6 +181,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     leave,
     setMuted,
     toggleMute,
+    startCamera,
+    stopCamera,
+    toggleCamera,
     startScreenShare,
     stopScreenShare,
     toggleScreenShare,

@@ -19,6 +19,8 @@ import {
   ScreenShareIcon,
   ScreenShareOffIcon,
   UsersIcon,
+  VideoIcon,
+  VideoOffIcon,
 } from '@/components/Icons'
 import { Spinner } from '@/components/Spinner'
 import { Tooltip } from '@/components/Tooltip'
@@ -59,6 +61,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
   const isStage = room.room_type === 'stage'
   const canSpeak = can(room.your_permissions, 'speak')
   const canShare = can(room.your_permissions, 'screen_share')
+  const canUseVideo = can(room.your_permissions, 'use_video')
   const canModerate = can(room.your_permissions, 'manage_room')
   const isCurrentRoom = voice.isCurrent
   const connected = isCurrentRoom && voice.status === 'connected'
@@ -290,6 +293,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                   accent={user?.profile.accent_color}
                   speaking={voice.speaking}
                   muted={voice.muted}
+                  cameraStream={voice.cameraStream}
                   screenSharing={voice.isScreenSharing}
                   compact
                   you
@@ -301,6 +305,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                   name={p.displayName}
                   speaking={p.speaking}
                   muted={p.muted}
+                  cameraStream={p.cameraStream}
                   screenSharing={Boolean(p.screenSharing)}
                   compact
                 />
@@ -347,6 +352,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                     speaking={voice.speaking}
                     muted={voice.muted}
                     role={stageRole}
+                    cameraStream={voice.cameraStream}
                     screenSharing={voice.isScreenSharing}
                     you
                     onStepDown={
@@ -367,6 +373,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                     speaking={p.speaking}
                     muted={p.muted}
                     role={p.stageRole ?? 'speaker'}
+                    cameraStream={p.cameraStream}
                     screenSharing={Boolean(p.screenSharing)}
                   />
                 ))}
@@ -422,6 +429,29 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
             >
               {voice.muted ? <MicOffIcon size={20} /> : <MicIcon size={20} />}
             </button>
+          </Tooltip>
+
+          <Tooltip
+            content={
+              !canUseVideo
+                ? 'You do not have permission to use video here'
+                : voice.isCameraOn
+                  ? 'Turn camera off'
+                  : 'Turn camera on'
+            }
+          >
+            <span className={styles.controlSlot}>
+              <button
+                type="button"
+                className={cx(styles.controlBtn, voice.isCameraOn && styles.controlBtnActive)}
+                onClick={() => void voice.toggleCamera()}
+                disabled={!connected || !canUseVideo}
+                aria-label={voice.isCameraOn ? 'Turn camera off' : 'Turn camera on'}
+                aria-pressed={voice.isCameraOn}
+              >
+                {voice.isCameraOn ? <VideoIcon size={20} /> : <VideoOffIcon size={20} />}
+              </button>
+            </span>
           </Tooltip>
 
           <Tooltip
@@ -498,11 +528,11 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
 }
 
 /**
- * One person in the room.
+ * One person in the room: their camera if it is on, their avatar if it is not.
  *
- * Deliberately not a video tile: audio playback lives in one place at the app
- * root (`GlobalAudioOutputs`) so it survives navigation, and a second `<audio>`
- * here would play every remote stream twice.
+ * Audio is deliberately not handled here — playback lives in one place at the
+ * app root (`GlobalAudioOutputs`) so it survives navigation, and a second
+ * `<audio>` here would play every remote stream twice.
  */
 function VoiceTile({
   name,
@@ -511,6 +541,7 @@ function VoiceTile({
   speaking,
   muted,
   role,
+  cameraStream,
   screenSharing,
   compact,
   you,
@@ -522,6 +553,7 @@ function VoiceTile({
   speaking: boolean
   muted: boolean
   role?: 'host' | 'speaker' | 'audience'
+  cameraStream?: MediaStream | null
   screenSharing?: boolean
   compact?: boolean
   you?: boolean
@@ -533,18 +565,25 @@ function VoiceTile({
         styles.voiceTile,
         speaking && styles.voiceTileSpeaking,
         compact && styles.voiceTileCompact,
+        cameraStream && styles.voiceTileVideo,
       )}
     >
-      <div className={styles.avatarWrap}>
-        <Avatar
-          name={name}
-          src={avatar}
-          color={accent}
-          size={compact ? 'lg' : 'xl'}
-          speaking={speaking}
-        />
-        {speaking && <div className={styles.speakingWaveRing} />}
-      </div>
+      {cameraStream ? (
+        // Your own camera is mirrored, everyone else's is not: you expect your
+        // self-view to behave like a mirror, and them to appear as they are.
+        <TileVideo stream={cameraStream} mirrored={you} />
+      ) : (
+        <div className={styles.avatarWrap}>
+          <Avatar
+            name={name}
+            src={avatar}
+            color={accent}
+            size={compact ? 'lg' : 'xl'}
+            speaking={speaking}
+          />
+          {speaking && <div className={styles.speakingWaveRing} />}
+        </div>
+      )}
 
       <div className={styles.tileNameTag}>
         <span className={styles.tileNameText}>{you ? `${name} (you)` : name}</span>
@@ -567,6 +606,33 @@ function VoiceTile({
         </button>
       )}
     </div>
+  )
+}
+
+/** A participant's camera, cropped to fill their tile. */
+function TileVideo({ stream, mirrored }: { stream: MediaStream; mirrored?: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.srcObject = stream
+    void video.play().catch(() => {})
+    return () => {
+      video.srcObject = null
+    }
+  }, [stream])
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      // Muted because the audio for this participant is already playing from
+      // the app-root sink; an unmuted element here would double it.
+      muted
+      className={cx(styles.tileVideoElement, mirrored && styles.tileVideoMirrored)}
+    />
   )
 }
 

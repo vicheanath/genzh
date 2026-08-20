@@ -459,6 +459,16 @@ async fn handle_client(
             } else {
                 RoomEvent::CameraDisabled { participant_id }
             });
+
+            // Same reasoning as the screen share below: the track has to go
+            // even if the client never renegotiates, because a kind that is
+            // still registered as published rejects the next publish of it —
+            // which would make the camera toggle work exactly once.
+            if !enabled {
+                let _ = room
+                    .unpublish_track(participant_id, TrackKind::Camera)
+                    .await;
+            }
             Ok(())
         }
 

@@ -341,6 +341,7 @@
   min-height: 10rem;
   padding: var(--space-4);
   overflow: hidden;
+  isolation: isolate;
   border: 1px solid var(--stage-border);
   border-radius: var(--radius-2xl);
   background: var(--stage-surface);
@@ -369,6 +370,33 @@
   min-width: 8.75rem;
   padding: var(--space-2);
 }
+
+/* A tile showing a camera drops its padding — the video is the tile, and the
+   name tag floats over it rather than sitting beside it. */
+.voiceTileVideo {
+  padding: 0;
+  background: #000;
+}
+
+/* Absolutely positioned rather than laid out: the tile is a centring flex
+   column built for an avatar, and a video has to fill it edge to edge instead
+   of being centred in it. */
+.tileVideoElement {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Cover, not contain: a grid of tiles wants uniform rectangles, and the
+     letterboxing that `contain` produces reads as broken here. The screen
+     share is the opposite case and uses `contain`. */
+  object-fit: cover;
+}
+
+/* The light-source wash would sit as a haze over the video. */
+.voiceTileVideo::before { content: none; }
+
+/* Self-view only. You expect your own camera to behave like a mirror. */
+.tileVideoMirrored { transform: scaleX(-1); }
 
 /* Speaking is the gradient, not a green ring — it is the same signature as
    every other "this is active" state in the app. */

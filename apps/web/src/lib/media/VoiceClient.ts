@@ -23,14 +23,18 @@ export interface RemoteParticipant {
   displayName: string
   muted: boolean
   speaking: boolean
+  cameraOn?: boolean
   screenSharing?: boolean
   handRaised?: boolean
   stageRole?: 'host' | 'speaker' | 'audience'
   /** Populated once the SFU starts forwarding this participant's audio. */
   stream: MediaStream | null
+  /** Populated once the SFU starts forwarding this participant's camera. */
+  cameraStream?: MediaStream | null
   /** Populated once the SFU starts forwarding this participant's screen track. */
   screenStream?: MediaStream | null
-  /** The SFU's id for that screen track, needed to unsubscribe from it. */
+  /** The SFU's ids for those video tracks, needed to unsubscribe from them. */
+  cameraTrackId?: string | null
   screenTrackId?: string | null
 }
 
@@ -40,6 +44,8 @@ export interface VoiceState {
   participants: RemoteParticipant[]
   muted: boolean
   speaking: boolean
+  isCameraOn: boolean
+  cameraStream: MediaStream | null
   isScreenSharing: boolean
   screenStream: MediaStream | null
   handRaised: boolean
@@ -57,6 +63,8 @@ const INITIAL_STATE: VoiceState = {
   participants: [],
   muted: true,
   speaking: false,
+  isCameraOn: false,
+  cameraStream: null,
   isScreenSharing: false,
   screenStream: null,
   handRaised: false,
@@ -85,6 +93,8 @@ export class VoiceClient {
   private subscriber: RTCPeerConnection | null = null
 
   private localStream: MediaStream | null = null
+  private cameraTrack: MediaStreamTrack | null = null
+  private cameraSender: RTCRtpSender | null = null
   private screenTrack: MediaStreamTrack | null = null
   private screenSender: RTCRtpSender | null = null
   private audioContext: AudioContext | null = null
@@ -137,6 +147,7 @@ export class VoiceClient {
   async leave(): Promise<void> {
     this.closing = true
     this.clearReconnect()
+    await this.stopCamera()
     await this.stopScreenShare()
     this.send({ type: 'leave' })
     this.teardown()
@@ -155,6 +166,101 @@ export class VoiceClient {
       this.patch({ muted, speaking: false })
     } else {
       this.patch({ muted })
+    }
+  }
+
+  /**
+   * Turn the camera on.
+   *
+   * Same shape as a screen share — declare intent, add the track, re-offer —
+   * but a different `TrackKind`, which is the only thing that tells the server
+   * these two video streams apart. A participant may run both at once; the SFU
+   * allows one track per kind.
+   */
+  async startCamera(deviceId?: string): Promise<MediaStream | null> {
+    if (this.state.isCameraOn && this.state.cameraStream) {
+      return this.state.cameraStream
+    }
+    if (this.state.status !== 'connected' || !this.publisher) {
+      this.patch({ error: 'Join the room before turning on your camera' })
+      return null
+    }
+
+    let capture: MediaStream
+    try {
+      capture = await navigator.mediaDevices.getUserMedia({
+        video: deviceId
+          ? { deviceId: { exact: deviceId } }
+          : { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        // The microphone is published separately and independently of this, so
+        // asking for it again here would open a second capture of the same
+        // device and fight with the mute button.
+        audio: false,
+      })
+    } catch (error) {
+      this.patch({
+        error: isPermissionDenied(error)
+          ? 'Camera permission is blocked for this site'
+          : 'Could not start your camera',
+      })
+      return null
+    }
+
+    const track = capture.getVideoTracks()[0]
+    if (!track) {
+      for (const t of capture.getTracks()) t.stop()
+      return null
+    }
+
+    const cameraStream = new MediaStream([track])
+    this.cameraTrack = track
+    // Unplugging a webcam ends the track without any action from us.
+    track.addEventListener('ended', () => void this.stopCamera())
+
+    try {
+      this.send({ type: 'publish_intent', kind: 'camera', client_track_id: track.id })
+      this.cameraSender = this.publisher.addTrack(track, cameraStream)
+      await this.renegotiatePublisher()
+    } catch {
+      track.stop()
+      this.cameraTrack = null
+      this.cameraSender = null
+      this.patch({ error: 'Could not publish your camera to the room' })
+      return null
+    }
+
+    this.send({ type: 'camera', enabled: true })
+    this.patch({ isCameraOn: true, cameraStream, error: null })
+    return cameraStream
+  }
+
+  async stopCamera(): Promise<void> {
+    if (!this.state.isCameraOn && !this.cameraTrack) return
+
+    this.cameraTrack?.stop()
+    this.cameraTrack = null
+    for (const t of this.state.cameraStream?.getTracks() ?? []) t.stop()
+
+    if (this.publisher && this.cameraSender && this.publisher.connectionState !== 'closed') {
+      try {
+        this.publisher.removeTrack(this.cameraSender)
+        await this.renegotiatePublisher()
+      } catch {
+        // The connection is going away anyway; the `camera` flag below is what
+        // the server actually acts on.
+      }
+    }
+    this.cameraSender = null
+
+    this.send({ type: 'camera', enabled: false })
+    this.patch({ isCameraOn: false, cameraStream: null })
+  }
+
+  async toggleCamera(): Promise<void> {
+    if (this.state.isCameraOn) {
+      await this.stopCamera()
+    } else {
+      await this.startCamera()
     }
   }
 
@@ -499,16 +605,31 @@ export class VoiceClient {
         }
         break
       }
+      case 'camera_enabled':
+      case 'camera_disabled': {
+        const index = indexOf(message.participant_id)
+        const existing = participants[index]
+        if (existing) {
+          const isOn = message.event === 'camera_enabled'
+          participants[index] = {
+            ...existing,
+            cameraOn: isOn,
+            // The flag arrives before the media; the tile keeps showing the
+            // avatar until `track_published` brings the frames.
+            cameraStream: isOn ? existing.cameraStream : null,
+            cameraTrackId: isOn ? existing.cameraTrackId : null,
+          }
+        }
+        break
+      }
       case 'track_published': {
         const info = message.track
         const index = indexOf(info.participant_id)
         const existing = participants[index]
-        if (existing && info.kind === 'screen_share') {
-          participants[index] = {
-            ...existing,
-            screenSharing: true,
-            screenTrackId: info.track_id,
-          }
+        if (existing && info.kind === 'camera') {
+          participants[index] = { ...existing, cameraOn: true, cameraTrackId: info.track_id }
+        } else if (existing && info.kind === 'screen_share') {
+          participants[index] = { ...existing, screenSharing: true, screenTrackId: info.track_id }
         }
         // Video is never auto-subscribed — a twenty-person room must not push
         // nineteen video streams at a phone — so asking is the whole mechanism.
@@ -519,7 +640,14 @@ export class VoiceClient {
         this.remoteTracks.delete(message.track_id)
         const index = indexOf(message.participant_id)
         const existing = participants[index]
-        if (existing && message.kind !== 'audio') {
+        if (existing && message.kind === 'camera') {
+          participants[index] = {
+            ...existing,
+            cameraOn: false,
+            cameraStream: null,
+            cameraTrackId: null,
+          }
+        } else if (existing && message.kind === 'screen_share') {
           participants[index] = {
             ...existing,
             screenSharing: false,
@@ -573,26 +701,27 @@ export class VoiceClient {
       const participantId = info?.participant_id ?? participantIdFromTrack(event)
       if (!participantId) return
 
-      // The registry is authoritative when it has an entry; the track's own
-      // media kind is the fallback for a stack that renumbered the msid.
-      const isVideo = info ? info.kind !== 'audio' : event.track.kind === 'video'
+      // A camera and a screen are both just video on the wire, so the kind has
+      // to come from the SFU's own naming rather than from the track itself.
+      const kind = info?.kind ?? kindFromTrackId(event.track.id) ?? event.track.kind
 
       // A stream per track: the SFU uses the publisher's id as the stream id
       // for *all* of their tracks, so `event.streams[0]` is one object holding
-      // both the microphone and the screen.
+      // the microphone, the camera and the screen together.
       const stream = new MediaStream([event.track])
 
-      if (isVideo) {
-        // The publisher hanging up mid-share ends the track without any room
+      if (kind !== 'audio') {
+        // The publisher hanging up mid-stream ends the track without any room
         // event arriving, so the tile has to clear itself.
-        event.track.addEventListener('ended', () => this.clearRemoteScreen(participantId))
+        event.track.addEventListener('ended', () =>
+          this.clearRemoteVideo(participantId, kind === 'camera' ? 'camera' : 'screen'),
+        )
       }
 
       const participants = this.state.participants.map((p) => {
         if (p.id !== participantId) return p
-        if (isVideo) {
-          return { ...p, screenStream: stream, screenSharing: true }
-        }
+        if (kind === 'camera') return { ...p, cameraStream: stream, cameraOn: true }
+        if (kind === 'screen_share') return { ...p, screenStream: stream, screenSharing: true }
         return { ...p, stream }
       })
       this.patch({ participants })
@@ -616,8 +745,18 @@ export class VoiceClient {
     this.send({ type: 'publish_intent', kind: 'audio', client_track_id: track.id })
     publisher.addTrack(track, this.localStream)
 
-    // A reconnect builds a fresh publisher, so a share that survived the drop
-    // has to be put back on it — in this same offer, not a second one.
+    // A reconnect builds a fresh publisher, so any video that survived the drop
+    // has to be put back on it — in this same offer, not one offer per track.
+    const cameraTrack = this.cameraTrack
+    if (cameraTrack && cameraTrack.readyState === 'live') {
+      this.send({ type: 'publish_intent', kind: 'camera', client_track_id: cameraTrack.id })
+      this.cameraSender = publisher.addTrack(
+        cameraTrack,
+        this.state.cameraStream ?? new MediaStream([cameraTrack]),
+      )
+      this.send({ type: 'camera', enabled: true })
+    }
+
     const screenTrack = this.screenTrack
     if (screenTrack && screenTrack.readyState === 'live') {
       this.send({
@@ -695,13 +834,14 @@ export class VoiceClient {
 
   // ── plumbing ────────────────────────────────────────────────────────────
 
-  /** Drop a remote share from the UI without waiting for a room event. */
-  private clearRemoteScreen(participantId: string): void {
-    const participants = this.state.participants.map((p) =>
-      p.id === participantId
-        ? { ...p, screenSharing: false, screenStream: null, screenTrackId: null }
-        : p,
-    )
+  /** Drop a remote video from the UI without waiting for a room event. */
+  private clearRemoteVideo(participantId: string, which: 'camera' | 'screen'): void {
+    const participants = this.state.participants.map((p) => {
+      if (p.id !== participantId) return p
+      return which === 'camera'
+        ? { ...p, cameraOn: false, cameraStream: null, cameraTrackId: null }
+        : { ...p, screenSharing: false, screenStream: null, screenTrackId: null }
+    })
     this.patch({ participants })
   }
 
@@ -739,8 +879,9 @@ export class VoiceClient {
     this.subscriber?.close()
     this.publisher = null
     this.subscriber = null
-    // The sender belonged to the closed publisher; the *track* deliberately
-    // survives, so `negotiate` can put the share back on the new connection.
+    // The senders belonged to the closed publisher; the *tracks* deliberately
+    // survive, so `negotiate` can put them back on the new connection.
+    this.cameraSender = null
     this.screenSender = null
     this.remoteTracks.clear()
 
@@ -766,6 +907,7 @@ export class VoiceClient {
 }
 
 function toRemote(info: ParticipantInfo): RemoteParticipant {
+  const camera = info.tracks?.find((track) => track.kind === 'camera')
   const screen = info.tracks?.find((track) => track.kind === 'screen_share')
   return {
     id: info.participant_id,
@@ -773,11 +915,34 @@ function toRemote(info: ParticipantInfo): RemoteParticipant {
     displayName: info.display_name,
     muted: info.audio_muted,
     speaking: false,
+    cameraOn: info.camera_enabled || camera !== undefined,
     screenSharing: info.screen_sharing || screen !== undefined,
+    cameraTrackId: camera?.track_id ?? null,
     screenTrackId: screen?.track_id ?? null,
     stream: null,
+    cameraStream: null,
     screenStream: null,
   }
+}
+
+/**
+ * Recover a track's kind from the id the SFU gave it (`<participant>:<kind>`).
+ *
+ * The fallback for when the registry has no entry — a track that arrived before
+ * our `subscribe` was recorded, or a stack that reordered things.
+ */
+function kindFromTrackId(trackId: string): TrackInfo['kind'] | null {
+  const suffix = trackId.split(':')[1]
+  if (suffix === 'audio' || suffix === 'camera' || suffix === 'screen_share') return suffix
+  return null
+}
+
+/** Did the browser refuse the capture because permission is denied? */
+function isPermissionDenied(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'NotAllowedError' || error.name === 'SecurityError')
+  )
 }
 
 /**
