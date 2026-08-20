@@ -116,8 +116,11 @@ pub fn build(state: AppState) -> Router {
             get(routes::social::list).post(routes::social::request),
         )
         .route("/friends/requests", get(routes::social::pending))
+        .route("/friends/sent", get(routes::social::sent))
         .route("/friends/{user_id}", delete(routes::social::remove))
         .route("/friends/{user_id}/respond", post(routes::social::respond))
+        .route("/presence", get(routes::presence::online))
+        .route("/blocks", get(routes::social::blocked))
         .route(
             "/blocks/{user_id}",
             put(routes::social::block).delete(routes::social::unblock),

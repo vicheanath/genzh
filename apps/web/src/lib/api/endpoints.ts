@@ -338,6 +338,10 @@ export const friends = {
   pending: (token: string) =>
     request<Friendship[]>('/api/v1/friends/requests', { token }),
 
+  /** Requests this user has sent that nobody has answered yet. */
+  sent: (token: string) =>
+    request<Friendship[]>('/api/v1/friends/sent', { token }),
+
   request: (token: string, userId: Uuid) =>
     request<Friendship>('/api/v1/friends', {
       method: 'POST',
@@ -356,7 +360,24 @@ export const friends = {
     request<void>(`/api/v1/friends/${userId}`, { method: 'DELETE', token }),
 }
 
+// ── presence ──────────────────────────────────────────────────────────────
+
+export const presence = {
+  /**
+   * Who, of `ids`, is online right now.
+   *
+   * Omitting `ids` returns everyone connected — what the friends list wants,
+   * since it has no id list of its own until the friendships have loaded.
+   */
+  online: (token: string, ids?: Uuid[]) => {
+    const query = ids && ids.length > 0 ? `?ids=${ids.join(',')}` : ''
+    return request<{ online: Uuid[] }>(`/api/v1/presence${query}`, { token })
+  },
+}
+
 export const blocks = {
+  list: (token: string) => request<Uuid[]>('/api/v1/blocks', { token }),
+
   block: (token: string, userId: Uuid) =>
     request<void>(`/api/v1/blocks/${userId}`, { method: 'PUT', token }),
 

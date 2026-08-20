@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use genzh_community::CommunityService;
 use genzh_community::authorization::apply_room_overrides;
+use genzh_graph::SocialService;
 use genzh_domain::room::{
     self, Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,
     RoomVisibility,
@@ -67,14 +68,17 @@ pub struct UpdateRoom {
 pub struct RoomService {
     rooms: RoomRepository,
     communities: CommunityService,
+    /// Consulted for direct rooms only, to keep a block from being bypassed.
+    social: SocialService,
 }
 
 impl RoomService {
     /// Build the service.
-    pub fn new(pool: DbPool, communities: CommunityService) -> Self {
+    pub fn new(pool: DbPool, communities: CommunityService, social: SocialService) -> Self {
         Self {
             rooms: RoomRepository::new(pool),
             communities,
+            social,
         }
     }
 
@@ -131,6 +135,15 @@ impl RoomService {
     }
 
     /// Resolve access and assert the room is visible.
+    ///
+    /// A direct conversation with someone on either side of a block is *not*
+    /// visible, which is what makes a block bite everywhere rather than only on
+    /// friend requests: posting, reading history and joining media all go
+    /// through here, so none of them need their own check.
+    ///
+    /// Deliberately scoped to direct rooms. Blocking is about direct reach —
+    /// it should not eject either party from a community channel they both
+    /// belong to.
     pub async fn visible_access(
         &self,
         room_id: RoomId,
@@ -138,6 +151,13 @@ impl RoomService {
     ) -> ServiceResult<RoomAccess> {
         let access = self.access(room_id, user_id).await?;
         access.require_visible()?;
+
+        if access.room.category == "dm" {
+            if let Some(peer) = self.rooms.direct_peer(room_id, user_id).await? {
+                self.social.ensure_can_reach(user_id, peer).await?;
+            }
+        }
+
         Ok(access)
     }
 
@@ -287,6 +307,10 @@ impl RoomService {
         target_name: &str,
         target_handle: &str,
     ) -> ServiceResult<(Room, bool)> {
+        // Refused before the room exists, so a block cannot be worked around by
+        // opening the conversation from the blocked side.
+        self.social.ensure_can_reach(user_a, user_b).await?;
+
         if let Some(existing) = self.rooms.find_direct_room(user_a, user_b).await? {
             return Ok((existing, false));
         }

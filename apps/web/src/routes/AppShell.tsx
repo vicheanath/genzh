@@ -52,9 +52,11 @@ import { useProfiles } from '@/lib/useProfiles'
 import { useTheme, type Theme } from '@/lib/useTheme'
 import { chatSocket } from '@/lib/ws/ChatSocket'
 
+import { UserSettingsModal } from '@/features/settings'
+
 import { AddCommunityDialog } from './AddCommunityDialog'
 import { ProfileDialog } from './ProfileDialog'
-import { UserSettingsModal } from './UserSettingsModal'
+
 
 import styles from './AppShell.module.css'
 

@@ -45,6 +45,8 @@ pub struct AppState {
     pub auth_rate_limiter: Arc<dyn RateLimiter>,
     /// Broadcast channel for real-time WebSocket chat interactions.
     pub chat_tx: tokio::sync::broadcast::Sender<crate::routes::ws::ChatServerEvent>,
+    /// Who is currently connected, derived from live WebSockets.
+    pub presence: crate::presence::PresenceRegistry,
 }
 
 impl std::fmt::Debug for AppState {
@@ -70,9 +72,11 @@ impl AppState {
 
         let auth = AuthService::new(pool.clone(), jwt);
         let communities = CommunityService::new(pool.clone());
-        let rooms = RoomService::new(pool.clone(), communities.clone());
-        let messaging = MessagingService::new(pool.clone(), rooms.clone());
+        // Rooms consult the social graph so a block makes a direct conversation
+        // invisible; everything layered on rooms inherits that.
         let social = SocialService::new(pool.clone());
+        let rooms = RoomService::new(pool.clone(), communities.clone(), social.clone());
+        let messaging = MessagingService::new(pool.clone(), rooms.clone());
 
         let signer = Arc::new(MediaTokenSigner::new(
             config.media_token_secret.as_bytes(),
@@ -122,6 +126,7 @@ impl AppState {
             social,
             media,
             chat_tx: tokio::sync::broadcast::channel(4096).0,
+            presence: crate::presence::PresenceRegistry::new(),
             config: Arc::new(config),
         })
     }

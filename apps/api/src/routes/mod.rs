@@ -11,6 +11,7 @@ pub mod health;
 pub mod media;
 pub mod messages;
 pub mod oauth;
+pub mod presence;
 pub mod rooms;
 pub mod social;
 pub mod users;

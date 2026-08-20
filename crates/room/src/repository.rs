@@ -330,6 +330,20 @@ impl RoomRepository {
             .collect())
     }
 
+    /// The other participant in one direct room.
+    pub async fn direct_peer(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> RepositoryResult<Option<UserId>> {
+        Ok(self
+            .direct_peers(user_id, &[room_id])
+            .await?
+            .into_iter()
+            .next()
+            .map(|(_, peer)| peer))
+    }
+
     /// Find an existing direct message room between two users.
     pub async fn find_direct_room(
         &self,

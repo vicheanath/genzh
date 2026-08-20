@@ -482,6 +482,9 @@
 }
 
 .themeCard {
+  position: relative;
+  font: inherit;
+  text-align: center;
   background: var(--color-surface);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -517,10 +520,14 @@
 
 .voiceTestFill {
   height: 100%;
-  background: var(--color-online);
+  background: var(--color-border-strong);
   border-radius: var(--radius-full);
-  transition: width 0.08s ease;
+  transition: width 0.08s linear;
 }
+
+/* Only while a test is running: a coloured bar at rest reads as a live signal
+   from a microphone nobody is listening to. */
+.voiceTestFillLive { background: var(--gradient-live); }
 
 .blockedList {
   display: flex;
@@ -538,3 +545,119 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
+
+/* ── shared field furniture ─────────────────────────────────────────────── */
+
+.formActions { margin-top: var(--space-2); }
+
+/* A label with something on the far right of it — a value readout, or a
+   secondary action like "randomise". */
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.sliderField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.testRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+.permissionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.warningNote {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+}
+
+.emptyNote {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-subtle);
+}
+
+/* ── devices ────────────────────────────────────────────────────────────── */
+
+.cameraPreview {
+  width: 100%;
+  max-width: 22rem;
+  margin-top: var(--space-3);
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: #000;
+  /* Mirrored, like every other self-view in the app. */
+  transform: scaleX(-1);
+}
+
+/* ── appearance ─────────────────────────────────────────────────────────── */
+
+.themeName {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.themeHint {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+}
+
+.themeCheck {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  color: var(--color-accent);
+}
+
+/* ── anonymous persona ──────────────────────────────────────────────────── */
+
+.maskAvatar {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius-full);
+  font-size: 2rem;
+  box-shadow: 0 0 0 4px var(--color-surface-raised);
+}
+
+/* ── blocked list ───────────────────────────────────────────────────────── */
+
+.blockedWho {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.blockedName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── sidebar ────────────────────────────────────────────────────────────── */
+
+/* Pins sign-out to the bottom of the nav column. */
+.sidebarFooter { margin-top: auto; }

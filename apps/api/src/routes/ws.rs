@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::interval;
 
 use crate::middleware::CurrentUser;
+use crate::presence::PresenceChange;
 use crate::state::AppState;
 
 /// Events broadcasted by the server to clients over WebSocket.
@@ -61,6 +62,15 @@ pub enum ChatServerEvent {
         room_id: RoomId,
         message_id: MessageId,
         reactions: Vec<ReactionSummary>,
+    },
+    /// Somebody's online state changed.
+    ///
+    /// Broadcast to everyone: presence is not a secret between friends here,
+    /// and scoping it to a follower graph would mean resolving that graph on
+    /// every connect and disconnect.
+    PresenceChanged {
+        user_id: UserId,
+        online: bool,
     },
     /// A direct conversation was opened, and this user is in it.
     ///
@@ -191,6 +201,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
     let mut subscribed_rooms = HashSet::<RoomId>::new();
     let mut rx = state.chat_tx.subscribe();
 
+    // Tracks whoever this connection is counted against, so the disconnect can
+    // undo exactly what the connect did even if the token is swapped later.
+    let mut counted_as: Option<UserId> = None;
+
     if let Some(ref user) = current_user {
         let auth_event = ChatServerEvent::Authenticated {
             user_id: user.user_id,
@@ -198,6 +212,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
         if let Ok(json) = serde_json::to_string(&auth_event) {
             let _ = sender.send(WsMessage::Text(json.into())).await;
         }
+        counted_as = Some(user.user_id);
+        announce_presence(&state, user.user_id, state.presence.connect(user.user_id));
     }
 
     let mut ping_interval = interval(Duration::from_secs(30));
@@ -238,6 +254,27 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
                                         user_id: user.user_id,
                                         session_id: user.session_id,
                                     });
+
+                                    // Authenticating over an already-open socket
+                                    // is the normal path — the client connects
+                                    // first and sends the token after — so this
+                                    // has to count the connection, and move it
+                                    // if the identity changed.
+                                    if counted_as != Some(uid) {
+                                        if let Some(previous) = counted_as {
+                                            announce_presence(
+                                                &state,
+                                                previous,
+                                                state.presence.disconnect(previous),
+                                            );
+                                        }
+                                        counted_as = Some(uid);
+                                        announce_presence(
+                                            &state,
+                                            uid,
+                                            state.presence.connect(uid),
+                                        );
+                                    }
                                     let _ = sender.send(WsMessage::Text(
                                         serde_json::to_string(&ChatServerEvent::Authenticated {
                                             user_id: uid,
@@ -392,4 +429,28 @@ async fn handle_socket(socket: WebSocket, state: AppState, initial_token: Option
             }
         }
     }
+
+    // The loop only ends when the socket is gone, so this is the one place a
+    // disconnect is observed — every exit path funnels through it.
+    if let Some(user_id) = counted_as {
+        announce_presence(&state, user_id, state.presence.disconnect(user_id));
+    }
+}
+
+/// Broadcast an online-state transition, and only a transition.
+///
+/// [`PresenceChange::Unchanged`] is the common case — a second tab opening or
+/// closing — and announcing it would put a message on every connection in the
+/// process for something nobody can see.
+fn announce_presence(state: &AppState, user_id: UserId, change: PresenceChange) {
+    let online = match change {
+        PresenceChange::CameOnline => true,
+        PresenceChange::WentOffline => false,
+        PresenceChange::Unchanged => return,
+    };
+
+    // No receivers is not a failure; it means nobody is connected to tell.
+    let _ = state
+        .chat_tx
+        .send(ChatServerEvent::PresenceChanged { user_id, online });
 }

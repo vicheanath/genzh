@@ -11,6 +11,7 @@ import {
 
 import { media as mediaApi, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { useAppStore } from '@/lib/store'
 
 import { VoiceClient, type RemoteParticipant, type VoiceState } from './VoiceClient'
 
@@ -30,6 +31,7 @@ export interface VoiceContextValue extends VoiceState {
   leave: () => Promise<void>
   setMuted: (muted: boolean) => void
   toggleMute: () => void
+  setAudioInput: (deviceId: string) => Promise<void>
   startCamera: (deviceId?: string) => Promise<MediaStream | null>
   stopCamera: () => Promise<void>
   toggleCamera: () => Promise<void>
@@ -119,6 +121,18 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     await client.leave()
   }, [client])
 
+  const micDeviceId = useAppStore((s) => s.micDeviceId)
+  const cameraDeviceId = useAppStore((s) => s.cameraDeviceId)
+  const speakerDeviceId = useAppStore((s) => s.speakerDeviceId)
+  const outputVolume = useAppStore((s) => s.outputVolume)
+
+  // Push the saved microphone into the client whenever it changes — including
+  // once on mount, which is what makes the choice survive a reload rather than
+  // only applying to the call it was made during.
+  useEffect(() => {
+    void client.setAudioInput(micDeviceId)
+  }, [client, micDeviceId])
+
   const setMuted = useCallback((muted: boolean) => client.setMuted(muted), [client])
   const toggleMute = useCallback(() => {
     client.setMuted(!client.getState().muted)
@@ -157,9 +171,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
   }, [user, activeSession?.roomId, client])
 
-  const startCamera = useCallback(
-    (deviceId?: string) => client.startCamera(deviceId),
+  const setAudioInput = useCallback(
+    (deviceId: string) => client.setAudioInput(deviceId),
     [client],
+  )
+
+  // The camera defaults to the saved preference, but an explicit argument wins
+  // — the settings screen previews a device before it has been chosen.
+  const startCamera = useCallback(
+    (deviceId?: string) => client.startCamera(deviceId ?? (cameraDeviceId || undefined)),
+    [client, cameraDeviceId],
   )
   const stopCamera = useCallback(() => client.stopCamera(), [client])
   const toggleCamera = useCallback(() => client.toggleCamera(), [client])
@@ -181,6 +202,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     leave,
     setMuted,
     toggleMute,
+    setAudioInput,
     startCamera,
     stopCamera,
     toggleCamera,
@@ -195,7 +217,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     <VoiceContext.Provider value={value}>
       {children}
       {/* Global Audio output container: keeps remote participant audio playing across page navigations */}
-      <GlobalAudioOutputs participants={state.participants} />
+      <GlobalAudioOutputs
+        participants={state.participants}
+        sinkId={speakerDeviceId}
+        volume={outputVolume}
+      />
     </VoiceContext.Provider>
   )
 }
@@ -227,17 +253,46 @@ export function useVoiceRoom(roomId: Uuid) {
   }
 }
 
-function GlobalAudioOutputs({ participants }: { participants: RemoteParticipant[] }) {
+function GlobalAudioOutputs({
+  participants,
+  sinkId,
+  volume,
+}: {
+  participants: RemoteParticipant[]
+  sinkId: string
+  volume: number
+}) {
   return (
     <div style={{ display: 'none' }} aria-hidden>
       {participants.map((participant) => (
-        <RemoteAudioTrack key={participant.id} stream={participant.stream} />
+        <RemoteAudioTrack
+          key={participant.id}
+          stream={participant.stream}
+          sinkId={sinkId}
+          volume={volume}
+        />
       ))}
     </div>
   )
 }
 
-function RemoteAudioTrack({ stream }: { stream: MediaStream | null }) {
+/**
+ * One remote participant's audio.
+ *
+ * Playback lives here, at the app root, rather than in whatever screen happens
+ * to be showing the call — so navigating away from a room does not unmount the
+ * audio. That also makes this the one place the speaker and volume have to be
+ * applied.
+ */
+function RemoteAudioTrack({
+  stream,
+  sinkId,
+  volume,
+}: {
+  stream: MediaStream | null
+  sinkId: string
+  volume: number
+}) {
   const ref = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
@@ -249,6 +304,23 @@ function RemoteAudioTrack({ stream }: { stream: MediaStream | null }) {
       element.srcObject = null
     }
   }, [stream])
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    element.volume = Math.min(Math.max(volume, 0), 100) / 100
+  }, [volume])
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element || !sinkId) return
+    // Chromium-only. Elsewhere the element plays through the system default,
+    // and the settings screen hides the control rather than offering a no-op.
+    const withSink = element as HTMLAudioElement & {
+      setSinkId?: (id: string) => Promise<void>
+    }
+    void withSink.setSinkId?.(sinkId).catch(() => {})
+  }, [sinkId, stream])
 
   if (!stream) return null
   return <audio ref={ref} autoPlay playsInline />

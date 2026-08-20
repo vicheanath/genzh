@@ -12,6 +12,14 @@ use crate::extract::ApiJson;
 use crate::middleware::CurrentUser;
 use crate::state::AppState;
 
+/// `GET /api/v1/friends/sent`
+pub async fn sent(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+) -> ApiResult<Json<Vec<Friendship>>> {
+    Ok(Json(state.social.sent_requests(caller.user_id).await?))
+}
+
 /// `POST /api/v1/friends` body.
 #[derive(Debug, Deserialize)]
 pub struct FriendRequest {
@@ -77,6 +85,14 @@ pub async fn remove(
 ) -> ApiResult<StatusCode> {
     state.social.remove_friend(caller.user_id, other_id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/v1/blocks`
+pub async fn blocked(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+) -> ApiResult<Json<Vec<UserId>>> {
+    Ok(Json(state.social.blocked(caller.user_id).await?))
 }
 
 /// `PUT /api/v1/blocks/{user_id}`

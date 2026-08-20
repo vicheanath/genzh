@@ -1191,6 +1191,7 @@ dependencies = [
  "chrono",
  "genzh-community",
  "genzh-domain",
+ "genzh-graph",
  "genzh-infrastructure",
  "genzh-media-core",
  "serde",

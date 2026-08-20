@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 import type { Uuid } from './api'
 import type { FriendTab } from '@/routes/FriendsRoute'
-import type { SettingsTab } from '@/routes/UserSettingsModal'
+import type { SettingsTab } from '@/features/settings'
 
 interface AppState {
   // User settings modal
@@ -32,6 +32,24 @@ interface AppState {
   toggleMute: () => void
   toggleDeafen: () => void
 
+  // Device preferences.
+  //
+  // Persisted, because "which headset am I on" is not a per-session question.
+  // An empty string means "whatever the system picks" — deliberately not null,
+  // so a device that has since been unplugged degrades to the default rather
+  // than failing an `exact` constraint.
+  micDeviceId: string
+  cameraDeviceId: string
+  speakerDeviceId: string
+  /** Playback gain for remote participants, 0–100. */
+  outputVolume: number
+  setDevicePreferences: (prefs: {
+    micDeviceId?: string
+    cameraDeviceId?: string
+    speakerDeviceId?: string
+    outputVolume?: number
+  }) => void
+
   // Anonymous Persona Settings
   anonymousAlias: string
   anonymousAccent: string
@@ -46,6 +64,33 @@ interface AppState {
 }
 
 const ANON_STORAGE_KEY = 'genzh_anonymous_settings'
+const DEVICE_STORAGE_KEY = 'genzh_device_preferences'
+
+interface DevicePreferences {
+  micDeviceId: string
+  cameraDeviceId: string
+  speakerDeviceId: string
+  outputVolume: number
+}
+
+const DEVICE_DEFAULTS: DevicePreferences = {
+  micDeviceId: '',
+  cameraDeviceId: '',
+  speakerDeviceId: '',
+  outputVolume: 100,
+}
+
+function getInitialDevices(): DevicePreferences {
+  try {
+    const raw = localStorage.getItem(DEVICE_STORAGE_KEY)
+    if (raw) {
+      return { ...DEVICE_DEFAULTS, ...(JSON.parse(raw) as Partial<DevicePreferences>) }
+    }
+  } catch {
+    // Ignore storage parse errors
+  }
+  return DEVICE_DEFAULTS
+}
 
 function getInitialAnonSettings() {
   try {
@@ -65,6 +110,7 @@ function getInitialAnonSettings() {
 }
 
 const initialAnon = getInitialAnonSettings()
+const initialDevices = getInitialDevices()
 
 export const useAppStore = create<AppState>((set) => ({
   userSettingsOpen: false,
@@ -89,6 +135,24 @@ export const useAppStore = create<AppState>((set) => ({
   isDeafened: false,
   toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
   toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
+
+  ...initialDevices,
+
+  setDevicePreferences: (prefs) =>
+    set((state) => {
+      const next: DevicePreferences = {
+        micDeviceId: prefs.micDeviceId ?? state.micDeviceId,
+        cameraDeviceId: prefs.cameraDeviceId ?? state.cameraDeviceId,
+        speakerDeviceId: prefs.speakerDeviceId ?? state.speakerDeviceId,
+        outputVolume: prefs.outputVolume ?? state.outputVolume,
+      }
+      try {
+        localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // Storage access issues
+      }
+      return next
+    }),
 
   anonymousAlias: initialAnon?.alias ?? 'Anonymous Phantom',
   anonymousAccent: initialAnon?.accent ?? '#a855f7',

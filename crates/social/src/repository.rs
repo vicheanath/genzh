@@ -116,6 +116,23 @@ impl SocialRepository {
         .map_err(RepositoryError::from)
     }
 
+    /// Everyone this user has blocked.
+    ///
+    /// One direction only, deliberately: this answers "who have I blocked",
+    /// which is a list the user can act on. Whether *they* blocked *you* is not
+    /// disclosed — that is what [`Self::blocked_either_way`] is for.
+    pub async fn list_blocked(&self, blocker_id: UserId) -> RepositoryResult<Vec<Block>> {
+        sqlx::query_as(
+            "SELECT blocker_id, blocked_id, created_at
+             FROM blocks WHERE blocker_id = $1
+             ORDER BY created_at DESC",
+        )
+        .bind(blocker_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
     /// Unblock a user.
     pub async fn unblock(&self, blocker_id: UserId, blocked_id: UserId) -> RepositoryResult<bool> {
         let result = sqlx::query("DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2")

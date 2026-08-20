@@ -20,25 +20,36 @@ impl SocialService {
         }
     }
 
-    /// Send a friend request.
+    /// Refuse anything that would let two users reach each other across a block.
     ///
-    /// A request from someone you have blocked — or who has blocked you — is
-    /// refused with the same error as any other rejection, so a block is not
-    /// observable from the outside.
+    /// Checked in *both* directions and reported with the same error either
+    /// way, so a block is not observable from the outside: someone you blocked
+    /// gets the response they would get if you had simply declined.
+    ///
+    /// This is the gate every direct-contact path goes through — friend
+    /// requests, opening a conversation, posting into one. Blocking used to
+    /// guard only the first of those, which meant a blocked user could still
+    /// open a DM and talk to you.
+    pub async fn ensure_can_reach(&self, a: UserId, b: UserId) -> ServiceResult<()> {
+        if a == b {
+            // You can always reach yourself; a self-DM is a legitimate notes-
+            // to-self room and is not a "contact" in the sense this guards.
+            return Ok(());
+        }
+        if self.repository.blocked_either_way(a, b).await? {
+            return Err(ServiceError::denied("blocked"));
+        }
+        Ok(())
+    }
+
+    /// Send a friend request.
     pub async fn request_friend(
         &self,
         requester_id: UserId,
         addressee_id: UserId,
     ) -> ServiceResult<Friendship> {
         social::ensure_distinct_users(requester_id, addressee_id)?;
-
-        if self
-            .repository
-            .blocked_either_way(requester_id, addressee_id)
-            .await?
-        {
-            return Err(ServiceError::denied("blocked"));
-        }
+        self.ensure_can_reach(requester_id, addressee_id).await?;
 
         if let Some(existing) = self
             .repository
@@ -106,16 +117,35 @@ impl SocialService {
         Ok(rows.iter().filter_map(|f| f.counterpart(user_id)).collect())
     }
 
-    /// List incoming pending requests.
+    /// Requests waiting for *this* user to answer.
     pub async fn pending_requests(&self, user_id: UserId) -> ServiceResult<Vec<Friendship>> {
-        let rows = self
-            .repository
-            .list_by_status(user_id, FriendshipStatus::Pending)
-            .await?;
-        Ok(rows
+        Ok(self
+            .pending_both_ways(user_id)
+            .await?
             .into_iter()
             .filter(|f| f.addressee_id == user_id)
             .collect())
+    }
+
+    /// Requests this user has sent and nobody has answered yet.
+    ///
+    /// Without these the sender has no feedback at all: the request vanishes on
+    /// submit, and asking again returns a conflict for a request they cannot
+    /// see.
+    pub async fn sent_requests(&self, user_id: UserId) -> ServiceResult<Vec<Friendship>> {
+        Ok(self
+            .pending_both_ways(user_id)
+            .await?
+            .into_iter()
+            .filter(|f| f.requester_id == user_id)
+            .collect())
+    }
+
+    async fn pending_both_ways(&self, user_id: UserId) -> ServiceResult<Vec<Friendship>> {
+        Ok(self
+            .repository
+            .list_by_status(user_id, FriendshipStatus::Pending)
+            .await?)
     }
 
     /// Block a user, ending any friendship between them.
@@ -125,6 +155,17 @@ impl SocialService {
         // A block that leaves the friendship in place would be a half-measure.
         self.repository.remove(blocker_id, blocked_id).await?;
         Ok(())
+    }
+
+    /// Everyone this user has blocked, most recent first.
+    pub async fn blocked(&self, blocker_id: UserId) -> ServiceResult<Vec<UserId>> {
+        Ok(self
+            .repository
+            .list_blocked(blocker_id)
+            .await?
+            .into_iter()
+            .map(|block| block.blocked_id)
+            .collect())
     }
 
     /// Unblock a user.

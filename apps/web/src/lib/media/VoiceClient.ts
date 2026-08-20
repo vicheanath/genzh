@@ -93,6 +93,9 @@ export class VoiceClient {
   private subscriber: RTCPeerConnection | null = null
 
   private localStream: MediaStream | null = null
+  private audioSender: RTCRtpSender | null = null
+  /** Empty means "whatever the system picks". Survives reconnects. */
+  private preferredMicId = ''
   private cameraTrack: MediaStreamTrack | null = null
   private cameraSender: RTCRtpSender | null = null
   private screenTrack: MediaStreamTrack | null = null
@@ -170,6 +173,55 @@ export class VoiceClient {
   }
 
   /**
+   * Choose which microphone to publish.
+   *
+   * Applied immediately when in a call and remembered for the next one. The
+   * swap goes through `replaceTrack`, so it does not renegotiate and nobody
+   * else in the room hears a gap — which is the whole reason to prefer it over
+   * removing and re-adding the track.
+   */
+  async setAudioInput(deviceId: string): Promise<void> {
+    if (deviceId === this.preferredMicId) return
+    this.preferredMicId = deviceId
+
+    // Not in a call: the choice is stored and takes effect on the next join.
+    if (!this.localStream) return
+
+    let replacement: MediaStream
+    try {
+      replacement = await captureAudio(deviceId)
+    } catch {
+      this.patch({ error: 'Could not switch to that microphone' })
+      return
+    }
+
+    const track = replacement.getAudioTracks()[0]
+    if (!track) return
+    // Carry the mute state across, or switching devices would unmute you.
+    track.enabled = !this.state.muted
+
+    try {
+      await this.audioSender?.replaceTrack(track)
+    } catch {
+      for (const t of replacement.getTracks()) t.stop()
+      this.patch({ error: 'Could not switch to that microphone' })
+      return
+    }
+
+    for (const old of this.localStream.getTracks()) old.stop()
+    this.localStream = replacement
+    // The analyser was reading the old track; without this the speaking ring
+    // freezes at whatever the previous microphone was last doing.
+    this.restartVoiceDetection()
+    this.patch({ error: null })
+  }
+
+  /** The microphone this client will use, or '' for the system default. */
+  get audioInputId(): string {
+    return this.preferredMicId
+  }
+
+  /**
    * Turn the camera on.
    *
    * Same shape as a screen share — declare intent, add the track, re-offer —
@@ -188,15 +240,7 @@ export class VoiceClient {
 
     let capture: MediaStream
     try {
-      capture = await navigator.mediaDevices.getUserMedia({
-        video: deviceId
-          ? { deviceId: { exact: deviceId } }
-          : { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-        // The microphone is published separately and independently of this, so
-        // asking for it again here would open a second capture of the same
-        // device and fight with the mute button.
-        audio: false,
-      })
+      capture = await captureVideo(deviceId ?? '')
     } catch (error) {
       this.patch({
         error: isPermissionDenied(error)
@@ -403,13 +447,7 @@ export class VoiceClient {
 
     try {
       if (!this.localStream) {
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        })
+        this.localStream = await captureAudio(this.preferredMicId)
         // Join muted; unmuting is an explicit act.
         for (const track of this.localStream.getAudioTracks()) track.enabled = false
       }
@@ -743,7 +781,7 @@ export class VoiceClient {
     // SDP cannot say what a track is for; the server correlates this with the
     // msid in the offer.
     this.send({ type: 'publish_intent', kind: 'audio', client_track_id: track.id })
-    publisher.addTrack(track, this.localStream)
+    this.audioSender = publisher.addTrack(track, this.localStream)
 
     // A reconnect builds a fresh publisher, so any video that survived the drop
     // has to be put back on it — in this same offer, not one offer per track.
@@ -786,6 +824,16 @@ export class VoiceClient {
    * with server CPU. Hysteresis matches the server-side detector: a short burst
    * does not trigger, and a pause between words does not clear.
    */
+  private restartVoiceDetection(): void {
+    if (this.vadFrame !== null) {
+      cancelAnimationFrame(this.vadFrame)
+      this.vadFrame = null
+    }
+    void this.audioContext?.close().catch(() => {})
+    this.audioContext = null
+    this.startVoiceDetection()
+  }
+
   private startVoiceDetection(): void {
     if (!this.localStream) return
 
@@ -881,6 +929,7 @@ export class VoiceClient {
     this.subscriber = null
     // The senders belonged to the closed publisher; the *tracks* deliberately
     // survive, so `negotiate` can put them back on the new connection.
+    this.audioSender = null
     this.cameraSender = null
     this.screenSender = null
     this.remoteTracks.clear()
@@ -935,6 +984,66 @@ function kindFromTrackId(trackId: string): TrackInfo['kind'] | null {
   const suffix = trackId.split(':')[1]
   if (suffix === 'audio' || suffix === 'camera' || suffix === 'screen_share') return suffix
   return null
+}
+
+/**
+ * Open the microphone, honouring a chosen device.
+ *
+ * A saved device id can go stale — the headset it named was unplugged some time
+ * between the last session and this one — and `exact` turns that into a hard
+ * failure. Falling back to the system default means an absent device costs the
+ * user their preference, not their ability to join.
+ */
+async function captureAudio(deviceId: string): Promise<MediaStream> {
+  const audio: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  }
+
+  if (!deviceId) return navigator.mediaDevices.getUserMedia({ audio })
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: { ...audio, deviceId: { exact: deviceId } },
+    })
+  } catch (error) {
+    if (!isDeviceUnavailable(error)) throw error
+    return navigator.mediaDevices.getUserMedia({ audio })
+  }
+}
+
+/** The camera equivalent of {@link captureAudio}, with the same fallback. */
+async function captureVideo(deviceId: string): Promise<MediaStream> {
+  const video: MediaTrackConstraints = {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: { ideal: 30 },
+  }
+  // The microphone is published separately and independently of this, so asking
+  // for it here would open a second capture of the same device and fight with
+  // the mute button.
+  const audio = false
+
+  if (!deviceId) return navigator.mediaDevices.getUserMedia({ video, audio })
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { ...video, deviceId: { exact: deviceId } },
+      audio,
+    })
+  } catch (error) {
+    if (!isDeviceUnavailable(error)) throw error
+    return navigator.mediaDevices.getUserMedia({ video, audio })
+  }
+}
+
+/** Is the named device simply not there any more? */
+function isDeviceUnavailable(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'OverconstrainedError' || error.name === 'NotFoundError')
+  )
 }
 
 /** Did the browser refuse the capture because permission is denied? */

@@ -38,9 +38,9 @@ async fn main() -> anyhow::Result<()> {
 
     let auth = AuthService::new(pool.clone(), jwt);
     let communities = CommunityService::new(pool.clone());
-    let rooms = RoomService::new(pool.clone(), communities.clone());
-    let messaging = MessagingService::new(pool.clone(), rooms.clone());
     let social = SocialService::new(pool.clone());
+    let rooms = RoomService::new(pool.clone(), communities.clone(), social.clone());
+    let messaging = MessagingService::new(pool.clone(), rooms.clone());
 
     println!("--- 1. Seeding Users ---");
     let test_users = [
