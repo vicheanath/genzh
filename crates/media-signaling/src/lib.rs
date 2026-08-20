@@ -40,9 +40,11 @@
 //! offerer per connection the problem does not exist, at the cost of a second
 //! ICE/DTLS handshake — which is why every production SFU is built this way.
 
+pub mod budget;
 pub mod limits;
 pub mod protocol;
 
+pub use budget::MessageBudget;
 pub use limits::*;
 pub use protocol::{
     ClientMessage, PROTOCOL_VERSION, PeerTarget, ProtocolError, ServerMessage, SignalCloseCode,
