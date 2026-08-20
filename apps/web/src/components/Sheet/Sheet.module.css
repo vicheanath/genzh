@@ -28,6 +28,23 @@
 .popup[data-starting-style],
 .popup[data-ending-style] { transform: translateX(-100%); }
 
+/* Comes up from the bottom instead. Capped short of full height so the page
+   behind stays visible — this is a glance, not a destination — and the bottom
+   inset keeps the last row clear of the home indicator. */
+.popupBottom {
+  inset-block: auto 0;
+  inset-inline: 0;
+  width: auto;
+  max-height: min(70vh, 32rem);
+  padding-bottom: env(safe-area-inset-bottom);
+  border-inline-end: none;
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+.popupBottom[data-starting-style],
+.popupBottom[data-ending-style] { transform: translateY(100%); }
+
 /* Visually hidden, still announced. The panel's heading is the navigation
    itself; a visible title would just cost a row of screen. */
 .srOnly {

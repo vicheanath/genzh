@@ -503,6 +503,14 @@
   color: var(--color-accent-text);
 }
 
+/* Anchors the unread badge to the icon rather than the whole tab, so it sits
+   on the bell instead of floating over the label. */
+.mobileNavIcon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
 @media (max-width: 900px) {
   .shell { flex-direction: column; }
 }

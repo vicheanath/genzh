@@ -32,7 +32,10 @@
   font-weight: 700;
   line-height: 1rem;
   text-align: center;
-  box-shadow: 0 0 0 2px var(--color-sunken);
+  /* A ring in the surrounding colour so the badge reads as sitting on top of
+     the icon rather than merging with it. `currentColor` is wrong here — the
+     ring belongs to the background, not the glyph. */
+  box-shadow: 0 0 0 2px var(--color-surface);
 }
 
 .popup {

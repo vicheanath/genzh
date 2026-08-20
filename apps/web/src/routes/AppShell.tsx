@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-rout
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import {
+  BellIcon,
   CheckIcon,
   CompassIcon,
   FlameIcon,
@@ -48,6 +49,7 @@ import { useVoice } from '@/lib/media'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
+import { useNotifications } from '@/lib/useNotifications'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 import { useTheme, type Theme } from '@/lib/useTheme'
@@ -55,7 +57,7 @@ import { chatSocket } from '@/lib/ws/ChatSocket'
 
 import { UserSettingsModal } from '@/features/settings'
 
-import { NotificationBell } from './NotificationBell'
+import { NotificationBell, NotificationBadge, NotificationPanel } from './NotificationBell'
 
 import { AddCommunityDialog } from './AddCommunityDialog'
 import { ProfileDialog } from './ProfileDialog'
@@ -89,6 +91,11 @@ export function AppShell() {
   const [openedAt, setOpenedAt] = useState<string | null>(null)
   const drawerOpen = openedAt === location.pathname
   const setDrawerOpen = (open: boolean) => setOpenedAt(open ? location.pathname : null)
+
+  // On a phone the user bar — and the bell in it — lives inside the navigation
+  // drawer, which is the wrong place for something you check at a glance. The
+  // bottom bar owns it there instead.
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   const communities = useAsync(
     async () => communitiesApi.list(await getToken()),
@@ -187,7 +194,13 @@ export function AppShell() {
         </div>
       </main>
 
-      {isMobile && <MobileNav onOpenAdd={() => openAddCommunity()} />}
+      {isMobile && (
+        <MobileNav
+          onOpenAdd={() => openAddCommunity()}
+          notificationsOpen={notificationsOpen}
+          onNotificationsOpenChange={setNotificationsOpen}
+        />
+      )}
 
       <AddCommunityDialog
         open={addCommunityOpen}
@@ -713,7 +726,17 @@ function MobileTopBar({
   )
 }
 
-function MobileNav({ onOpenAdd }: { onOpenAdd: () => void }) {
+function MobileNav({
+  onOpenAdd,
+  notificationsOpen,
+  onNotificationsOpenChange,
+}: {
+  onOpenAdd: () => void
+  notificationsOpen: boolean
+  onNotificationsOpenChange: (open: boolean) => void
+}) {
+  const { unread } = useNotifications()
+
   return (
     <nav className={styles.mobileNav} aria-label="Main">
       <NavLink
@@ -740,12 +763,34 @@ function MobileNav({ onOpenAdd }: { onOpenAdd: () => void }) {
       </NavLink>
       <button
         type="button"
+        className={cx(styles.mobileNavItem, notificationsOpen && styles.mobileNavItemActive)}
+        onClick={() => onNotificationsOpenChange(true)}
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+      >
+        <span className={styles.mobileNavIcon}>
+          <BellIcon size={20} />
+          <NotificationBadge count={unread} />
+        </span>
+        Alerts
+      </button>
+
+      <button
+        type="button"
         className={styles.mobileNavItem}
         onClick={onOpenAdd}
       >
         <PlusIcon size={20} />
-        Add Server
+        Add
       </button>
+
+      <Sheet
+        open={notificationsOpen}
+        onOpenChange={onNotificationsOpenChange}
+        title="Notifications"
+        side="bottom"
+      >
+        <NotificationPanel onNavigate={() => onNotificationsOpenChange(false)} />
+      </Sheet>
     </nav>
   )
 }
