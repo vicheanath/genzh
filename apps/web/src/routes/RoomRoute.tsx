@@ -28,6 +28,7 @@ import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
+import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 
 import { ActivityExperience } from '@/features/experiences/ActivityExperience'
@@ -87,6 +88,7 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const { user, getToken } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const { isOnline } = usePresence()
   const [membersOpen, setMembersOpen] = useState(false)
   const isAnonymousByDefault = useAppStore((s) => s.isAnonymousByDefault)
   const anonymousAlias = useAppStore((s) => s.anonymousAlias)
@@ -157,7 +159,7 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
                 src={partner?.avatar_url}
                 color={partner?.accent_color}
                 size="md"
-                presence="online"
+                presence={partnerId && isOnline(partnerId) ? 'online' : 'offline'}
               />
               <div className={styles.headerText}>
                 <h1 className={styles.roomName}>

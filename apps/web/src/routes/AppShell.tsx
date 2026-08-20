@@ -48,6 +48,7 @@ import { useVoice } from '@/lib/media'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
+import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 import { useTheme, type Theme } from '@/lib/useTheme'
 import { chatSocket } from '@/lib/ws/ChatSocket'
@@ -462,6 +463,7 @@ function ChannelSidebar({
 function DirectMessageList({ rooms }: { rooms: UserRoom[] }) {
   const peerIds = rooms.flatMap((room) => (room.dm_peer_id ? [room.dm_peer_id] : []))
   const lookup = useProfiles(peerIds)
+  const { isOnline } = usePresence()
 
   return (
     <>
@@ -481,7 +483,9 @@ function DirectMessageList({ rooms }: { rooms: UserRoom[] }) {
                 src={peer.avatar_url}
                 color={peer.accent_color}
                 size="xs"
-                presence="online"
+                presence={
+                  dm.dm_peer_id && isOnline(dm.dm_peer_id) ? 'online' : 'offline'
+                }
               />
             ) : (
               <MessageSquareIcon size={16} className={styles.navIcon} />
@@ -604,6 +608,8 @@ function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
 
   return (
     <div className={styles.userBar}>
+      {/* Your own dot is genuinely online whenever this renders — the shell
+          holds the socket, so a signed-in session is a connected one. */}
       <Avatar
         name={user?.profile.display_name ?? '?'}
         src={user?.profile.avatar_url}

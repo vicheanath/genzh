@@ -1,10 +1,8 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -37,11 +35,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const { user, getToken } = useAuth()
   const [onlineIds, setOnlineIds] = useState<ReadonlySet<Uuid>>(() => new Set())
 
-  // Held in a ref as well so the socket listener can update without being torn
-  // down and re-attached on every presence change.
-  const latest = useRef(onlineIds)
-  latest.current = onlineIds
-
   const signedIn = Boolean(user)
 
   useEffect(() => {
@@ -62,16 +55,20 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       }
     })()
 
+    // Updated functionally rather than from a ref, so the listener is attached
+    // once for the session instead of being replaced on every change.
     const off = chatSocket.on<ChatServerEvent>('presence_changed', (event) => {
       if (event.type !== 'presence_changed') return
 
-      const next = new Set(latest.current)
-      if (event.online) {
-        next.add(event.user_id)
-      } else {
-        next.delete(event.user_id)
-      }
-      setOnlineIds(next)
+      setOnlineIds((current) => {
+        const next = new Set(current)
+        if (event.online) {
+          next.add(event.user_id)
+        } else {
+          next.delete(event.user_id)
+        }
+        return next
+      })
     })
 
     return () => {
@@ -104,13 +101,4 @@ export function usePresence(): PresenceValue {
     [],
   )
   return context ?? fallback
-}
-
-/** One user's presence, as the prop `Avatar` expects. */
-export function usePresenceOf(userId: Uuid | null | undefined) {
-  const { isOnline } = usePresence()
-  return useCallback(
-    () => (userId && isOnline(userId) ? ('online' as const) : ('offline' as const)),
-    [userId, isOnline],
-  )()
 }

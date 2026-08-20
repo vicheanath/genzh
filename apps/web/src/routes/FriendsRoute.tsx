@@ -35,6 +35,7 @@ import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { formatRelative } from '@/lib/time'
 import { useAsync } from '@/lib/useAsync'
+import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 
 import { ProfileDialog } from './ProfileDialog'
@@ -54,15 +55,20 @@ export function FriendsRoute() {
   const tab = useAppStore((s) => s.friendsTab)
   const setTab = useAppStore((s) => s.setFriendsTab)
 
+  const { isOnline } = usePresence()
   const [search, setSearch] = useState('')
   const [selectedUserId, setSelectedUserId] = useState<Uuid | null>(null)
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
 
   const friends = useAsync(async () => friendsApi.list(await getToken()), [getToken])
   const requests = useAsync(async () => friendsApi.pending(await getToken()), [getToken])
+  const sent = useAsync(async () => friendsApi.sent(await getToken()), [getToken])
+  const blocked = useAsync(async () => blocksApi.list(await getToken()), [getToken])
 
-  // Track blocked users locally for the blocked tab
-  const [blockedUsers, setBlockedUsers] = useState<Uuid[]>([])
+  // Local overlay on the fetched list, so blocking and unblocking take effect
+  // without a round trip. Null means "nothing changed here yet".
+  const [blockOverride, setBlockOverride] = useState<Uuid[] | null>(null)
+  const blockedUsers = blockOverride ?? blocked.data ?? []
 
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -74,6 +80,7 @@ export function FriendsRoute() {
   const allIds = [
     ...(friends.data ?? []),
     ...(requests.data ?? []).map((r) => r.requester_id),
+    ...(sent.data ?? []).map((r) => r.addressee_id),
     ...blockedUsers,
   ]
   const lookup = useProfiles(allIds)
@@ -81,7 +88,8 @@ export function FriendsRoute() {
   const refresh = useCallback(() => {
     friends.reload()
     requests.reload()
-  }, [friends, requests])
+    sent.reload()
+  }, [friends, requests, sent])
 
   async function openDM(friendId: Uuid) {
     const prof = lookup(friendId)
@@ -139,7 +147,7 @@ export function FriendsRoute() {
     try {
       await blocksApi.block(await getToken(), otherId)
       if (!blockedUsers.includes(otherId)) {
-        setBlockedUsers((prev) => [...prev, otherId])
+        setBlockOverride([...blockedUsers, otherId])
       }
       toast.success('User blocked', 'They can no longer message or interact with you.')
       refresh()
@@ -151,7 +159,7 @@ export function FriendsRoute() {
   async function unblockUser(otherId: Uuid) {
     try {
       await blocksApi.unblock(await getToken(), otherId)
-      setBlockedUsers((prev) => prev.filter((id) => id !== otherId))
+      setBlockOverride(blockedUsers.filter((id) => id !== otherId))
       toast.success('User unblocked')
       refresh()
     } catch (cause) {
@@ -167,9 +175,15 @@ export function FriendsRoute() {
       .catch(() => toast.error('Could not copy User ID'))
   }
 
-  const pendingCount = requests.data?.length ?? 0
+  // Both directions: a request you sent is as pending as one you received, and
+  // the sender previously had no way to see theirs at all.
+  const pendingCount = (requests.data?.length ?? 0) + (sent.data?.length ?? 0)
 
   const filteredFriends = (friends.data ?? []).filter((friendId) => {
+    // The Online tab used to render the same list as All with the dot forced
+    // green. It now filters on real presence.
+    if (tab === 'online' && !isOnline(friendId)) return false
+
     const prof = lookup(friendId)
     if (!search) return true
     const query = search.toLowerCase()
@@ -292,7 +306,7 @@ export function FriendsRoute() {
                         src={prof?.avatar_url}
                         color={prof?.accent_color}
                         size="md"
-                        presence={tab === 'online' ? 'online' : 'offline'}
+                        presence={isOnline(friendId) ? 'online' : 'offline'}
                       />
                       <div
                         className={styles.identity}
@@ -369,7 +383,7 @@ export function FriendsRoute() {
 
             {!requests.loading && pendingCount === 0 && (
               <div className={styles.empty}>
-                <p>There are no pending friend requests waiting for you.</p>
+                <p>Nothing pending — no requests waiting, none awaiting a reply.</p>
               </div>
             )}
 
@@ -414,6 +428,47 @@ export function FriendsRoute() {
                   )
                 })}
               </div>
+            )}
+
+            {sent.data && sent.data.length > 0 && (
+              <>
+                <div className={styles.sectionTitle}>Sent — {sent.data.length}</div>
+                <div className={styles.list}>
+                  {sent.data.map((req) => {
+                    const prof = lookup(req.addressee_id)
+                    return (
+                      <div key={req.addressee_id} className={styles.row}>
+                        <Avatar
+                          name={prof?.display_name ?? '?'}
+                          src={prof?.avatar_url}
+                          color={prof?.accent_color}
+                          size="md"
+                          presence={isOnline(req.addressee_id) ? 'online' : 'offline'}
+                        />
+                        <div className={styles.identity}>
+                          <div className={styles.name}>{prof?.display_name ?? 'Loading…'}</div>
+                          <div className={styles.meta}>
+                            Awaiting their reply · sent {formatRelative(req.created_at)}
+                          </div>
+                        </div>
+
+                        <div className={styles.actions}>
+                          {/* Withdrawing is the same operation as unfriending:
+                              it deletes the row either way. */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void removeFriend(req.addressee_id)}
+                          >
+                            <XIcon size={15} />
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </section>
         )}

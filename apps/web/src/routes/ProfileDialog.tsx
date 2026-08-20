@@ -31,6 +31,7 @@ import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
+import { usePresence } from '@/lib/usePresence'
 import { primeProfile } from '@/lib/useProfiles'
 
 import styles from './ProfileDialog.module.css'
@@ -111,6 +112,7 @@ function PublicProfileCard({
   const { getToken } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
+  const { isOnline } = usePresence()
 
   const publicProfile = useAsync(
     async () => usersApi.get(await getToken(), userId),
@@ -187,7 +189,9 @@ function PublicProfileCard({
     <div>
       <div
         className={styles.preview}
-        style={{ '--preview-accent': profile?.accent_color ?? '#5865f2' } as React.CSSProperties}
+        style={
+          { '--preview-accent': profile?.accent_color ?? 'var(--color-accent)' } as React.CSSProperties
+        }
       >
         <div className={styles.previewBanner} />
         <Avatar
@@ -195,7 +199,7 @@ function PublicProfileCard({
           src={profile?.avatar_url}
           color={profile?.accent_color}
           size="xl"
-          presence="online"
+          presence={isOnline(userId) ? 'online' : 'offline'}
           className={styles.previewAvatar}
         />
         <div className={styles.previewText}>
@@ -358,6 +362,7 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
               src={avatarUrl || null}
               color={accent}
               size="xl"
+              // Your own preview: online by construction, since you are here looking at it.
               presence="online"
               className={styles.previewAvatar}
             />

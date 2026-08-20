@@ -9,6 +9,7 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
+import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 
 import { ProfileDialog } from './ProfileDialog'
@@ -38,7 +39,13 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
   }, [getToken, communityId, roomId])
 
   const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? [])
-  const allMembers = members.data ?? []
+  const { isOnline } = usePresence()
+
+  // Online first. A member list sorted by join order buries the people you can
+  // actually talk to right now.
+  const allMembers = [...(members.data ?? [])].sort(
+    (a, b) => Number(isOnline(b.user_id)) - Number(isOnline(a.user_id)),
+  )
 
   return (
     <div className={styles.panel}>
@@ -65,7 +72,7 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
                   src={profile?.avatar_url}
                   color={profile?.accent_color}
                   size="sm"
-                  presence="online"
+                  presence={isOnline(member.user_id) ? 'online' : 'offline'}
                 />
                 <div className={styles.identity}>
                   <div className={styles.name} style={{ color: profile?.accent_color ?? undefined }}>

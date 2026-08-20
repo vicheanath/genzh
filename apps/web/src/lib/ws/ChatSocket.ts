@@ -46,6 +46,11 @@ export type ChatServerEvent =
       reactions: ReactionSummary[]
     }
   | {
+      type: 'presence_changed'
+      user_id: Uuid
+      online: boolean
+    }
+  | {
       type: 'direct_room_opened'
       user_id: Uuid
       room_id: Uuid

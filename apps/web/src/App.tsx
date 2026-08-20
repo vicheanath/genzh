@@ -5,6 +5,7 @@ import { LoadingPanel } from '@/components/Spinner'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { VoiceProvider } from '@/lib/media'
 import { queryClient } from '@/lib/queryClient'
+import { PresenceProvider } from '@/lib/usePresence'
 
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
@@ -19,11 +20,13 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <VoiceProvider>
-          <BrowserRouter>
-            <Router />
-          </BrowserRouter>
-        </VoiceProvider>
+        <PresenceProvider>
+          <VoiceProvider>
+            <BrowserRouter>
+              <Router />
+            </BrowserRouter>
+          </VoiceProvider>
+        </PresenceProvider>
       </AuthProvider>
     </QueryClientProvider>
   )

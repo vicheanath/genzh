@@ -90,6 +90,7 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
               src={avatarUrl || user.profile.avatar_url}
               color={accentColor}
               size="xl"
+              // Your own preview: online by construction, since you are here looking at it.
               presence="online"
             />
           </div>
