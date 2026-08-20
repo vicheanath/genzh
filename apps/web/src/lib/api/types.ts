@@ -229,3 +229,12 @@ export interface MediaJoinResponse {
   expires_at: Timestamp
   ice_servers: Array<{ urls: string | string[]; username?: string; credential?: string }>
 }
+
+export interface AuthConfig {
+  app_env: string
+  allow_password_signup: boolean
+  oauth_providers: {
+    google: boolean
+    discord: boolean
+  }
+}

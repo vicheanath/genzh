@@ -23,10 +23,13 @@ pub fn build(state: AppState) -> Router {
 
     let api = Router::new()
         // ---- auth ----
+        .route("/auth/config", get(routes::oauth::config))
         .route("/auth/register", post(routes::auth::register))
         .route("/auth/login", post(routes::auth::login))
         .route("/auth/refresh", post(routes::auth::refresh))
         .route("/auth/logout", post(routes::auth::logout))
+        .route("/auth/oauth/{provider}/authorize", get(routes::oauth::authorize))
+        .route("/auth/oauth/{provider}/callback", get(routes::oauth::callback))
         .route(
             "/me",
             get(routes::auth::me).patch(routes::auth::update_profile),

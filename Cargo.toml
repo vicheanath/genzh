@@ -47,6 +47,7 @@ axum-extra = { version = "0.10", features = ["typed-header"] }
 tower = "0.5"
 tower-http = { version = "0.7", features = ["trace", "cors", "limit", "timeout"] }
 http = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # ---- serde ----
 serde = { version = "1", features = ["derive"] }
@@ -88,6 +89,7 @@ bytes = "1"
 dotenvy = "0.15"
 validator = { version = "0.21", features = ["derive"] }
 parking_lot = "0.12"
+urlencoding = "2.1"
 
 [profile.release]
 lto = "thin"

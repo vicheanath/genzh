@@ -28,8 +28,8 @@ pub struct User {
     pub handle: String,
     /// Unique, case-insensitive e-mail address.
     pub email: String,
-    /// Argon2id PHC string.
-    pub password_hash: String,
+    /// Argon2id PHC string. None if the user registered via OAuth without a password.
+    pub password_hash: Option<String>,
     /// Whether the account can still authenticate.
     pub is_active: bool,
     /// Creation time (UTC).

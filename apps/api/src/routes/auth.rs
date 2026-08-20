@@ -72,6 +72,12 @@ pub async fn register(
     headers: HeaderMap,
     ApiJson(body): ApiJson<RegisterRequest>,
 ) -> ApiResult<Json<AuthResponse>> {
+    if !state.config.allow_password_signup {
+        return Err(crate::error::ApiError::Forbidden(
+            "Password signup is disabled in production. Please sign up with Google or Discord.".to_owned(),
+        ));
+    }
+
     let (user, tokens) = state
         .auth
         .register(
@@ -211,7 +217,7 @@ pub async fn update_profile(
 }
 
 /// Capture where a session was created from.
-fn session_context(headers: &HeaderMap) -> SessionContext {
+pub(crate) fn session_context(headers: &HeaderMap) -> SessionContext {
     SessionContext {
         user_agent: headers
             .get(USER_AGENT)

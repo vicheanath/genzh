@@ -57,6 +57,23 @@ pub struct Config {
     pub rate_limit_per_minute: u32,
     /// Requests per minute per client address on `/auth/*`.
     pub auth_rate_limit_per_minute: u32,
+
+    /// Deployment environment: "development", "production", "test".
+    pub app_env: String,
+    /// Whether password-based registration is allowed.
+    pub allow_password_signup: bool,
+    /// Frontend application base URL for OAuth callbacks.
+    pub frontend_url: String,
+
+    /// Google OAuth configuration.
+    pub google_client_id: Option<String>,
+    pub google_client_secret: Option<String>,
+    pub google_redirect_uri: Option<String>,
+
+    /// Discord OAuth configuration.
+    pub discord_client_id: Option<String>,
+    pub discord_client_secret: Option<String>,
+    pub discord_redirect_uri: Option<String>,
 }
 
 /// A configuration value that is missing or unusable.
@@ -144,6 +161,30 @@ impl Config {
             cors_allowed_origins: optional("CORS_ALLOWED_ORIGINS").unwrap_or_default(),
             rate_limit_per_minute: number("RATE_LIMIT_PER_MINUTE", 600)?,
             auth_rate_limit_per_minute: number("AUTH_RATE_LIMIT_PER_MINUTE", 20)?,
+
+            app_env: {
+                let env = optional("APP_ENV")
+                    .or_else(|| optional("ENVIRONMENT"))
+                    .unwrap_or_else(|| "development".to_owned());
+                env
+            },
+            allow_password_signup: {
+                let env = optional("APP_ENV")
+                    .or_else(|| optional("ENVIRONMENT"))
+                    .unwrap_or_else(|| "development".to_owned());
+                let default_allow = !env.eq_ignore_ascii_case("production");
+                flag("ALLOW_PASSWORD_SIGNUP", default_allow)
+            },
+            frontend_url: optional("FRONTEND_URL")
+                .unwrap_or_else(|| "http://localhost:5173".to_owned()),
+
+            google_client_id: optional("GOOGLE_CLIENT_ID"),
+            google_client_secret: optional("GOOGLE_CLIENT_SECRET"),
+            google_redirect_uri: optional("GOOGLE_REDIRECT_URI"),
+
+            discord_client_id: optional("DISCORD_CLIENT_ID"),
+            discord_client_secret: optional("DISCORD_CLIENT_SECRET"),
+            discord_redirect_uri: optional("DISCORD_REDIRECT_URI"),
         })
     }
 }

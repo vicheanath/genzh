@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 
+import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
@@ -16,6 +17,7 @@ import {
   SparkleIcon,
 } from '@/components/Icons'
 import { Input } from '@/components/Input'
+import { Select, type SelectOption } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { useAuth } from '@/lib/auth'
@@ -59,7 +61,7 @@ export function InfoPage({ page }: { page: InfoPageType }) {
               <span className={styles.logoGlyph}>⚡</span>
               <span className={styles.logoText}>genzh</span>
             </Link>
-            <span className={styles.tagline}>Legal & Help Center</span>
+            <Badge tone="accent">Help & Legal</Badge>
           </div>
 
           <div className={styles.headerActions}>
@@ -114,7 +116,7 @@ export function InfoPage({ page }: { page: InfoPageType }) {
         <div className={styles.footerInner}>
           <div className={styles.footerBrand}>
             <span className={styles.logoGlyph}>⚡</span> genzh
-            <span className={styles.copy}>© {new Date().getFullYear()} genzh. Next-gen communication for everyone.</span>
+            <span className={styles.copy}>© {new Date().getFullYear()} genzh. Modern communication for all.</span>
           </div>
           <div className={styles.footerLinks}>
             {NAV_ITEMS.map((item) => (
@@ -135,10 +137,10 @@ function AboutSection() {
   return (
     <article className={styles.article}>
       <header className={styles.articleHeader}>
-        <span className={styles.kicker}>Next-Gen Social Experience</span>
+        <Badge tone="mint" dot>Next-Gen Social</Badge>
         <h1 className={styles.title}>About genzh</h1>
         <p className={styles.lead}>
-          genzh is a modern, real-time social platform engineered for authentic human connections, expressive communication, community spaces, and high-performance WebRTC voice and video.
+          genzh is a real-time social platform engineered for authentic human connections, expressive communication, community spaces, and high-performance WebRTC voice and video.
         </p>
       </header>
 
@@ -190,7 +192,7 @@ function AboutSection() {
       <section className={styles.section}>
         <h2>Built with Modern Architecture</h2>
         <p>
-          Engineered from the ground up using a modern Rust backend, WebSocket streaming, Selective Forwarding Units (SFU), and a responsive React frontend styled with modern design tokens.
+          Engineered from the ground up using a modern Rust backend, WebSocket streaming, Selective Forwarding Units (SFU), and a responsive React frontend styled with design tokens.
         </p>
       </section>
     </article>
@@ -203,7 +205,7 @@ function GuidelinesSection() {
   return (
     <article className={styles.article}>
       <header className={styles.articleHeader}>
-        <span className={styles.kicker}>Safety & Culture</span>
+        <Badge tone="accent" dot>Safety & Culture</Badge>
         <h1 className={styles.title}>Community Guidelines</h1>
         <p className={styles.lead}>
           Our mission is to create a welcoming, vibrant, and safe platform. We hold all members and communities to the highest standard of mutual respect.
@@ -257,7 +259,7 @@ function TermsSection() {
   return (
     <article className={styles.article}>
       <header className={styles.articleHeader}>
-        <span className={styles.kicker}>Legal Agreement</span>
+        <Badge tone="neutral">Legal Agreement</Badge>
         <h1 className={styles.title}>Terms of Service</h1>
         <p className={styles.lead}>
           Last updated: August 19, 2026. Please read these Terms carefully before using the genzh platform.
@@ -308,7 +310,7 @@ function PrivacySection() {
   return (
     <article className={styles.article}>
       <header className={styles.articleHeader}>
-        <span className={styles.kicker}>Data Protection</span>
+        <Badge tone="success" dot>Data Protection</Badge>
         <h1 className={styles.title}>Privacy Policy</h1>
         <p className={styles.lead}>
           We take your privacy seriously. This policy explains what information we collect, how we protect it, and your rights over your data.
@@ -377,7 +379,7 @@ function ContactSection() {
   return (
     <article className={styles.article}>
       <header className={styles.articleHeader}>
-        <span className={styles.kicker}>Get in Touch</span>
+        <Badge tone="mint">Get in Touch</Badge>
         <h1 className={styles.title}>Contact Us</h1>
         <p className={styles.lead}>
           Have a question, feedback, partnership inquiry, or need technical help? We&apos;d love to hear from you.
@@ -421,7 +423,7 @@ function ContactSection() {
         <div className={styles.contactFormWrap}>
           <h2>Send a Message</h2>
           {sent && (
-            <Callout tone="success">
+            <Callout tone="info">
               Thank you! Your message has been received. A team member will reply within 24 hours.
             </Callout>
           )}
@@ -478,9 +480,19 @@ function ContactSection() {
 
 // ── 6. REPORT ABUSE ────────────────────────────────────────────────────────
 
+const REPORT_CATEGORIES: ReadonlyArray<SelectOption<string>> = [
+  { value: 'harassment', label: 'Harassment / Bullying / Threats' },
+  { value: 'hate_speech', label: 'Hate Speech / Discrimination' },
+  { value: 'doxxing', label: 'Privacy Violation / Doxxing' },
+  { value: 'inappropriate', label: 'Inappropriate / Explicit Content' },
+  { value: 'spam', label: 'Spam / Scams / Raids' },
+  { value: 'impersonation', label: 'Impersonation / Fake Identity' },
+  { value: 'security', label: 'Security Vulnerability / Exploit' },
+]
+
 function ReportSection() {
   const toast = useToast()
-  const [category, setCategory] = useState('harassment')
+  const [category, setCategory] = useState<string>('harassment')
   const [targetIdentifier, setTargetIdentifier] = useState('')
   const [details, setDetails] = useState('')
   const [busy, setBusy] = useState(false)
@@ -501,7 +513,7 @@ function ReportSection() {
   return (
     <article className={styles.article}>
       <header className={styles.articleHeader}>
-        <span className={styles.kicker}>Trust & Safety</span>
+        <Badge tone="danger" dot>Trust & Safety</Badge>
         <h1 className={styles.title}>Report Abuse or Violations</h1>
         <p className={styles.lead}>
           If you encounter harassment, hate speech, illegal content, or other violations of our Community Guidelines, please submit a detailed report below.
@@ -509,7 +521,7 @@ function ReportSection() {
       </header>
 
       {submitted && (
-        <Callout tone="success">
+        <Callout tone="info">
           Thank you for helping keep genzh safe. Our moderation team reviews all reports promptly and takes appropriate action.
         </Callout>
       )}
@@ -517,19 +529,11 @@ function ReportSection() {
       <form className={styles.reportForm} onSubmit={handleSubmit}>
         <div>
           <label className={styles.fieldLabel}>Violation Category</label>
-          <select
-            className={styles.select}
+          <Select
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="harassment">Harassment / Bullying / Threats</option>
-            <option value="hate_speech">Hate Speech / Discrimination</option>
-            <option value="doxxing">Privacy Violation / Doxxing</option>
-            <option value="inappropriate">Inappropriate / Explicit Content</option>
-            <option value="spam">Spam / Scams / Raids</option>
-            <option value="impersonation">Impersonation / Fake Identity</option>
-            <option value="security">Security Vulnerability / Exploit</option>
-          </select>
+            onValueChange={setCategory}
+            options={REPORT_CATEGORIES}
+          />
         </div>
 
         <Input

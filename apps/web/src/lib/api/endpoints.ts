@@ -1,5 +1,6 @@
 import { request } from './client'
 import type {
+  AuthConfig,
   AuthResponse,
   Community,
   CommunityMember,
@@ -36,6 +37,8 @@ import type {
 // ── auth ──────────────────────────────────────────────────────────────────
 
 export const auth = {
+  config: () => request<AuthConfig>('/api/v1/auth/config'),
+
   register: (input: {
     handle: string
     email: string

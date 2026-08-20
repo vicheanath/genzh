@@ -65,6 +65,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     async function restore() {
+      // Check if arriving from OAuth redirect with access_token & refresh_token in hash or query
+      const hash = window.location.hash.startsWith('#')
+        ? window.location.hash.substring(1)
+        : window.location.search.startsWith('?')
+          ? window.location.search.substring(1)
+          : ''
+
+      if (hash.includes('access_token=') && hash.includes('refresh_token=')) {
+        const params = new URLSearchParams(hash)
+        const accessToken = params.get('access_token')
+        const refreshToken = params.get('refresh_token')
+        if (accessToken && refreshToken) {
+          session.current = saveSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            token_type: 'Bearer',
+            expires_in: 900,
+          })
+          const cleanPath = window.location.pathname === '/oauth/callback' ? '/' : window.location.pathname
+          window.history.replaceState(null, '', cleanPath)
+        }
+      }
+
       if (!session.current) {
         setLoading(false)
         return

@@ -37,4 +37,4 @@ pub mod service;
 
 pub use error::{AuthError, AuthResult};
 pub use jwt::{AccessClaims, CurrentUser, JwtService, TokenPair};
-pub use service::{AuthService, LoginInput, RegisterInput, SessionContext};
+pub use service::{AuthService, LoginInput, OAuthUserInput, RegisterInput, SessionContext};

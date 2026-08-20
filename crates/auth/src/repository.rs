@@ -160,6 +160,115 @@ impl UserRepository {
         .await?
         .ok_or(RepositoryError::NotFound("profile"))
     }
+
+    /// Find an OAuth account by provider and external ID.
+    pub async fn find_oauth_account(
+        &self,
+        provider: &str,
+        provider_user_id: &str,
+    ) -> RepositoryResult<Option<OAuthAccount>> {
+        sqlx::query_as(
+            "SELECT id, user_id, provider, provider_user_id, email, created_at, updated_at
+             FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2",
+        )
+        .bind(provider)
+        .bind(provider_user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// Link an OAuth account to an existing user.
+    pub async fn link_oauth_account(
+        &self,
+        user_id: UserId,
+        provider: &str,
+        provider_user_id: &str,
+        email: Option<&str>,
+    ) -> RepositoryResult<OAuthAccount> {
+        let id = uuid::Uuid::new_v4();
+        sqlx::query_as(
+            "INSERT INTO oauth_accounts (id, user_id, provider, provider_user_id, email)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (provider, provider_user_id) DO UPDATE
+             SET email = EXCLUDED.email, updated_at = now()
+             RETURNING id, user_id, provider, provider_user_id, email, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(provider)
+        .bind(provider_user_id)
+        .bind(email)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// Create a user from OAuth registration and link their OAuth identity atomically.
+    pub async fn create_oauth(
+        &self,
+        user: &User,
+        display_name: &str,
+        avatar_url: Option<&str>,
+        provider: &str,
+        provider_user_id: &str,
+        oauth_email: Option<&str>,
+    ) -> RepositoryResult<(User, Profile, OAuthAccount)> {
+        let mut tx = self.pool.begin().await?;
+
+        let created: User = sqlx::query_as(
+            "INSERT INTO users (id, handle, email, password_hash, is_active)
+             VALUES ($1, $2, $3, $4, TRUE)
+             RETURNING id, handle, email, password_hash, is_active, created_at, updated_at",
+        )
+        .bind(user.id)
+        .bind(&user.handle)
+        .bind(&user.email)
+        .bind(&user.password_hash)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let profile: Profile = sqlx::query_as(
+            "INSERT INTO profiles (user_id, display_name, avatar_url)
+             VALUES ($1, $2, $3)
+             RETURNING user_id, display_name, bio, avatar_url, avatar_effect, accent_color,
+                       created_at, updated_at",
+        )
+        .bind(user.id)
+        .bind(display_name)
+        .bind(avatar_url)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let oauth_id = uuid::Uuid::new_v4();
+        let oauth: OAuthAccount = sqlx::query_as(
+            "INSERT INTO oauth_accounts (id, user_id, provider, provider_user_id, email)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, user_id, provider, provider_user_id, email, created_at, updated_at",
+        )
+        .bind(oauth_id)
+        .bind(user.id)
+        .bind(provider)
+        .bind(provider_user_id)
+        .bind(oauth_email)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok((created, profile, oauth))
+    }
+}
+
+/// A linked OAuth account record.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct OAuthAccount {
+    pub id: uuid::Uuid,
+    pub user_id: UserId,
+    pub provider: String,
+    pub provider_user_id: String,
+    pub email: Option<String>,
+    pub created_at: genzh_domain::Timestamp,
+    pub updated_at: genzh_domain::Timestamp,
 }
 
 /// Refresh-token sessions.

@@ -58,6 +58,10 @@ pub enum ApiError {
     #[error("authentication required")]
     Unauthenticated,
 
+    /// Forbidden action.
+    #[error("{0}")]
+    Forbidden(String),
+
     /// Too many requests.
     #[error("too many requests")]
     RateLimited,
@@ -77,6 +81,11 @@ impl ApiError {
             ApiError::BadRequest(message) => (
                 StatusCode::BAD_REQUEST,
                 "BAD_REQUEST".to_owned(),
+                message.clone(),
+            ),
+            ApiError::Forbidden(message) => (
+                StatusCode::FORBIDDEN,
+                "FORBIDDEN".to_owned(),
                 message.clone(),
             ),
             ApiError::Unauthenticated => (

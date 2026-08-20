@@ -12,6 +12,23 @@ use crate::jwt::{CurrentUser, JwtService, TokenPair, hash_refresh_token};
 use crate::password;
 use crate::repository::{SessionRepository, UserRepository};
 
+/// User information retrieved from an external OAuth provider.
+#[derive(Debug, Clone)]
+pub struct OAuthUserInput {
+    /// Provider identifier, e.g. "google" or "discord".
+    pub provider: String,
+    /// Unique subject or user ID from the provider.
+    pub provider_user_id: String,
+    /// Verified e-mail address from the provider, if provided.
+    pub email: Option<String>,
+    /// Suggested handle / username from the provider.
+    pub suggested_handle: Option<String>,
+    /// Full or display name from the provider.
+    pub display_name: Option<String>,
+    /// Avatar URL from the provider.
+    pub avatar_url: Option<String>,
+}
+
 /// Registration input, already deserialised but not yet validated.
 #[derive(Debug, Clone)]
 pub struct RegisterInput {
@@ -97,7 +114,7 @@ impl AuthService {
             id: UserId::new(),
             handle,
             email,
-            password_hash,
+            password_hash: Some(password_hash),
             is_active: true,
             created_at: now,
             updated_at: now,
@@ -106,6 +123,175 @@ impl AuthService {
         let (created, profile) = self
             .users
             .create(&candidate, &display_name)
+            .await
+            .map_err(map_registration_error)?;
+
+        let tokens = self.start_session(created.id, context).await?;
+        Ok((
+            AuthenticatedUser {
+                user: created,
+                profile,
+            },
+            tokens,
+        ))
+    }
+
+    /// Sign in or register via an OAuth provider.
+    pub async fn login_or_register_oauth(
+        &self,
+        input: OAuthUserInput,
+        context: SessionContext,
+    ) -> AuthResult<(AuthenticatedUser, TokenPair)> {
+        // 1. Check if this OAuth account is already linked to a user.
+        if let Some(link) = self
+            .users
+            .find_oauth_account(&input.provider, &input.provider_user_id)
+            .await?
+        {
+            let user = self
+                .users
+                .find_by_id(link.user_id)
+                .await?
+                .ok_or(RepositoryError::NotFound("user"))?;
+
+            if !user.is_active {
+                return Err(AuthError::AccountInactive);
+            }
+
+            let profile = self
+                .users
+                .find_profile(user.id)
+                .await?
+                .ok_or(RepositoryError::NotFound("profile"))?;
+
+            let tokens = self.start_session(user.id, context).await?;
+            return Ok((AuthenticatedUser { user, profile }, tokens));
+        }
+
+        // 2. If a verified email was provided, check if a user already exists with that email.
+        if let Some(ref email_raw) = input.email {
+            if let Ok(email) = user::normalize_email(email_raw) {
+                if let Some(user) = self.users.find_by_identifier(&email).await? {
+                    if !user.is_active {
+                        return Err(AuthError::AccountInactive);
+                    }
+
+                    // Link the OAuth account to this existing user.
+                    self.users
+                        .link_oauth_account(
+                            user.id,
+                            &input.provider,
+                            &input.provider_user_id,
+                            Some(&email),
+                        )
+                        .await?;
+
+                    let profile = self
+                        .users
+                        .find_profile(user.id)
+                        .await?
+                        .ok_or(RepositoryError::NotFound("profile"))?;
+
+                    let tokens = self.start_session(user.id, context).await?;
+                    return Ok((AuthenticatedUser { user, profile }, tokens));
+                }
+            }
+        }
+
+        // 3. Provision a new account for this OAuth user.
+        let raw_handle = input
+            .suggested_handle
+            .or_else(|| {
+                input
+                    .email
+                    .as_ref()
+                    .and_then(|e| e.split('@').next().map(|s| s.to_string()))
+            })
+            .unwrap_or_else(|| {
+                let uid_snippet = &input.provider_user_id[..input.provider_user_id.len().min(6)];
+                format!("{}_{}", input.provider, uid_snippet)
+            });
+
+        let mut base_handle: String = raw_handle
+            .to_lowercase()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+
+        if base_handle.len() < user::HANDLE_MIN_LEN {
+            let uid_snippet = &input.provider_user_id[..input.provider_user_id.len().min(4)];
+            base_handle = format!("{}_{}", base_handle, uid_snippet);
+        }
+        if base_handle.len() > user::HANDLE_MAX_LEN {
+            base_handle.truncate(user::HANDLE_MAX_LEN);
+        }
+        base_handle = base_handle.trim_matches('.').to_string();
+        if base_handle.is_empty() {
+            let uid_snippet = &input.provider_user_id[..input.provider_user_id.len().min(8)];
+            base_handle = format!("user_{}", uid_snippet);
+        }
+
+        // Ensure uniqueness of handle
+        let mut handle = base_handle.clone();
+        let mut attempts = 0;
+        while self.users.find_by_identifier(&handle).await?.is_some() {
+            attempts += 1;
+            let suffix = format!("{}", rand::random::<u16>() % 10000);
+            let mut prefix = base_handle.clone();
+            if prefix.len() + suffix.len() > user::HANDLE_MAX_LEN {
+                prefix.truncate(user::HANDLE_MAX_LEN - suffix.len());
+            }
+            handle = format!("{}{}", prefix, suffix);
+            if attempts > 10 {
+                handle = format!("u_{}", &uuid::Uuid::new_v4().to_string()[..12]);
+                break;
+            }
+        }
+
+        let email = match input
+            .email
+            .as_deref()
+            .and_then(|e| user::normalize_email(e).ok())
+        {
+            Some(e) => e,
+            None => format!(
+                "{}_{}@oauth.genzh.local",
+                input.provider, input.provider_user_id
+            ),
+        };
+
+        let display_name = input
+            .display_name
+            .and_then(|name| user::validate_display_name(&name).ok())
+            .unwrap_or_else(|| handle.clone());
+
+        let now = Utc::now();
+        let candidate = User {
+            id: UserId::new(),
+            handle,
+            email: email.clone(),
+            password_hash: None,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+        };
+
+        let (created, profile, _) = self
+            .users
+            .create_oauth(
+                &candidate,
+                &display_name,
+                input.avatar_url.as_deref(),
+                &input.provider,
+                &input.provider_user_id,
+                Some(&email),
+            )
             .await
             .map_err(map_registration_error)?;
 
@@ -134,7 +320,13 @@ impl AuthService {
             return Err(AuthError::InvalidCredentials);
         };
 
-        if !password::verify(input.password, user.password_hash.clone()).await {
+        let Some(password_hash) = user.password_hash.clone() else {
+            // Account was created with OAuth without a password
+            password::verify_dummy(input.password).await;
+            return Err(AuthError::InvalidCredentials);
+        };
+
+        if !password::verify(input.password, password_hash).await {
             return Err(AuthError::InvalidCredentials);
         }
 

@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { HashIcon, MicIcon, UsersIcon } from '@/components/Icons'
+import { DiscordIcon, GoogleIcon, HashIcon, MicIcon, UsersIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
-import { ApiError } from '@/lib/api'
+import { ApiError, auth as authApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 
 import styles from './SignInRoute.module.css'
@@ -27,6 +28,25 @@ export function SignInRoute() {
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const { data: authConfig } = useQuery({
+    queryKey: ['authConfig'],
+    queryFn: () => authApi.config(),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Detect error from OAuth redirect if present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const err = params.get('error')
+    if (err) {
+      setError(err)
+    }
+  }, [])
+
+  function startOAuth(provider: 'google' | 'discord') {
+    window.location.href = `/api/v1/auth/oauth/${provider}/authorize`
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -50,6 +70,10 @@ export function SignInRoute() {
       setBusy(false)
     }
   }
+
+  // If password signup is disabled (e.g. in production), password registration is not allowed
+  const allowPasswordSignup = authConfig?.allow_password_signup ?? true
+  const showPasswordForm = mode === 'signin' || allowPasswordSignup
 
   return (
     <main className={styles.page}>
@@ -76,59 +100,95 @@ export function SignInRoute() {
           <p className={styles.tagline}>
             {mode === 'signin'
               ? 'Sign in to pick up where you left off.'
-              : 'It takes about twenty seconds.'}
+              : allowPasswordSignup
+                ? 'It takes about twenty seconds.'
+                : 'Sign up securely with Discord or Google.'}
           </p>
 
           {error && <Callout tone="danger">{error}</Callout>}
 
-          <form className={styles.form} onSubmit={submit} noValidate>
-            <Input
-              label={mode === 'signin' ? 'Handle or e-mail' : 'Handle'}
-              value={identifier}
-              onChange={(event) => setIdentifier(event.target.value)}
-              autoComplete={mode === 'signin' ? 'username' : 'off'}
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-              description={
-                mode === 'register' ? '3–32 characters: letters, digits, _ and .' : undefined
-              }
-            />
+          <div className={styles.socialGroup}>
+            <button
+              type="button"
+              className={`${styles.socialButton} ${styles.discordButton}`}
+              onClick={() => startOAuth('discord')}
+            >
+              <DiscordIcon size={20} />
+              <span>{mode === 'signin' ? 'Sign in with Discord' : 'Sign up with Discord'}</span>
+            </button>
 
-            {mode === 'register' && (
-              <>
+            <button
+              type="button"
+              className={`${styles.socialButton} ${styles.googleButton}`}
+              onClick={() => startOAuth('google')}
+            >
+              <GoogleIcon size={18} />
+              <span>{mode === 'signin' ? 'Sign in with Google' : 'Sign up with Google'}</span>
+            </button>
+          </div>
+
+          {showPasswordForm && (
+            <>
+              <div className={styles.divider}>
+                <span>or {mode === 'signin' ? 'with password' : 'with password (dev)'}</span>
+              </div>
+
+              <form className={styles.form} onSubmit={submit} noValidate>
                 <Input
-                  label="E-mail"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
+                  label={mode === 'signin' ? 'Handle or e-mail' : 'Handle'}
+                  value={identifier}
+                  onChange={(event) => setIdentifier(event.target.value)}
+                  autoComplete={mode === 'signin' ? 'username' : 'off'}
+                  autoCapitalize="none"
+                  spellCheck={false}
                   required
+                  description={
+                    mode === 'register' ? '3–32 characters: letters, digits, _ and .' : undefined
+                  }
                 />
+
+                {mode === 'register' && (
+                  <>
+                    <Input
+                      label="E-mail"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      autoComplete="email"
+                      required
+                    />
+                    <Input
+                      label="Display name"
+                      value={displayName}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      placeholder="Optional — defaults to your handle"
+                    />
+                  </>
+                )}
+
                 <Input
-                  label="Display name"
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  placeholder="Optional — defaults to your handle"
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                  required
+                  description={mode === 'register' ? 'At least 10 characters' : undefined}
                 />
-              </>
-            )}
 
-            <Input
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              required
-              description={mode === 'register' ? 'At least 10 characters' : undefined}
-            />
+                <Button type="submit" size="lg" disabled={busy}>
+                  {busy && <Spinner />}
+                  {mode === 'signin' ? 'Sign in' : 'Create account'}
+                </Button>
+              </form>
+            </>
+          )}
 
-            <Button type="submit" size="lg" disabled={busy}>
-              {busy && <Spinner />}
-              {mode === 'signin' ? 'Sign in' : 'Create account'}
-            </Button>
-          </form>
+          {!allowPasswordSignup && mode === 'register' && (
+            <p className={styles.prodInfo}>
+              To protect community security and prevent bot registrations, account creation in production requires Discord or Google authentication.
+            </p>
+          )}
 
           <p className={styles.switcher}>
             {mode === 'signin' ? 'New here? ' : 'Already have an account? '}
