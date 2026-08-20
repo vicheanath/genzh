@@ -33,7 +33,7 @@
 
 .heroContent {
   flex: 1;
-  min-width: 18rem;
+  min-width: min(100%, 18rem);
 }
 
 .greeting {
@@ -156,7 +156,7 @@
 
 .roomsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
   gap: var(--space-4);
 }
 
@@ -250,7 +250,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
   gap: var(--space-3);
 }
 
@@ -318,5 +318,13 @@
 
 @media (max-width: 900px) {
   .page { padding: var(--space-4) var(--space-4) var(--space-6); gap: var(--space-5); }
-  .heroCard { padding: var(--space-4); }
+  .heroCard { padding: var(--space-4); gap: var(--space-4); }
+  .title { font-size: var(--text-xl); }
+}
+
+@media (max-width: 600px) {
+  .page { padding: var(--space-3) var(--space-3) var(--space-5); }
+  .heroCard { padding: var(--space-3); }
+  .heroActions { width: 100%; }
+  .randomButton { width: 100%; justify-content: center; }
 }

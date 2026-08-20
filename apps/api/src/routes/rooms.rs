@@ -191,6 +191,46 @@ pub async fn list_mine(
     Ok(Json(rooms))
 }
 
+/// `POST /api/v1/rooms/dm/{target_user_id}` (Get or create shared direct message room)
+pub async fn get_or_create_dm(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(target_user_id): Path<UserId>,
+) -> ApiResult<(StatusCode, Json<Room>)> {
+    let target_profile = state
+        .auth
+        .users()
+        .find_profile(target_user_id)
+        .await
+        .ok()
+        .flatten();
+
+    let target_user = state
+        .auth
+        .users()
+        .find_by_id(target_user_id)
+        .await
+        .ok()
+        .flatten();
+
+    let display_name = target_profile
+        .as_ref()
+        .map(|p| p.display_name.as_str())
+        .unwrap_or("Friend");
+
+    let handle = target_user
+        .as_ref()
+        .map(|u| u.handle.as_str())
+        .unwrap_or("");
+
+    let room = state
+        .rooms
+        .get_or_create_dm(caller.user_id, target_user_id, display_name, handle)
+        .await?;
+
+    Ok((StatusCode::OK, Json(room)))
+}
+
 /// `GET /api/v1/rooms/discovery`
 pub async fn discovery(
     State(state): State<AppState>,

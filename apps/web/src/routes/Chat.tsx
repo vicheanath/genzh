@@ -49,6 +49,7 @@ import {
 import { useProfiles } from '@/lib/useProfiles'
 
 import { ProfileDialog } from './ProfileDialog'
+import { useAppStore } from '@/lib/store'
 import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 import styles from './Chat.module.css'
 
@@ -145,14 +146,25 @@ export function Chat({
     const unsubs = [
       chatSocket.on<ChatServerEvent>('message_created', (event) => {
         if (event.type === 'message_created' && event.room_id === room.id) {
-          setItems((current) => merge(current, [event.message]))
+          const fullMessage: Message = {
+            ...event.message,
+            reactions: event.reactions ?? [],
+            anonymous_author: event.anonymous_author,
+          }
+          setItems((current) => merge(current, [fullMessage]))
         }
       }),
       chatSocket.on<ChatServerEvent>('message_updated', (event) => {
         if (event.type === 'message_updated' && event.room_id === room.id) {
           setItems((current) =>
             current.map((m) =>
-              m.id === event.message.id ? { ...event.message, reactions: m.reactions } : m,
+              m.id === event.message.id
+                ? {
+                    ...event.message,
+                    reactions: event.reactions ?? m.reactions,
+                    anonymous_author: event.anonymous_author ?? m.anonymous_author,
+                  }
+                : m,
             ),
           )
         }
@@ -165,9 +177,17 @@ export function Chat({
       chatSocket.on<ChatServerEvent>('reactions_updated', (event) => {
         if (event.type === 'reactions_updated' && event.room_id === room.id) {
           setItems((current) =>
-            current.map((m) =>
-              m.id === event.message_id ? { ...m, reactions: event.reactions } : m,
-            ),
+            current.map((m) => {
+              if (m.id !== event.message_id) return m
+              const myExistingReactions = new Set(
+                m.reactions.filter((r) => r.me).map((r) => r.reaction),
+              )
+              const updatedReactions = (event.reactions ?? []).map((r) => ({
+                ...r,
+                me: myExistingReactions.has(r.reaction),
+              }))
+              return { ...m, reactions: updatedReactions }
+            }),
           )
         }
       }),
@@ -508,7 +528,7 @@ export function Chat({
           onTyping={notifyTyping}
           isAnonymous={isAnonymousPersona}
           onTogglePersona={onTogglePersona}
-          anonAlias={room.anonymous_identity?.alias_name}
+          anonAlias={room.anonymous_identity?.alias_name || useAppStore.getState().anonymousAlias || 'Anonymous'}
           publicName={user?.profile.display_name ?? 'You'}
         />
       ) : (

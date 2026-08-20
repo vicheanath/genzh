@@ -196,11 +196,31 @@ pub async fn edit(
         .edit(message_id, caller.user_id, &body.content)
         .await?;
 
+    let anonymous_author = if updated.is_anonymous {
+        state
+            .rooms
+            .repository()
+            .find_anonymous_identity(updated.room_id, updated.author_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    let reactions = state
+        .messaging
+        .reactions_for(updated.room_id, caller.user_id, &[message_id])
+        .await
+        .ok()
+        .and_then(|mut map| map.remove(&message_id))
+        .unwrap_or_default();
+
     let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageUpdated {
         room_id: updated.room_id,
         message: updated.clone(),
-        reactions: Vec::new(),
-        anonymous_author: None,
+        reactions,
+        anonymous_author,
     });
 
     Ok(Json(updated))
@@ -212,14 +232,21 @@ pub async fn delete(
     caller: CurrentUser,
     Path(message_id): Path<MessageId>,
 ) -> ApiResult<StatusCode> {
-    if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
-        let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageDeleted {
-            room_id: msg.room_id,
-            message_id,
-        });
-    }
+    let msg = state
+        .messaging
+        .repository()
+        .find(message_id)
+        .await
+        .map_err(genzh_infrastructure::ServiceError::from)?
+        .ok_or_else(|| genzh_infrastructure::ServiceError::not_found("message"))?;
 
     state.messaging.delete(message_id, caller.user_id).await?;
+
+    let _ = state.chat_tx.send(crate::routes::ws::ChatServerEvent::MessageDeleted {
+        room_id: msg.room_id,
+        message_id,
+    });
+
     Ok(StatusCode::NO_CONTENT)
 }
 

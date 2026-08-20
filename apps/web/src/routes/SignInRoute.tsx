@@ -143,6 +143,20 @@ export function SignInRoute() {
               {mode === 'signin' ? 'Create an account' : 'Sign in'}
             </button>
           </p>
+
+          <nav className={styles.footerNav} aria-label="Legal and help links">
+            <a href="/about" className={styles.footerLink}>About</a>
+            <span>•</span>
+            <a href="/guidelines" className={styles.footerLink}>Guidelines</a>
+            <span>•</span>
+            <a href="/terms" className={styles.footerLink}>Terms</a>
+            <span>•</span>
+            <a href="/privacy" className={styles.footerLink}>Privacy</a>
+            <span>•</span>
+            <a href="/contact" className={styles.footerLink}>Contact</a>
+            <span>•</span>
+            <a href="/report" className={styles.footerLink}>Report</a>
+          </nav>
         </div>
       </div>
     </main>

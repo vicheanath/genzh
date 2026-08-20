@@ -241,6 +241,44 @@ impl RoomService {
             .map_err(ServiceError::from)
     }
 
+    /// Find or create a 1-on-1 direct message room between two users.
+    pub async fn get_or_create_dm(
+        &self,
+        user_a: UserId,
+        user_b: UserId,
+        target_name: &str,
+        target_handle: &str,
+    ) -> ServiceResult<Room> {
+        if let Some(existing) = self.rooms.find_direct_room(user_a, user_b).await? {
+            return Ok(existing);
+        }
+
+        let name = if target_handle.is_empty() {
+            format!("DM: @{}", target_name)
+        } else {
+            format!("DM: @{}", target_handle)
+        };
+
+        self.create(
+            None,
+            user_a,
+            CreateRoom {
+                community_id: None,
+                name,
+                topic: Some(format!("Direct message with {}", target_name)),
+                category: Some("dm".to_string()),
+                room_type: RoomType::Text,
+                visibility: Some(RoomVisibility::Private),
+                is_anonymous: false,
+                duration_minutes: None,
+                position: None,
+                max_participants: None,
+                participant_ids: Some(vec![user_b]),
+            },
+        )
+        .await
+    }
+
     /// Fetch a room the caller can see.
     pub async fn get(&self, room_id: RoomId, user_id: UserId) -> ServiceResult<Room> {
         Ok(self.visible_access(room_id, user_id).await?.room)

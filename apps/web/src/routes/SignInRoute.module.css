@@ -126,3 +126,28 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+.footerNav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.footerLink {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--text-xs);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.footerLink:hover {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+}

@@ -20,6 +20,7 @@ import { Tooltip } from '@/components/Tooltip'
 import { rooms as roomsApi, type RoomType, type RoomWithPermissions, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
+import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { useProfiles } from '@/lib/useProfiles'
@@ -75,7 +76,9 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [membersOpen, setMembersOpen] = useState(false)
-  const [isAnonymous, setIsAnonymous] = useState(room.is_anonymous)
+  const isAnonymousByDefault = useAppStore((s) => s.isAnonymousByDefault)
+  const anonymousAlias = useAppStore((s) => s.anonymousAlias)
+  const [isAnonymous, setIsAnonymous] = useState(room.is_anonymous || isAnonymousByDefault)
   const [profileUserId, setProfileUserId] = useState<Uuid | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
 
@@ -162,7 +165,7 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
                 title="Post anonymously with masked alias"
               >
                 <LockIcon size={12} />
-                <span>{room.anonymous_identity?.alias_name ?? 'Anonymous'}</span>
+                <span>{room.anonymous_identity?.alias_name || anonymousAlias || 'Anonymous'}</span>
               </button>
               <button
                 type="button"

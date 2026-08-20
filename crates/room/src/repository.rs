@@ -290,6 +290,49 @@ impl RoomRepository {
         .map_err(RepositoryError::from)
     }
 
+    /// Find an existing direct message room between two users.
+    pub async fn find_direct_room(
+        &self,
+        user_a: UserId,
+        user_b: UserId,
+    ) -> RepositoryResult<Option<Room>> {
+        if user_a == user_b {
+            sqlx::query_as(
+                "SELECT r.id, r.community_id, r.owner_id, r.name, r.topic, r.category, r.room_type,
+                        r.visibility, r.status, r.is_anonymous, r.position, r.max_participants,
+                        r.current_participants, r.started_at, r.expires_at, r.ended_at,
+                        r.created_at, r.updated_at
+                 FROM rooms r
+                 JOIN room_participants p ON p.room_id = r.id AND p.user_id = $1
+                 WHERE r.category = 'dm' AND r.community_id IS NULL
+                 ORDER BY r.updated_at DESC
+                 LIMIT 1",
+            )
+            .bind(user_a)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RepositoryError::from)
+        } else {
+            sqlx::query_as(
+                "SELECT r.id, r.community_id, r.owner_id, r.name, r.topic, r.category, r.room_type,
+                        r.visibility, r.status, r.is_anonymous, r.position, r.max_participants,
+                        r.current_participants, r.started_at, r.expires_at, r.ended_at,
+                        r.created_at, r.updated_at
+                 FROM rooms r
+                 JOIN room_participants p1 ON p1.room_id = r.id AND p1.user_id = $1
+                 JOIN room_participants p2 ON p2.room_id = r.id AND p2.user_id = $2
+                 WHERE r.category = 'dm' AND r.community_id IS NULL
+                 ORDER BY r.updated_at DESC
+                 LIMIT 1",
+            )
+            .bind(user_a)
+            .bind(user_b)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RepositoryError::from)
+        }
+    }
+
     /// Partially update a room.
     pub async fn update(
         &self,

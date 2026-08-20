@@ -273,6 +273,12 @@ export const rooms = {
       method: 'DELETE',
       token,
     }),
+
+  openDM: (token: string, targetUserId: Uuid) =>
+    request<Room>(`/api/v1/rooms/dm/${targetUserId}`, {
+      method: 'POST',
+      token,
+    }),
 }
 
 // ── messages ──────────────────────────────────────────────────────────────

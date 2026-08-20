@@ -185,6 +185,10 @@ export class ChatSocket {
     }
     this.stopPing()
     if (this.socket) {
+      this.socket.onopen = null
+      this.socket.onmessage = null
+      this.socket.onclose = null
+      this.socket.onerror = null
       this.socket.close()
       this.socket = null
     }

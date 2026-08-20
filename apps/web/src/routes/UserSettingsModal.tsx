@@ -9,6 +9,7 @@ import {
   BanIcon,
   CheckIcon,
   CopyIcon,
+  LockIcon,
   MicIcon,
   MonitorIcon,
   MoonIcon,
@@ -36,7 +37,7 @@ import { useTheme } from '@/lib/useTheme'
 
 import styles from './UserSettingsModal.module.css'
 
-export type SettingsTab = 'profile' | 'account' | 'appearance' | 'voice' | 'blocked'
+export type SettingsTab = 'profile' | 'anonymous' | 'account' | 'appearance' | 'voice' | 'blocked'
 
 const PRESET_COLORS = [
   '#5865f2', // Blurple
@@ -50,6 +51,25 @@ const PRESET_COLORS = [
   '#f97316', // Orange
   '#64748b', // Slate
 ]
+
+const RANDOM_ALIASES = [
+  'Shadow Fox',
+  'Neon Phantom',
+  'Cyber Panda',
+  'Midnight Owl',
+  'Pixel Knight',
+  'Cosmic Voyager',
+  'Stealth Tiger',
+  'Quantum Hawk',
+  'Nebula Dragon',
+  'Mystic Wolf',
+  'Astral Lynx',
+  'Echo Viper',
+  'Solar Falcon',
+  'Zero Spectrum',
+]
+
+const MASK_SYMBOLS = ['🎭', '🕶️', '🦊', '👻', '🤖', '🦉', '🐺', '🐼', '⚡', '🔮', '👾', '🛸']
 
 interface ProfileFormValues {
   displayName: string
@@ -100,6 +120,18 @@ export function UserSettingsModal({
   const avatarUrl = profileForm.watch('avatarUrl')
   const accentColor = profileForm.watch('accentColor')
 
+  // Anonymous Persona store bindings
+  const anonymousAlias = useAppStore((s) => s.anonymousAlias)
+  const anonymousAccent = useAppStore((s) => s.anonymousAccent)
+  const anonymousAvatarSeed = useAppStore((s) => s.anonymousAvatarSeed)
+  const isAnonymousByDefault = useAppStore((s) => s.isAnonymousByDefault)
+  const setAnonymousSettings = useAppStore((s) => s.setAnonymousSettings)
+
+  const [anonAlias, setAnonAlias] = useState(anonymousAlias)
+  const [anonAccent, setAnonAccent] = useState(anonymousAccent)
+  const [anonSymbol, setAnonSymbol] = useState(anonymousAvatarSeed)
+  const [anonDefault, setAnonDefault] = useState(isAnonymousByDefault)
+
   // Blocked users management state
   const [blockedIds, setBlockedIds] = useState<Uuid[]>([])
   const [blockError, setBlockError] = useState<string | null>(null)
@@ -126,10 +158,14 @@ export function UserSettingsModal({
         accentColor: user.profile.accent_color ?? '#5865f2',
         avatarEffect: user.profile.avatar_effect ?? '',
       })
+      setAnonAlias(anonymousAlias)
+      setAnonAccent(anonymousAccent)
+      setAnonSymbol(anonymousAvatarSeed)
+      setAnonDefault(isAnonymousByDefault)
       setActiveTab(initialTab || storeTab)
       setError(null)
     }
-  }, [open, user, initialTab, storeTab])
+  }, [open, user, initialTab, storeTab, anonymousAlias, anonymousAccent, anonymousAvatarSeed, isAnonymousByDefault])
 
   // ESC to close
   useEffect(() => {
@@ -176,6 +212,22 @@ export function UserSettingsModal({
     }
   }
 
+  function handleSaveAnonSettings(event: React.FormEvent) {
+    event.preventDefault()
+    setAnonymousSettings({
+      alias: anonAlias.trim() || 'Anonymous Phantom',
+      accent: anonAccent,
+      avatarSeed: anonSymbol,
+      isAnonymousByDefault: anonDefault,
+    })
+    toast.success('Anonymous persona saved', 'Your anonymous identity is ready for rooms.')
+  }
+
+  function handleRandomizeAnonAlias() {
+    const random = RANDOM_ALIASES[Math.floor(Math.random() * RANDOM_ALIASES.length)] ?? 'Shadow Fox'
+    setAnonAlias(random)
+  }
+
   async function handleBlockUser(data: BlockUserFormValues) {
     const targetId = data.userId.trim()
     if (!targetId) return
@@ -219,174 +271,318 @@ export function UserSettingsModal({
         <BaseDialog.Popup className={styles.modal}>
           {/* Left Navigation Sidebar */}
           <aside className={styles.sidebar}>
-          <div className={styles.sidebarGroup}>
-            <div className={styles.sidebarHeading}>User Settings</div>
-            <button
-              type="button"
-              className={cx(styles.navButton, activeTab === 'profile' && styles.navButtonActive)}
-              onClick={() => setActiveTab('profile')}
-            >
-              <UsersIcon size={16} />
-              Profiles
-            </button>
-            <button
-              type="button"
-              className={cx(styles.navButton, activeTab === 'account' && styles.navButtonActive)}
-              onClick={() => setActiveTab('account')}
-            >
-              <ShieldIcon size={16} />
-              My Account
-            </button>
-          </div>
+            <div className={styles.sidebarGroup}>
+              <div className={styles.sidebarHeading}>User Settings</div>
+              <button
+                type="button"
+                className={cx(styles.navButton, activeTab === 'profile' && styles.navButtonActive)}
+                onClick={() => setActiveTab('profile')}
+              >
+                <UsersIcon size={16} />
+                Profiles
+              </button>
+              <button
+                type="button"
+                className={cx(styles.navButton, activeTab === 'anonymous' && styles.navButtonActive)}
+                onClick={() => setActiveTab('anonymous')}
+              >
+                <LockIcon size={16} />
+                Anonymous Persona
+              </button>
+              <button
+                type="button"
+                className={cx(styles.navButton, activeTab === 'account' && styles.navButtonActive)}
+                onClick={() => setActiveTab('account')}
+              >
+                <ShieldIcon size={16} />
+                My Account
+              </button>
+            </div>
 
-          <div className={styles.sidebarGroup}>
-            <div className={styles.sidebarHeading}>App Settings</div>
-            <button
-              type="button"
-              className={cx(styles.navButton, activeTab === 'appearance' && styles.navButtonActive)}
-              onClick={() => setActiveTab('appearance')}
-            >
-              <SunIcon size={16} />
-              Appearance
-            </button>
-            <button
-              type="button"
-              className={cx(styles.navButton, activeTab === 'voice' && styles.navButtonActive)}
-              onClick={() => setActiveTab('voice')}
-            >
-              <MicIcon size={16} />
-              Voice & Video
-            </button>
-            <button
-              type="button"
-              className={cx(styles.navButton, activeTab === 'blocked' && styles.navButtonActive)}
-              onClick={() => setActiveTab('blocked')}
-            >
-              <BanIcon size={16} />
-              Blocked Users
-            </button>
-          </div>
+            <div className={styles.sidebarGroup}>
+              <div className={styles.sidebarHeading}>App Settings</div>
+              <button
+                type="button"
+                className={cx(styles.navButton, activeTab === 'appearance' && styles.navButtonActive)}
+                onClick={() => setActiveTab('appearance')}
+              >
+                <SunIcon size={16} />
+                Appearance
+              </button>
+              <button
+                type="button"
+                className={cx(styles.navButton, activeTab === 'voice' && styles.navButtonActive)}
+                onClick={() => setActiveTab('voice')}
+              >
+                <MicIcon size={16} />
+                Voice & Video
+              </button>
+              <button
+                type="button"
+                className={cx(styles.navButton, activeTab === 'blocked' && styles.navButtonActive)}
+                onClick={() => setActiveTab('blocked')}
+              >
+                <BanIcon size={16} />
+                Blocked Users
+              </button>
+            </div>
 
-          <div className={styles.sidebarGroup} style={{ marginTop: 'auto' }}>
-            <button
-              type="button"
-              className={cx(styles.navButton, styles.dangerButton)}
-              onClick={() => void logout()}
-            >
-              <SignOutIcon size={16} />
-              Log Out
-            </button>
-          </div>
-        </aside>
+            <div className={styles.sidebarGroup} style={{ marginTop: 'auto' }}>
+              <button
+                type="button"
+                className={cx(styles.navButton, styles.dangerButton)}
+                onClick={() => void logout()}
+              >
+                <SignOutIcon size={16} />
+                Log Out
+              </button>
+            </div>
+          </aside>
 
-        {/* Content Area */}
-        <div className={styles.contentWrapper}>
-          <div className={styles.closeButtonContainer}>
-            <button
-              type="button"
-              className={styles.closeButton}
-              onClick={onClose}
-              aria-label="Close Settings"
-            >
-              <XIcon size={18} />
-            </button>
-            <span className={styles.escKey}>ESC</span>
-          </div>
+          {/* Content Area */}
+          <div className={styles.contentWrapper}>
+            <div className={styles.closeButtonContainer}>
+              <button
+                type="button"
+                className={styles.closeButton}
+                onClick={onClose}
+                aria-label="Close Settings"
+              >
+                <XIcon size={18} />
+              </button>
+              <span className={styles.escKey}>ESC</span>
+            </div>
 
-          <div className={styles.scrollArea}>
-            {/* PROFILE TAB */}
-            {activeTab === 'profile' && (
-              <div>
-                <h2 className={styles.panelTitle}>User Profile</h2>
-                <p className={styles.panelDescription}>
-                  Customize how you appear across genzh communities and direct chats.
-                </p>
+            <div className={styles.scrollArea}>
+              {/* PROFILE TAB */}
+              {activeTab === 'profile' && (
+                <div>
+                  <h2 className={styles.panelTitle}>User Profile</h2>
+                  <p className={styles.panelDescription}>
+                    Customize how you appear across genzh communities and direct chats.
+                  </p>
 
-                {error && <Callout tone="danger">{error}</Callout>}
+                  {error && <Callout tone="danger">{error}</Callout>}
 
-                {/* Live Preview Card */}
-                <div className={styles.profilePreviewCard}>
-                  <div
-                    className={styles.previewBanner}
-                    style={{ '--banner-color': accentColor } as React.CSSProperties}
-                  />
-                  <div className={styles.previewBody}>
-                    <div className={styles.previewAvatarWrap}>
-                      <Avatar
-                        name={displayName || user.profile.display_name}
-                        src={avatarUrl || user.profile.avatar_url}
-                        color={accentColor}
-                        size="xl"
-                        presence="online"
+                  {/* Live Preview Card */}
+                  <div className={styles.profilePreviewCard}>
+                    <div
+                      className={styles.previewBanner}
+                      style={{ '--banner-color': accentColor } as React.CSSProperties}
+                    />
+                    <div className={styles.previewBody}>
+                      <div className={styles.previewAvatarWrap}>
+                        <Avatar
+                          name={displayName || user.profile.display_name}
+                          src={avatarUrl || user.profile.avatar_url}
+                          color={accentColor}
+                          size="xl"
+                          presence="online"
+                        />
+                      </div>
+                      <div className={styles.previewName}>
+                        {displayName || user.profile.display_name}
+                      </div>
+                      <div className={styles.previewHandle}>@{user.handle}</div>
+                      {bio && <div className={styles.previewBio}>{bio}</div>}
+                    </div>
+                  </div>
+
+                  <form className={styles.formGrid} onSubmit={profileForm.handleSubmit(handleSaveProfile)}>
+                    <Input
+                      label="Display Name"
+                      {...profileForm.register('displayName', { required: true })}
+                      placeholder="Enter display name"
+                      maxLength={32}
+                      required
+                    />
+
+                    <div className={styles.textareaField}>
+                      <label className={styles.fieldLabel}>About Me</label>
+                      <textarea
+                        className={styles.textarea}
+                        {...profileForm.register('bio')}
+                        placeholder="Tell everyone a bit about yourself..."
+                        rows={3}
+                        maxLength={190}
                       />
                     </div>
-                    <div className={styles.previewName}>
-                      {displayName || user.profile.display_name}
+
+                    <Input
+                      label="Avatar Image URL"
+                      {...profileForm.register('avatarUrl')}
+                      placeholder="https://example.com/avatar.png"
+                    />
+
+                    <div>
+                      <label className={styles.fieldLabel}>Profile Banner & Accent Color</label>
+                      <div className={styles.colorSwatches}>
+                        {PRESET_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            className={cx(
+                              styles.colorSwatch,
+                              accentColor === color && styles.colorSwatchActive,
+                            )}
+                            style={{ backgroundColor: color }}
+                            onClick={() => profileForm.setValue('accentColor', color, { shouldDirty: true })}
+                            aria-label={`Color ${color}`}
+                          />
+                        ))}
+                        <Input
+                          label="Custom Hex"
+                          {...profileForm.register('accentColor')}
+                          placeholder="#5865f2"
+                        />
+                      </div>
                     </div>
-                    <div className={styles.previewHandle}>@{user.handle}</div>
-                    {bio && <div className={styles.previewBio}>{bio}</div>}
-                  </div>
+
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <Button type="submit" disabled={saving}>
+                        {saving && <Spinner />}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </form>
                 </div>
+              )}
 
-                <form className={styles.formGrid} onSubmit={profileForm.handleSubmit(handleSaveProfile)}>
-                  <Input
-                    label="Display Name"
-                    {...profileForm.register('displayName', { required: true })}
-                    placeholder="Enter display name"
-                    maxLength={32}
-                    required
-                  />
+              {/* ANONYMOUS PERSONA TAB */}
+              {activeTab === 'anonymous' && (
+                <div>
+                  <h2 className={styles.panelTitle}>Anonymous Persona & State</h2>
+                  <p className={styles.panelDescription}>
+                    Customize your masked alias, icon, and default posting state for rooms. Your real account and identity stay 100% private.
+                  </p>
 
-                  <div className={styles.textareaField}>
-                    <label className={styles.fieldLabel}>About Me</label>
-                    <textarea
-                      className={styles.textarea}
-                      {...profileForm.register('bio')}
-                      placeholder="Tell everyone a bit about yourself..."
-                      rows={3}
-                      maxLength={190}
+                  {/* Toggle Default Mode */}
+                  <div className={styles.toggleCard}>
+                    <div className={styles.toggleInfo}>
+                      <div className={styles.toggleTitle}>Post Anonymously by Default</div>
+                      <div className={styles.toggleSubtitle}>
+                        When entering rooms that permit anonymity, automatically start in anonymous persona.
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className={styles.switchInput}
+                      checked={anonDefault}
+                      onChange={(e) => setAnonDefault(e.target.checked)}
+                      aria-label="Post Anonymously by Default"
                     />
                   </div>
 
-                  <Input
-                    label="Avatar Image URL"
-                    {...profileForm.register('avatarUrl')}
-                    placeholder="https://example.com/avatar.png"
-                  />
-
-                  <div>
-                    <label className={styles.fieldLabel}>Profile Banner & Accent Color</label>
-                    <div className={styles.colorSwatches}>
-                      {PRESET_COLORS.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          className={cx(
-                            styles.colorSwatch,
-                            accentColor === color && styles.colorSwatchActive,
-                          )}
-                          style={{ backgroundColor: color }}
-                          onClick={() => profileForm.setValue('accentColor', color, { shouldDirty: true })}
-                          aria-label={`Color ${color}`}
-                        />
-                      ))}
-                      <Input
-                        label="Custom Hex"
-                        {...profileForm.register('accentColor')}
-                        placeholder="#5865f2"
-                      />
+                  {/* Anonymous Live Preview Card */}
+                  <div className={styles.profilePreviewCard}>
+                    <div
+                      className={styles.previewBanner}
+                      style={{ '--banner-color': anonAccent } as React.CSSProperties}
+                    />
+                    <div className={styles.previewBody}>
+                      <div className={styles.previewAvatarWrap}>
+                        <div
+                          style={{
+                            width: '4rem',
+                            height: '4rem',
+                            borderRadius: '50%',
+                            backgroundColor: anonAccent,
+                            display: 'grid',
+                            placeItems: 'center',
+                            fontSize: '2rem',
+                            boxShadow: '0 0 0 4px var(--color-surface-raised)',
+                          }}
+                        >
+                          {anonSymbol}
+                        </div>
+                      </div>
+                      <div className={styles.previewName}>
+                        {anonAlias || 'Anonymous Persona'}
+                      </div>
+                      <div className={styles.previewHandle}>🎭 Masked Persona • Hidden Profile</div>
+                      <div className={styles.previewBio}>
+                        Your public handle (@{user.handle}) and profile avatar are hidden from others when speaking under this persona.
+                      </div>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <Button type="submit" disabled={saving}>
-                      {saving && <Spinner />}
-                      Save Changes
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            )}
+                  <form className={styles.formGrid} onSubmit={handleSaveAnonSettings}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                        <span className={styles.fieldLabel}>Anonymous Alias / Codename</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleRandomizeAnonAlias}
+                          style={{ fontSize: 'var(--text-xs)' }}
+                        >
+                          🎲 Randomize
+                        </Button>
+                      </div>
+                      <Input
+                        label="Anonymous Alias"
+                        value={anonAlias}
+                        onChange={(e) => setAnonAlias(e.target.value)}
+                        placeholder="e.g. Shadow Fox"
+                        maxLength={32}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className={styles.fieldLabel}>Mask Avatar / Symbol</label>
+                      <div className={styles.anonSymbolChips}>
+                        {MASK_SYMBOLS.map((symbol) => (
+                          <button
+                            key={symbol}
+                            type="button"
+                            className={cx(
+                              styles.anonSymbolChip,
+                              anonSymbol === symbol && styles.anonSymbolChipActive,
+                            )}
+                            onClick={() => setAnonSymbol(symbol)}
+                            aria-label={`Select mask ${symbol}`}
+                          >
+                            {symbol}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={styles.fieldLabel}>Persona Accent Color</label>
+                      <div className={styles.colorSwatches}>
+                        {PRESET_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            className={cx(
+                              styles.colorSwatch,
+                              anonAccent === color && styles.colorSwatchActive,
+                            )}
+                            style={{ backgroundColor: color }}
+                            onClick={() => setAnonAccent(color)}
+                            aria-label={`Color ${color}`}
+                          />
+                        ))}
+                        <Input
+                          label="Custom Hex"
+                          value={anonAccent}
+                          onChange={(e) => setAnonAccent(e.target.value)}
+                          placeholder="#a855f7"
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <Button type="submit">
+                        Save Anonymous Persona
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
             {/* MY ACCOUNT TAB */}
             {activeTab === 'account' && (

@@ -88,32 +88,7 @@ export function FriendsRoute() {
     try {
       const token = await getToken()
       const targetName = prof?.display_name ?? 'Friend'
-      const handle = prof?.handle ?? ''
-
-      // Reuse existing DM if one was already established
-      try {
-        const mine = await roomsApi.mine(token)
-        const existing = mine.find(
-          (r) => r.category === 'dm' && (r.name.includes(`@${handle}`) || r.topic?.includes(`@${handle}`))
-        )
-        if (existing) {
-          toast.success(`Opening conversation with ${targetName}!`)
-          void navigate(`/rooms/${existing.id}`)
-          return
-        }
-      } catch {
-        // Fall back to creating a new one
-      }
-
-      const dmRoom = await roomsApi.createStandalone(token, {
-        name: `DM: @${handle || 'Friend'}`,
-        topic: `Direct message with ${targetName}`,
-        category: 'dm',
-        room_type: 'text',
-        visibility: 'private',
-        is_anonymous: false,
-        participant_ids: [friendId],
-      })
+      const dmRoom = await roomsApi.openDM(token, friendId)
       toast.success(`Opening conversation with ${targetName}!`)
       void navigate(`/rooms/${dmRoom.id}`)
     } catch {

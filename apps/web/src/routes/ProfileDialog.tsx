@@ -7,9 +7,11 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
   CopyIcon,
+  LockIcon,
   MessageSquareIcon,
   ShieldIcon,
   UserPlusIcon,
+  UsersIcon,
 } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Skeleton } from '@/components/Skeleton'
@@ -26,6 +28,8 @@ import {
   type Uuid,
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { cx } from '@/lib/cx'
+import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { primeProfile } from '@/lib/useProfiles'
 
@@ -41,6 +45,23 @@ const ACCENTS = [
   '#a855f7',
   '#06b6d4',
 ]
+
+const RANDOM_ALIASES = [
+  'Shadow Fox',
+  'Neon Phantom',
+  'Cyber Panda',
+  'Midnight Owl',
+  'Pixel Knight',
+  'Cosmic Voyager',
+  'Stealth Tiger',
+  'Quantum Hawk',
+  'Nebula Dragon',
+  'Mystic Wolf',
+  'Astral Lynx',
+  'Echo Viper',
+]
+
+const MASK_SYMBOLS = ['🎭', '🕶️', '🦊', '👻', '🤖', '🦉', '🐺', '🐼', '⚡', '🔮', '👾', '🛸']
 
 interface ProfileDialogProps {
   open: boolean
@@ -59,9 +80,9 @@ export function ProfileDialog({ open, onOpenChange, targetUserId }: ProfileDialo
         <BaseDialog.Popup className={styles.popup}>
           {isViewingSelf ? (
             <>
-              <BaseDialog.Title className={styles.title}>Edit profile</BaseDialog.Title>
+              <BaseDialog.Title className={styles.title}>Edit Profile & Identity</BaseDialog.Title>
               <BaseDialog.Description className={styles.description}>
-                This is what everyone else in your communities sees.
+                Customize your public account or masked anonymous persona.
               </BaseDialog.Description>
               {user && (
                 <ProfileForm key={String(open)} user={user} onDone={() => onOpenChange(false)} />
@@ -103,34 +124,8 @@ function PublicProfileCard({
     try {
       const token = await getToken()
       const targetName = publicProfile.data?.display_name ?? 'User'
-      const handle = publicProfile.data?.handle ?? ''
-
-      // Reuse existing DM if one was already established
-      try {
-        const mine = await roomsApi.mine(token)
-        const existing = mine.find(
-          (r) => r.category === 'dm' && (r.name.includes(`@${handle}`) || r.topic?.includes(`@${handle}`))
-        )
-        if (existing) {
-          toast.success(`Opening conversation with ${targetName}!`)
-          onClose()
-          void navigate(`/rooms/${existing.id}`)
-          return
-        }
-      } catch {
-        // Fall back to creating a new one
-      }
-
-      const dmRoom = await roomsApi.createStandalone(token, {
-        name: `DM: @${handle || 'User'}`,
-        topic: `Direct chat with ${targetName}`,
-        category: 'dm',
-        room_type: 'text',
-        visibility: 'private',
-        is_anonymous: false,
-        participant_ids: [userId],
-      })
-      toast.success(`Opening direct chat with ${targetName}!`)
+      const dmRoom = await roomsApi.openDM(token, userId)
+      toast.success(`Opening conversation with ${targetName}!`)
       onClose()
       void navigate(`/rooms/${dmRoom.id}`)
     } catch (cause) {
@@ -262,6 +257,9 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
   const { getToken, applyProfile } = useAuth()
   const toast = useToast()
 
+  const [tab, setTab] = useState<'public' | 'anonymous'>('public')
+
+  // Public profile states
   const [displayName, setDisplayName] = useState(user.profile.display_name)
   const [bio, setBio] = useState(user.profile.bio ?? '')
   const [avatarUrl, setAvatarUrl] = useState(user.profile.avatar_url ?? '')
@@ -269,7 +267,19 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  async function save(event: FormEvent) {
+  // Anonymous Persona states
+  const anonymousAlias = useAppStore((s) => s.anonymousAlias)
+  const anonymousAccent = useAppStore((s) => s.anonymousAccent)
+  const anonymousAvatarSeed = useAppStore((s) => s.anonymousAvatarSeed)
+  const isAnonymousByDefault = useAppStore((s) => s.isAnonymousByDefault)
+  const setAnonymousSettings = useAppStore((s) => s.setAnonymousSettings)
+
+  const [anonAlias, setAnonAlias] = useState(anonymousAlias)
+  const [anonAccent, setAnonAccent] = useState(anonymousAccent)
+  const [anonSymbol, setAnonSymbol] = useState(anonymousAvatarSeed)
+  const [anonDefault, setAnonDefault] = useState(isAnonymousByDefault)
+
+  async function savePublic(event: FormEvent) {
     event.preventDefault()
     setError(null)
     setSaving(true)
@@ -289,7 +299,7 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
         avatar_effect: profile.avatar_effect,
         accent_color: profile.accent_color,
       })
-      toast.success('Profile saved')
+      toast.success('Public profile saved')
       onDone()
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Could not save your profile')
@@ -298,82 +308,240 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
     }
   }
 
+  function saveAnonymous(event: FormEvent) {
+    event.preventDefault()
+    setAnonymousSettings({
+      alias: anonAlias.trim() || 'Anonymous Phantom',
+      accent: anonAccent,
+      avatarSeed: anonSymbol,
+      isAnonymousByDefault: anonDefault,
+    })
+    toast.success('Anonymous persona saved', 'Your masked state is updated.')
+    onDone()
+  }
+
+  function randomizeAlias() {
+    const random = RANDOM_ALIASES[Math.floor(Math.random() * RANDOM_ALIASES.length)] ?? 'Shadow Fox'
+    setAnonAlias(random)
+  }
+
   return (
     <>
-      <div
-        className={styles.preview}
-        style={{ '--preview-accent': accent ?? undefined } as React.CSSProperties}
-      >
-        <div className={styles.previewBanner} />
-        <Avatar
-          name={displayName || user.handle}
-          src={avatarUrl || null}
-          color={accent}
-          size="xl"
-          presence="online"
-          className={styles.previewAvatar}
-        />
-        <div className={styles.previewText}>
-          <div className={styles.previewName}>{displayName || user.handle}</div>
-          <div className={styles.previewHandle}>@{user.handle}</div>
-          {bio && <p className={styles.previewBio}>{bio}</p>}
-        </div>
+      <div className={styles.tabSwitcher}>
+        <button
+          type="button"
+          className={cx(styles.tabBtn, tab === 'public' && styles.tabBtnActive)}
+          onClick={() => setTab('public')}
+        >
+          <UsersIcon size={14} />
+          Public Profile
+        </button>
+        <button
+          type="button"
+          className={cx(styles.tabBtn, tab === 'anonymous' && styles.tabBtnActive)}
+          onClick={() => setTab('anonymous')}
+        >
+          <LockIcon size={14} />
+          Anonymous Persona
+        </button>
       </div>
 
-      {error && <Callout tone="danger">{error}</Callout>}
-
-      <form className={styles.form} onSubmit={save}>
-        <Input
-          label="Display name"
-          value={displayName}
-          onChange={(event) => setDisplayName(event.target.value)}
-          maxLength={32}
-          required
-        />
-
-        <Input
-          label="Bio"
-          value={bio}
-          onChange={(event) => setBio(event.target.value)}
-          placeholder="Something about you"
-          maxLength={190}
-        />
-
-        <Input
-          label="Avatar URL"
-          value={avatarUrl}
-          onChange={(event) => setAvatarUrl(event.target.value)}
-          placeholder="https://…"
-          spellCheck={false}
-          description="Leave it blank to use your initials."
-        />
-
-        <fieldset className={styles.accents}>
-          <legend className={styles.accentsLabel}>Accent</legend>
-          <div className={styles.swatches}>
-            {ACCENTS.map((value, index) => (
-              <button
-                key={value}
-                type="button"
-                className={styles.swatch}
-                style={{ background: value }}
-                aria-label={`Accent ${index + 1}`}
-                aria-pressed={accent === value}
-                data-selected={accent === value || undefined}
-                onClick={() => setAccent(value)}
-              />
-            ))}
+      {tab === 'public' ? (
+        <>
+          <div
+            className={styles.preview}
+            style={{ '--preview-accent': accent ?? undefined } as React.CSSProperties}
+          >
+            <div className={styles.previewBanner} />
+            <Avatar
+              name={displayName || user.handle}
+              src={avatarUrl || null}
+              color={accent}
+              size="xl"
+              presence="online"
+              className={styles.previewAvatar}
+            />
+            <div className={styles.previewText}>
+              <div className={styles.previewName}>{displayName || user.handle}</div>
+              <div className={styles.previewHandle}>@{user.handle}</div>
+              {bio && <p className={styles.previewBio}>{bio}</p>}
+            </div>
           </div>
-        </fieldset>
 
-        <div className={styles.actions}>
-          <BaseDialog.Close render={<Button variant="secondary">Cancel</Button>} />
-          <Button type="submit" disabled={saving || !displayName.trim()}>
-            {saving && <Spinner />}
-            Save
-          </Button>
-        </div>
-      </form>
+          {error && <Callout tone="danger">{error}</Callout>}
+
+          <form className={styles.form} onSubmit={savePublic}>
+            <Input
+              label="Display name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              maxLength={32}
+              required
+            />
+
+            <Input
+              label="Bio"
+              value={bio}
+              onChange={(event) => setBio(event.target.value)}
+              placeholder="Something about you"
+              maxLength={190}
+            />
+
+            <Input
+              label="Avatar URL"
+              value={avatarUrl}
+              onChange={(event) => setAvatarUrl(event.target.value)}
+              placeholder="https://…"
+              spellCheck={false}
+              description="Leave it blank to use your initials."
+            />
+
+            <fieldset className={styles.accents}>
+              <legend className={styles.accentsLabel}>Accent</legend>
+              <div className={styles.swatches}>
+                {ACCENTS.map((value, index) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={styles.swatch}
+                    style={{ background: value }}
+                    aria-label={`Accent ${index + 1}`}
+                    aria-pressed={accent === value}
+                    data-selected={accent === value || undefined}
+                    onClick={() => setAccent(value)}
+                  />
+                ))}
+              </div>
+            </fieldset>
+
+            <div className={styles.actions}>
+              <BaseDialog.Close render={<Button variant="secondary">Cancel</Button>} />
+              <Button type="submit" disabled={saving || !displayName.trim()}>
+                {saving && <Spinner />}
+                Save
+              </Button>
+            </div>
+          </form>
+        </>
+      ) : (
+        <>
+          <div
+            className={styles.preview}
+            style={{ '--preview-accent': anonAccent } as React.CSSProperties}
+          >
+            <div className={styles.previewBanner} />
+            <div
+              style={{
+                width: '3.5rem',
+                height: '3.5rem',
+                borderRadius: '50%',
+                backgroundColor: anonAccent,
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: '1.75rem',
+                margin: '-2rem 0 0 var(--space-4)',
+                boxShadow: '0 0 0 4px var(--color-surface)',
+              }}
+            >
+              {anonSymbol}
+            </div>
+            <div className={styles.previewText}>
+              <div className={styles.previewName}>{anonAlias || 'Anonymous Persona'}</div>
+              <div className={styles.previewHandle}>🎭 Masked Identity • Hidden Account</div>
+            </div>
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 'var(--text-xs)' }}>
+                Post Anonymously by Default
+              </div>
+              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>
+                Automatically enter rooms in anonymous persona
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              className={styles.switch}
+              checked={anonDefault}
+              onChange={(e) => setAnonDefault(e.target.checked)}
+              aria-label="Post Anonymously by Default"
+            />
+          </div>
+
+          <form className={styles.form} onSubmit={saveAnonymous}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                <span className={styles.accentsLabel} style={{ marginBottom: 0 }}>
+                  Anonymous Alias
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={randomizeAlias}
+                  style={{ fontSize: 'var(--text-2xs)' }}
+                >
+                  🎲 Randomize
+                </Button>
+              </div>
+              <Input
+                label="Anonymous Alias"
+                value={anonAlias}
+                onChange={(e) => setAnonAlias(e.target.value)}
+                placeholder="e.g. Shadow Fox"
+                maxLength={32}
+                required
+              />
+            </div>
+
+            <div>
+              <label className={styles.accentsLabel}>Mask Symbol</label>
+              <div className={styles.symbolGrid}>
+                {MASK_SYMBOLS.map((symbol) => (
+                  <button
+                    key={symbol}
+                    type="button"
+                    className={cx(
+                      styles.symbolBtn,
+                      anonSymbol === symbol && styles.symbolBtnActive,
+                    )}
+                    onClick={() => setAnonSymbol(symbol)}
+                    aria-label={`Select mask ${symbol}`}
+                  >
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <fieldset className={styles.accents}>
+              <legend className={styles.accentsLabel}>Accent Color</legend>
+              <div className={styles.swatches}>
+                {ACCENTS.map((value, index) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={styles.swatch}
+                    style={{ background: value }}
+                    aria-label={`Accent ${index + 1}`}
+                    aria-pressed={anonAccent === value}
+                    data-selected={anonAccent === value || undefined}
+                    onClick={() => setAnonAccent(value)}
+                  />
+                ))}
+              </div>
+            </fieldset>
+
+            <div className={styles.actions}>
+              <BaseDialog.Close render={<Button variant="secondary">Cancel</Button>} />
+              <Button type="submit">
+                Save Anonymous Persona
+              </Button>
+            </div>
+          </form>
+        </>
+      )}
     </>
   )
 }

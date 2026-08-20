@@ -27,9 +27,11 @@ export function VoicePanel({ room }: { room: RoomWithPermissions }) {
   const voice = useVoiceRoom(room.id)
 
   const canSpeak = can(room.your_permissions, 'speak')
-  const connected = voice.status === 'connected'
-  const pending = voice.status === 'connecting' || voice.status === 'reconnecting'
-  const headcount = voice.participants.length + 1
+  const isCurrentRoom = voice.isCurrent
+  const connected = isCurrentRoom && voice.status === 'connected'
+  const pending = isCurrentRoom && (voice.status === 'connecting' || voice.status === 'reconnecting')
+  const inOtherRoom = Boolean(voice.activeRoomId && voice.activeRoomId !== room.id)
+  const headcount = isCurrentRoom ? voice.participants.length + 1 : 0
 
   if (!connected && !pending) {
     return (
@@ -40,21 +42,30 @@ export function VoicePanel({ room }: { room: RoomWithPermissions }) {
           </span>
           <div className={styles.inviteText}>
             <div className={styles.inviteTitle}>
-              {voice.status === 'failed' ? 'Voice disconnected' : 'Voice is open here'}
+              {inOtherRoom
+                ? `Currently connected in ${voice.activeRoomName || 'another room'}`
+                : isCurrentRoom && voice.status === 'failed'
+                  ? 'Voice disconnected'
+                  : 'Voice is open here'}
             </div>
             <p className={styles.inviteHint}>
-              {canSpeak
-                ? 'Join to talk with everyone in this room.'
-                : 'You can listen in this room, but not speak.'}
+              {inOtherRoom
+                ? 'Joining this room will switch your voice connection here.'
+                : canSpeak
+                  ? 'Join to talk with everyone in this room.'
+                  : 'You can listen in this room, but not speak.'}
             </p>
           </div>
-          <Button onClick={() => void voice.join()}>
+          <Button
+            onClick={() => void voice.join(room.name, room.community_id ?? undefined)}
+            style={{ background: inOtherRoom ? 'var(--color-accent)' : undefined }}
+          >
             <MicIcon size={16} />
-            Join voice
+            {inOtherRoom ? 'Switch to this room' : 'Join voice'}
           </Button>
         </div>
 
-        {voice.error && <Callout tone="danger">{voice.error}</Callout>}
+        {isCurrentRoom && voice.error && <Callout tone="danger">{voice.error}</Callout>}
       </section>
     )
   }

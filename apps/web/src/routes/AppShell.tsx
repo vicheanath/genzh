@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
@@ -37,6 +37,7 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
+import { useVoice } from '@/lib/media'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
@@ -257,8 +258,9 @@ function CommunityRail({
           onClick={onAddClick}
           aria-label="Add a Server"
         >
+          <span className={styles.railPill} aria-hidden />
           <span className={styles.railGlyph}>
-            <PlusIcon size={20} />
+            <PlusIcon size={20} className={styles.railAddIcon} />
           </span>
         </button>
       </Tooltip>
@@ -385,7 +387,69 @@ function ChannelSidebar({
         )}
       </nav>
 
+      <VoiceConnectionBar />
       <UserBar onOpenSettings={onOpenSettings} />
+    </div>
+  )
+}
+
+function VoiceConnectionBar() {
+  const voice = useVoice()
+  const navigate = useNavigate()
+
+  if (!voice.activeRoomId || voice.status === 'idle') return null
+
+  const isConnected = voice.status === 'connected'
+  const isConnecting = voice.status === 'connecting' || voice.status === 'reconnecting'
+
+  const targetUrl = voice.activeCommunityId
+    ? `/c/${voice.activeCommunityId}/r/${voice.activeRoomId}`
+    : `/rooms/${voice.activeRoomId}`
+
+  return (
+    <div className={styles.voiceBar}>
+      <div
+        className={styles.voiceBarInfo}
+        onClick={() => void navigate(targetUrl)}
+        title="Click to go to active voice room"
+      >
+        <div className={styles.voiceBarStatus}>
+          <span
+            className={cx(styles.voiceDot, isConnected && styles.voiceDotConnected)}
+            aria-hidden
+          />
+          <span className={styles.voiceStatusText}>
+            {isConnected ? 'Voice Connected' : isConnecting ? 'Connecting…' : 'Disconnected'}
+          </span>
+        </div>
+        <div className={styles.voiceRoomName}>
+          {voice.activeRoomName || 'Voice Channel'}
+        </div>
+      </div>
+
+      <div className={styles.voiceBarActions}>
+        <Tooltip content={voice.muted ? 'Unmute' : 'Mute'}>
+          <button
+            type="button"
+            className={cx(styles.voiceActionBtn, voice.muted && styles.voiceActionMuted)}
+            onClick={() => voice.toggleMute()}
+            aria-label={voice.muted ? 'Unmute microphone' : 'Mute microphone'}
+          >
+            {voice.muted ? <MicOffIcon size={15} /> : <MicIcon size={15} />}
+          </button>
+        </Tooltip>
+
+        <Tooltip content="Disconnect from voice">
+          <button
+            type="button"
+            className={cx(styles.voiceActionBtn, styles.voiceDisconnectBtn)}
+            onClick={() => void voice.leave()}
+            aria-label="Disconnect from voice"
+          >
+            <PhoneOffIcon size={15} />
+          </button>
+        </Tooltip>
+      </div>
     </div>
   )
 }

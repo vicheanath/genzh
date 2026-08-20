@@ -71,6 +71,7 @@ pub fn build(state: AppState) -> Router {
             "/rooms",
             post(routes::rooms::create_standalone_room),
         )
+        .route("/rooms/dm/{user_id}", post(routes::rooms::get_or_create_dm))
         .route("/rooms/discovery", get(routes::rooms::discovery))
         .route("/rooms/mine", get(routes::rooms::list_mine))
         .route("/rooms/trending", get(routes::rooms::trending))
