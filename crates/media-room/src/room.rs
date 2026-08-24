@@ -23,6 +23,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use genzh_media_core::events::{ParticipantInfo, RoomEvent};
 use genzh_media_core::track::{ParticipantId, TrackId, TrackKind};
@@ -32,6 +33,7 @@ use uuid::Uuid;
 
 use crate::error::{MediaRoomError, MediaRoomResult};
 use crate::participant::Participant;
+use crate::speakers::{ActiveSpeakers, DEFAULT_SPEAKER_LIMIT};
 use crate::track::PublishedTrack;
 
 /// Depth of the room's event bus.
@@ -74,6 +76,11 @@ pub struct RoomConfig {
     pub capacity: usize,
     /// Auto-subscription policy.
     pub auto_subscribe: AutoSubscribe,
+    /// How many people's audio is forwarded at once. Zero means no limit.
+    ///
+    /// Inert until a room grows past it, so ordinary calls are unaffected —
+    /// see [`crate::speakers`] for why a big room needs one at all.
+    pub speaker_limit: usize,
 }
 
 impl Default for RoomConfig {
@@ -81,6 +88,7 @@ impl Default for RoomConfig {
         Self {
             capacity: MAX_PARTICIPANTS_PER_ROOM,
             auto_subscribe: AutoSubscribe::default(),
+            speaker_limit: DEFAULT_SPEAKER_LIMIT,
         }
     }
 }
@@ -91,6 +99,14 @@ pub struct MediaRoom {
     config: RoomConfig,
     participants: RwLock<HashMap<ParticipantId, Arc<Participant>>>,
     events: broadcast::Sender<RoomEvent>,
+    /// Who is worth forwarding audio for, once the room is big enough for that
+    /// to be a question.
+    speakers: RwLock<ActiveSpeakers>,
+    /// Monotonically increasing stamp for speaker ordering.
+    ///
+    /// A counter rather than a clock: the ranking only needs to know what came
+    /// after what, and a counter cannot be tested against a sleeping thread.
+    tick: AtomicU64,
 }
 
 impl std::fmt::Debug for MediaRoom {
@@ -110,7 +126,89 @@ impl MediaRoom {
             config,
             participants: RwLock::new(HashMap::new()),
             events,
+            speakers: RwLock::new(ActiveSpeakers::new(config.speaker_limit)),
+            tick: AtomicU64::new(0),
         })
+    }
+
+    /// Record a voice-activity transition and re-apply the forwarding rule.
+    ///
+    /// Called on every start and stop of speech, which in a busy room is a few
+    /// times a second — so the work is a sort of at most `capacity` entries and
+    /// a flag write per audio track, and only the tracks whose state actually
+    /// changed are touched.
+    pub async fn note_speaking(&self, participant: ParticipantId, speaking: bool) {
+        let tick = self.tick.fetch_add(1, Ordering::Relaxed);
+        self.speakers
+            .write()
+            .await
+            .set_speaking(participant, speaking, tick);
+        self.apply_speaker_limit().await;
+    }
+
+    /// Push the current active set onto every audio track's forwarding flag.
+    async fn apply_speaker_limit(&self) {
+        let speakers = self.speakers.read().await;
+
+        // Nothing to decide until the room is bigger than the limit; skipping
+        // the walk keeps ordinary rooms free of this entirely.
+        if speakers.len() <= self.config.speaker_limit && self.config.speaker_limit != 0 {
+            return;
+        }
+
+        for participant in self.participants().await {
+            let Some(track) = participant.published_track(TrackKind::Audio).await else {
+                continue;
+            };
+            let active = speakers.is_active(participant.id());
+            if track.set_forwarding(active) {
+                tracing::debug!(
+                    room_id = %self.id,
+                    participant_id = %participant.id(),
+                    active,
+                    "audio forwarding toggled by the speaker limit"
+                );
+            }
+        }
+    }
+
+    /// What every track in this room has been doing.
+    ///
+    /// Walks the room rather than keeping a running aggregate: it is called by
+    /// an operator looking at a dashboard, not on the packet path, and a tree
+    /// assembled on demand cannot drift from the tracks it describes.
+    pub async fn report(&self) -> crate::stats::RoomReport {
+        let mut participants = Vec::new();
+
+        for participant in self.participants().await {
+            let tracks = participant
+                .published_tracks()
+                .await
+                .into_iter()
+                .map(|track| {
+                    let stats = track.stats_snapshot();
+                    crate::stats::TrackReport {
+                        track_id: track.id().to_string(),
+                        kind: track.kind().as_str(),
+                        mime_type: track.info().mime_type.clone(),
+                        subscribers: track.subscriber_count(),
+                        drop_rate: stats.drop_rate(),
+                        stats,
+                    }
+                })
+                .collect();
+
+            participants.push(crate::stats::ParticipantReport {
+                participant_id: participant.id().to_string(),
+                display_name: participant.display_name().to_owned(),
+                tracks,
+            });
+        }
+
+        crate::stats::RoomReport {
+            room_id: self.id.to_string(),
+            participants,
+        }
     }
 
     /// Room id, matching the control plane's `rooms.id`.
@@ -180,6 +278,11 @@ impl MediaRoom {
             participants.insert(participant.id(), participant.clone());
         }
 
+        {
+            let tick = self.tick.fetch_add(1, Ordering::Relaxed);
+            self.speakers.write().await.insert(participant.id(), tick);
+        }
+
         // Catch the newcomer up on what is already being published.
         let mut attached = Vec::new();
         for existing in self.participants().await {
@@ -221,6 +324,11 @@ impl MediaRoom {
     pub async fn remove_participant(&self, id: ParticipantId) -> Option<Arc<Participant>> {
         let participant = self.participants.write().await.remove(&id)?;
 
+        // Frees their slot in the active set, which may let somebody who was
+        // being held back through.
+        self.speakers.write().await.remove(id);
+        self.apply_speaker_limit().await;
+
         // 1. Everyone who was receiving this participant's media stops.
         for track in participant.published_tracks().await {
             self.detach_from_subscribers(track.id(), id).await;
@@ -257,6 +365,12 @@ impl MediaRoom {
         self.emit(RoomEvent::TrackPublished {
             track: track.info().clone(),
         });
+
+        // A track that appears in an already-crowded room needs the current
+        // verdict applied to it, not the default of "forward everything".
+        if track.kind().is_audio() {
+            self.apply_speaker_limit().await;
+        }
 
         if !self.config.auto_subscribe.includes(track.kind()) {
             return Ok(Vec::new());

@@ -38,6 +38,11 @@ pub struct Config {
     pub auto_subscribe_video: bool,
     /// Participant cap per room, enforced regardless of what the API believed.
     pub room_capacity: usize,
+    /// How many people's audio a room forwards at once. `0` disables the limit.
+    ///
+    /// Inert below this many participants, so it only ever affects rooms large
+    /// enough for everyone-hears-everyone to be wasteful.
+    pub speaker_limit: usize,
 }
 
 /// A configuration value that is missing or unusable.
@@ -108,6 +113,10 @@ impl Config {
             room_capacity: number(
                 "MEDIA_ROOM_CAPACITY",
                 genzh_media_signaling::limits::MAX_PARTICIPANTS_PER_ROOM,
+            )?,
+            speaker_limit: number(
+                "MEDIA_SPEAKER_LIMIT",
+                genzh_media_room::DEFAULT_SPEAKER_LIMIT,
             )?,
         })
     }

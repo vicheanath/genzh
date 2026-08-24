@@ -21,14 +21,22 @@
 //! `sfu` is the only module either points at today.
 
 pub mod error;
+pub mod keyframe;
 pub mod manager;
 pub mod participant;
 pub mod room;
+pub mod sequence;
+pub mod speakers;
 pub mod sfu;
+pub mod stats;
 pub mod track;
 pub mod transport;
 
 pub use error::{MediaRoomError, MediaRoomResult};
+pub use keyframe::{KEYFRAME_COOLDOWN, KeyframeGate};
+pub use sequence::SequenceRewriter;
+pub use speakers::{ActiveSpeakers, DEFAULT_SPEAKER_LIMIT};
+pub use stats::{TrackStats, TrackStatsSnapshot};
 pub use manager::MediaRoomManager;
 pub use participant::{ConnectionState, MediaState, Participant, SubscriberSink};
 pub use room::{AutoSubscribe, MediaRoom, RoomConfig};

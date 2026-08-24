@@ -24,6 +24,7 @@ use tracing_subscriber::prelude::*;
 
 use crate::config::Config;
 use crate::state::MediaState;
+use genzh_media_room::stats::ServerReport;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -66,6 +67,7 @@ async fn run() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready))
+        .route("/stats", get(stats))
         .route("/ws/media", get(signaling::ws_handler))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state.clone());
@@ -110,6 +112,16 @@ async fn health() -> axum::Json<Health> {
         service: "media",
         version: env!("CARGO_PKG_VERSION"),
     })
+}
+
+/// `GET /stats`
+///
+/// What every room on this node is carrying, down to the counters on each
+/// track. Unauthenticated like the other operational endpoints — it exposes no
+/// media and no account data, only ids and packet counts — and expected to sit
+/// behind whatever fronts the node, exactly as `/ready` does.
+async fn stats(State(state): State<MediaState>) -> axum::Json<ServerReport> {
+    axum::Json(state.rooms.report().await)
 }
 
 /// `GET /ready`

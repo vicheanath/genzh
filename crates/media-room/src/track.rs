@@ -24,11 +24,16 @@
 //!   dropping.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use genzh_media_core::track::{ParticipantId, TrackId, TrackInfo, TrackKind};
 use genzh_media_signaling::limits::RTP_FANOUT_DEPTH;
 use rtc::rtp_transceiver::rtp_sender::RTCRtpCodec;
 use tokio::sync::broadcast;
+
+use crate::keyframe::KeyframeGate;
+use crate::stats::{TrackStats, TrackStatsSnapshot};
 
 /// A track one participant is publishing, plus its fan-out channel.
 pub struct PublishedTrack {
@@ -42,6 +47,16 @@ pub struct PublishedTrack {
     codec: Option<RTCRtpCodec>,
     /// Relays keyframe requests from subscribers back to the publisher.
     keyframe_requests: Option<KeyframeRequester>,
+    /// Rations those requests, so a room-wide loss event asks once.
+    keyframe_gate: KeyframeGate,
+    /// What this track's forwarding path has done.
+    stats: TrackStats,
+    /// Whether this track's packets are currently worth sending on.
+    ///
+    /// A flag rather than an unsubscribe: turning forwarding back on has to be
+    /// instant — somebody who starts talking should be audible on their next
+    /// packet — and tearing a subscription down and back up would renegotiate.
+    forwarding: AtomicBool,
 }
 
 /// Asks the publisher for a fresh keyframe.
@@ -95,6 +110,9 @@ impl PublishedTrack {
             rtp_tx,
             codec: None,
             keyframe_requests,
+            keyframe_gate: KeyframeGate::new(),
+            stats: TrackStats::default(),
+            forwarding: AtomicBool::new(true),
         })
     }
 
@@ -121,6 +139,9 @@ impl PublishedTrack {
             rtp_tx,
             codec: Some(codec),
             keyframe_requests,
+            keyframe_gate: KeyframeGate::new(),
+            stats: TrackStats::default(),
+            forwarding: AtomicBool::new(true),
         })
     }
 
@@ -167,12 +188,49 @@ impl PublishedTrack {
     /// Ask the publisher for a keyframe, if this track supports it.
     ///
     /// A no-op for audio, and for tracks created without a requester (tests).
-    pub fn request_keyframe(&self) {
+    ///
+    /// Rationed: returns whether the request actually reached the publisher.
+    /// Callers are per-subscriber and a loss event hits all of them at once, so
+    /// forwarding every request would answer one problem with twenty intra
+    /// frames — see [`crate::keyframe`].
+    pub fn request_keyframe(&self) -> bool {
         if self.info.kind.is_audio() {
-            return;
+            return false;
         }
-        if let Some(requester) = &self.keyframe_requests {
-            requester.request();
+        let Some(requester) = &self.keyframe_requests else {
+            return false;
+        };
+        if !self.keyframe_gate.admit(Instant::now()) {
+            return false;
+        }
+        requester.request();
+        true
+    }
+
+    /// Should this track's packets be forwarded right now?
+    ///
+    /// True unless a room has more unmuted people in it than it forwards at
+    /// once — see [`crate::speakers`].
+    pub fn is_forwarding(&self) -> bool {
+        self.forwarding.load(Ordering::Relaxed)
+    }
+
+    /// Turn forwarding on or off. Returns whether this changed anything.
+    pub fn set_forwarding(&self, forwarding: bool) -> bool {
+        self.forwarding.swap(forwarding, Ordering::Relaxed) != forwarding
+    }
+
+    /// The live counters, for the forwarding path to increment.
+    pub fn stats(&self) -> &TrackStats {
+        &self.stats
+    }
+
+    /// A reading of everything this track has done.
+    pub fn stats_snapshot(&self) -> TrackStatsSnapshot {
+        TrackStatsSnapshot {
+            keyframes_sent: self.keyframe_gate.honoured(),
+            keyframes_coalesced: self.keyframe_gate.absorbed(),
+            ..self.stats.snapshot()
         }
     }
 }

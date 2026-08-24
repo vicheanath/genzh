@@ -14,7 +14,7 @@
 //! proportional to *published* tracks instead of to the square of the room.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+
 
 use async_trait::async_trait;
 
@@ -33,9 +33,6 @@ use webrtc::runtime::Runtime;
 use crate::track::{KeyframeRequester, PublishedTrack};
 
 use super::{PeerEvent, TrackIntents, emit_candidate};
-
-/// Minimum gap between keyframe requests relayed to one publisher.
-const PLI_MIN_INTERVAL_MS: u64 = 500;
 
 /// Handles the publisher connection's events: ICE, state, and inbound tracks.
 #[derive(Clone)]
@@ -187,6 +184,7 @@ impl PublisherHandler {
         kind: TrackKind,
     ) {
         let sender = published.sender();
+        let stats = published.clone();
         let events = self.events.clone();
         let participant_id = self.participant_id;
         let audio_level_ext_id = self.audio_level_ext_id;
@@ -206,6 +204,8 @@ impl PublisherHandler {
                         }
 
                         strip_header_extensions(&mut packet);
+
+                        stats.stats().packet_published();
 
                         // `send` fails only when nobody is subscribed, which is
                         // the normal state of a room of one.
@@ -229,29 +229,22 @@ impl PublisherHandler {
 
 /// Build the callback that relays keyframe requests to a publisher.
 ///
-/// Rate-limited: ten subscribers joining at once must not become ten PLIs, or
-/// the publisher spends its whole bitrate on intra frames.
+/// Unconditional: whatever reaches here is sent. The rationing that stops ten
+/// subscribers becoming ten PLIs happens one layer up, in
+/// [`crate::keyframe::KeyframeGate`], which is where the track that owns the
+/// decision lives.
+///
+/// This used to carry a cooldown of its own, measuring against a process-wide
+/// monotonic base that started at zero — so for the first half-second of the
+/// server's life, `now - 0 < 500` and the very first keyframe request of the
+/// process was silently dropped. The gate distinguishes "no request yet" from
+/// "a request 0ms ago", and is tested on exactly that.
 fn keyframe_requester(
     remote: Arc<dyn TrackRemote>,
     media_ssrc: u32,
     runtime: Arc<dyn Runtime>,
 ) -> KeyframeRequester {
-    let last_sent_ms = Arc::new(AtomicU64::new(0));
-
     KeyframeRequester::new(move || {
-        let now_ms = monotonic_millis();
-        let previous = last_sent_ms.load(Ordering::Relaxed);
-        if now_ms.saturating_sub(previous) < PLI_MIN_INTERVAL_MS {
-            return;
-        }
-        if last_sent_ms
-            .compare_exchange(previous, now_ms, Ordering::SeqCst, Ordering::Relaxed)
-            .is_err()
-        {
-            // Somebody else just sent one.
-            return;
-        }
-
         let remote = remote.clone();
         runtime.spawn(Box::pin(async move {
             let pli = PictureLossIndication {

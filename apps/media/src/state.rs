@@ -60,6 +60,7 @@ impl MediaState {
             audio_level_ext_id: 1,
             auto_subscribe_video: false,
             room_capacity: 16,
+            speaker_limit: genzh_media_room::DEFAULT_SPEAKER_LIMIT,
         };
 
         Self {
@@ -118,6 +119,7 @@ impl MediaState {
             } else {
                 AutoSubscribe::AudioOnly
             },
+            speaker_limit: config.speaker_limit,
         });
 
         let verifier = Arc::new(TokenVerifier::new(

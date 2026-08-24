@@ -124,6 +124,10 @@ impl Session {
             .update_state(|s| s.speaking = speaking)
             .await;
 
+        // The room decides whose audio is still worth forwarding once it is
+        // big enough for that to be a question.
+        self.room().note_speaking(participant_id, speaking).await;
+
         self.room().emit(if speaking {
             RoomEvent::SpeakingStarted { participant_id }
         } else {

@@ -126,6 +126,18 @@ impl MediaRoomManager {
     }
 
     /// Number of live rooms; surfaced by the health endpoint.
+    /// Every room this server is carrying, with counters.
+    pub async fn report(&self) -> crate::stats::ServerReport {
+        let rooms: Vec<Arc<MediaRoom>> = self.rooms.read().await.values().cloned().collect();
+
+        let mut reports = Vec::with_capacity(rooms.len());
+        for room in rooms {
+            reports.push(room.report().await);
+        }
+
+        crate::stats::ServerReport::with_totals(reports)
+    }
+
     pub async fn room_count(&self) -> usize {
         self.rooms.read().await.len()
     }

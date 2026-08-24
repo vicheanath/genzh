@@ -40,6 +40,7 @@ use webrtc::rtp_transceiver::RtpSender;
 
 use crate::error::{MediaRoomError, MediaRoomResult};
 use crate::participant::SubscriberSink;
+use crate::sequence::SequenceRewriter;
 use crate::track::PublishedTrack;
 
 use super::config::codec_from_profile;
@@ -281,12 +282,21 @@ fn spawn_forwarder(
         let payload_type = AtomicU8::new(0);
         let mut since_resolve_attempt = 0_u32;
         let mut consecutive_failures = 0_u32;
+        // This subscriber's own view of the sequence space. Anything dropped
+        // below closes up behind it rather than leaving a hole the client
+        // would ask us to retransmit.
+        let mut sequence = SequenceRewriter::new();
 
         loop {
             let packet = match packets.recv().await {
                 Ok(packet) => packet,
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(missed)) => {
                     tracing::debug!(%track_id, missed, "subscriber lagged");
+                    // Renumber around the loss, so what reaches the client is
+                    // still a contiguous run and it does not spend a round trip
+                    // asking for packets this server no longer holds.
+                    sequence.skip(missed);
+                    source.stats().subscriber_lagged(missed);
                     // Video cannot resynchronise without an intra frame.
                     if is_video {
                         source.request_keyframe();
@@ -295,6 +305,15 @@ fn spawn_forwarder(
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             };
+
+            // Outside the room's active-speaker set: renumber past it, so the
+            // subscriber sees an uninterrupted stream rather than a hole it
+            // would ask us to fill.
+            if !source.is_forwarding() {
+                sequence.skip(1);
+                source.stats().packet_suppressed();
+                continue;
+            }
 
             let mut pt = payload_type.load(Ordering::Relaxed);
             if pt == 0 {
@@ -309,6 +328,8 @@ fn spawn_forwarder(
                     // Not negotiated yet: drop rather than queue. A few tens of
                     // milliseconds of audio at the very start of a subscription
                     // is not worth buffering for.
+                    sequence.skip(1);
+                    source.stats().packets_dropped(1);
                     continue;
                 }
             }
@@ -316,14 +337,21 @@ fn spawn_forwarder(
             let mut packet = packet;
             packet.header.ssrc = ssrc;
             packet.header.payload_type = pt;
+            packet.header.sequence_number = sequence.forward(packet.header.sequence_number);
 
             match local.write_rtp(packet).await {
-                Ok(()) => consecutive_failures = 0,
+                Ok(()) => {
+                    consecutive_failures = 0;
+                    source.stats().packet_forwarded();
+                }
                 Err(error) => {
                     consecutive_failures += 1;
                     if consecutive_failures == 1 {
                         tracing::debug!(%track_id, %error, "forward write failed");
                     }
+                    // The packet never left, so it is a hole like any other.
+                    sequence.skip(1);
+                    source.stats().packets_dropped(1);
                     // A codec mismatch means our cached PT went stale across a
                     // renegotiation; re-resolve it.
                     payload_type.store(0, Ordering::Relaxed);
