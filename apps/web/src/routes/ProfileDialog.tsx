@@ -23,16 +23,11 @@ import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { Switch } from '@/components/Switch'
-import {
-  ApiError,
-  auth as authApi,
-  blocks as blocksApi,
-  friends as friendsApi,
-  rooms as roomsApi,
-  users as usersApi,
-  type CurrentUser,
-  type Uuid,
-} from '@/lib/api'
+import { ApiError, type CurrentUser, type Uuid } from '@/lib/api'
+import { authApi } from '@/features/auth'
+import { friendsApi, friendsApi as blocksApi } from '@/features/friends'
+import { roomsApi } from '@/features/rooms'
+import { settingsApi as usersApi } from '@/features/settings'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'

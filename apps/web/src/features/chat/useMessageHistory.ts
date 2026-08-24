@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { ApiError, messages as messagesApi, type Message, type Uuid } from '@/lib/api'
+import { ApiError, type Message, type Uuid } from '@/lib/api'
+import { chatApi as messagesApi } from '@/features/chat'
 import { useAuth } from '@/lib/auth'
 
 /** Where the next page starts. Both halves, or paging can skip messages. */

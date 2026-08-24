@@ -2,11 +2,9 @@ import { useState } from 'react'
 
 import { UserRow } from '@/components/UserRow'
 import { Skeleton } from '@/components/Skeleton'
-import {
-  communities as communitiesApi,
-  rooms as roomsApi,
-  type Uuid,
-} from '@/lib/api'
+import { type Uuid } from '@/lib/api'
+import { communitiesApi } from '@/features/communities'
+import { roomsApi } from '@/features/rooms'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
 import { usePresence } from '@/lib/usePresence'

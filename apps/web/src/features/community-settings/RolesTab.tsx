@@ -10,10 +10,10 @@ import { Switch } from '@/components/Switch'
 import { useToast } from '@/components/Toast'
 import {
   ApiError,
-  communities as communitiesApi,
   type CommunityWithPermissions,
   type Permission,
 } from '@/lib/api'
+import { communitiesApi } from '@/features/communities'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
 import { DEFAULT_ACCENT } from '@/lib/palette'

@@ -9,10 +9,10 @@ import { Select } from '@/components/Select'
 import { useToast } from '@/components/Toast'
 import {
   ApiError,
-  communities as communitiesApi,
   type CommunityWithPermissions,
   type Uuid,
 } from '@/lib/api'
+import { communitiesApi } from '@/features/communities'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
 import { usePresence } from '@/lib/usePresence'

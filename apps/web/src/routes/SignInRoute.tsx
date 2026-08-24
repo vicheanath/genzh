@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -7,7 +6,8 @@ import { DiscordIcon, GoogleIcon, HashIcon, MicIcon, UsersIcon } from '@/compone
 import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { Separator } from '@/components/Separator'
-import { ApiError, auth as authApi } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { useAuthConfig } from '@/features/auth'
 import { useAuth } from '@/lib/auth'
 
 import styles from './SignInRoute.module.css'
@@ -30,11 +30,7 @@ export function SignInRoute() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const { data: authConfig } = useQuery({
-    queryKey: ['authConfig'],
-    queryFn: () => authApi.config(),
-    staleTime: 5 * 60 * 1000,
-  })
+  const { data: authConfig } = useAuthConfig()
 
   // Detect error from OAuth redirect if present
   useEffect(() => {

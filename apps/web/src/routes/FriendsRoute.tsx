@@ -26,13 +26,9 @@ import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { UserRow } from '@/components/UserRow'
-import {
-  ApiError,
-  blocks as blocksApi,
-  friends as friendsApi,
-  rooms as roomsApi,
-  type Uuid,
-} from '@/lib/api'
+import { ApiError, type Uuid } from '@/lib/api'
+import { friendsApi, friendsApi as blocksApi } from '@/features/friends'
+import { roomsApi } from '@/features/rooms'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'

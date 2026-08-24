@@ -31,10 +31,10 @@ import { Tooltip } from '@/components/Tooltip'
 import { useToast } from '@/components/Toast'
 import {
   ApiError,
-  communities as communitiesApi,
-  rooms as roomsApi,
   type RoomType,
 } from '@/lib/api'
+import { communitiesApi } from '@/features/communities'
+import { roomsApi } from '@/features/rooms'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAsync } from '@/lib/useAsync'

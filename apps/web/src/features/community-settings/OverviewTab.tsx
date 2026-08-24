@@ -9,9 +9,9 @@ import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import {
   ApiError,
-  communities as communitiesApi,
   type CommunityWithPermissions,
 } from '@/lib/api'
+import { communitiesApi } from '@/features/communities'
 import { useAuth } from '@/lib/auth'
 
 import type { CommunityAbilities } from './tabs'

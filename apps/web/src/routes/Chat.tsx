@@ -30,13 +30,13 @@ import {
 } from '@/components/ContextMenu'
 import {
   ApiError,
-  messages as messagesApi,
   type Message,
   type PublicProfile,
   type ReactionSummary,
   type RoomWithPermissions,
   type Uuid,
 } from '@/lib/api'
+import { chatApi as messagesApi } from '@/features/chat'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { can } from '@/lib/permissions'

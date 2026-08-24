@@ -18,11 +18,11 @@ import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import {
   ApiError,
-  rooms as roomsApi,
   type CommunityWithPermissions,
   type RoomType,
   type Uuid,
 } from '@/lib/api'
+import { roomsApi } from '@/features/rooms'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
 

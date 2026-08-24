@@ -17,7 +17,8 @@ import {
 import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
-import { ApiError, communities as communitiesApi } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { communitiesApi } from '@/features/communities'
 import { useAuth } from '@/lib/auth'
 
 import styles from './AddCommunityDialog.module.css'
