@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@genzh/shared": ["../../packages/shared/src"],
+      "@genzh/shared/*": ["../../packages/shared/src/*"]
+    }
+  }
+}

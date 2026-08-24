@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@genzh/shared': fileURLToPath(new URL('../../packages/shared/src', import.meta.url)),
       },
     },
 

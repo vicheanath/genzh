@@ -26,6 +26,7 @@ export API_BIND   := $(BIND_HOST):$(API_PORT)
 export MEDIA_BIND := $(BIND_HOST):$(MEDIA_PORT)
 
 WEB_DIR := apps/web
+MOBILE_DIR := apps/mobile
 
 # Load .env into the recipe's shell without failing when it is absent.
 LOAD_ENV = set -a; [[ -f .env ]] && source ./.env; set +a
@@ -73,6 +74,10 @@ media: ## Run the media plane alone
 .PHONY: web
 web: ## Run the web client alone
 	cd $(WEB_DIR) && npm run dev -- --port $(WEB_PORT) --strictPort
+
+.PHONY: mobile
+mobile: ## Run the Expo mobile client alone
+	cd $(MOBILE_DIR) && npm start
 
 .PHONY: stop
 stop: ## Kill whatever is listening on the api, media and web ports
