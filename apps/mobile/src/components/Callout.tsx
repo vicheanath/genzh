@@ -1,31 +1,39 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { AlertCircle, Info } from 'lucide-react-native';
-import { Colors, Radius } from '../theme/tokens';
+import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { AlertCircle, CheckCircle2, Info, TriangleAlert } from 'lucide-react-native';
 
-interface CalloutProps {
-  type?: 'info' | 'danger';
-  text: string;
+import { Colors, Radius, Spacing } from '../theme/tokens';
+
+export interface CalloutProps {
+  /** Matches the web component's vocabulary, so ports read the same. */
+  tone?: 'info' | 'danger' | 'success' | 'warning';
+  /** Alias for `tone`, kept for the screens that were written against it. */
+  type?: 'info' | 'danger' | 'success' | 'warning';
+  /** The message. `children` is accepted for a body with its own layout. */
+  text?: string;
+  children?: React.ReactNode;
   style?: ViewStyle;
 }
 
-export function Callout({ type = 'info', text, style }: CalloutProps) {
-  const isDanger = type === 'danger';
+const TONES = {
+  info: { color: Colors.accentText, background: Colors.accentSubtle, Icon: Info },
+  danger: { color: Colors.danger, background: Colors.dangerSubtle, Icon: AlertCircle },
+  success: { color: Colors.success, background: Colors.successSubtle, Icon: CheckCircle2 },
+  warning: { color: Colors.warning, background: 'rgba(250, 173, 20, 0.16)', Icon: TriangleAlert },
+} as const;
+
+/** A boxed message: an error from a form, a note above a list. */
+export function Callout({ tone, type, text, children, style }: CalloutProps) {
+  const { color, background, Icon } = TONES[tone ?? type ?? 'info'];
 
   return (
     <View
-      style={[
-        styles.callout,
-        isDanger ? styles.dangerCallout : styles.infoCallout,
-        style,
-      ]}
+      accessibilityRole={(tone ?? type) === 'danger' ? 'alert' : undefined}
+      style={[styles.callout, { backgroundColor: background, borderColor: color }, style]}
     >
-      {isDanger ? (
-        <AlertCircle size={18} color={Colors.danger} style={{ marginRight: 10 }} />
-      ) : (
-        <Info size={18} color={Colors.accent} style={{ marginRight: 10 }} />
-      )}
-      <Text style={[styles.text, isDanger ? styles.dangerText : styles.infoText]}>{text}</Text>
+      <Icon size={18} color={color} />
+      {text ? <Text style={[styles.text, { color }]}>{text}</Text> : null}
+      {children ? <View style={styles.body}>{children}</View> : null}
     </View>
   );
 }
@@ -34,29 +42,18 @@ const styles = StyleSheet.create({
   callout: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    gap: Spacing.md,
+    padding: Spacing.lg,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    marginBottom: 16,
-  },
-  infoCallout: {
-    backgroundColor: Colors.accentSubtle,
-    borderColor: 'rgba(186, 227, 16, 0.3)',
-  },
-  dangerCallout: {
-    backgroundColor: Colors.dangerSubtle,
-    borderColor: 'rgba(255, 77, 79, 0.3)',
   },
   text: {
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  infoText: {
-    color: Colors.text,
-  },
-  dangerText: {
-    color: Colors.danger,
+  body: {
+    flex: 1,
   },
 });

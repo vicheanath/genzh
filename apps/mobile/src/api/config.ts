@@ -34,7 +34,10 @@ function devServerHost(): string | null {
 }
 
 function isLoopback(host: string): boolean {
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  // An IPv6 host arrives bracketed ("[::1]"), so strip the brackets before
+  // comparing — otherwise the emulator fallback below never fires for it.
+  const bare = host.replace(/^\[|\]$/g, '');
+  return bare === 'localhost' || bare === '127.0.0.1' || bare === '::1';
 }
 
 /**

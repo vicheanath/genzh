@@ -1,115 +1,174 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Search, Check } from 'lucide-react-native';
-import { communities, type Community } from '@genzh/shared';
-import { useAuth } from '../../context/AuthContext';
+import { Compass, Plus, Search } from 'lucide-react-native';
+import { ApiError, communities as communitiesApi, hueFor, type Uuid } from '@genzh/shared';
+
 import { Avatar } from '../../components/Avatar';
-import { Input } from '../../components/Input';
-import { Colors, Radius } from '../../theme/tokens';
+import { Badge } from '../../components/Badge';
+import { Button } from '../../components/Button';
+import { Callout } from '../../components/Callout';
+import { EmptyState } from '../../components/EmptyState';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { SkeletonRows } from '../../components/Skeleton';
+import { useToast } from '../../components/Toast';
+import { useAuth } from '../../context/AuthContext';
+import { useAsync } from '../../lib/useAsync';
+import { Colors, Radius, Spacing } from '../../theme/tokens';
 
+import { CreateCommunityModal } from './CreateCommunityModal';
+
+/** Browse public communities, search them, and join. */
 export function ExploreScreen({ navigation }: any) {
-  const { token } = useAuth();
+  const { getToken } = useAuth();
+  const toast = useToast();
+
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Community[]>([]);
-  const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [joiningId, setJoiningId] = useState<Uuid | null>(null);
 
-  const handleSearch = async (text: string) => {
-    setQuery(text);
-    if (!token || !text.trim()) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
+  const communities = useAsync(
+    async () => communitiesApi.list(await getToken()),
+    [getToken],
+  );
+
+  async function join(communityId: Uuid, communityName: string) {
+    setJoiningId(communityId);
     try {
-      const all = await communities.list(token);
-      const filtered = all.filter(
-        (c) =>
-          c.name.toLowerCase().includes(text.toLowerCase()) ||
-          (c.description && c.description.toLowerCase().includes(text.toLowerCase()))
+      await communitiesApi.join(await getToken(), communityId);
+      communities.reload();
+      toast.success('Joined community');
+      navigation.navigate('CommunityDetail', { communityId, communityName });
+    } catch (cause) {
+      // Already a member is not a failure — it just means "go there".
+      if (cause instanceof ApiError && cause.code === 'CONFLICT') {
+        navigation.navigate('CommunityDetail', { communityId, communityName });
+        return;
+      }
+      toast.error(
+        'Could not join community',
+        cause instanceof ApiError ? cause.message : undefined,
       );
-      setResults(filtered);
-    } catch {
-      // Ignore
     } finally {
-      setLoading(false);
+      setJoiningId(null);
     }
-  };
+  }
 
-  const handleJoin = async (communityId: string) => {
-    if (!token) return;
-    try {
-      await communities.join(token, communityId);
-      setJoinedIds((prev) => new Set(prev).add(communityId));
-      Alert.alert('Success', 'You have joined the community!');
-    } catch (err: any) {
-      Alert.alert('Join Failed', err?.message || 'Could not join community');
-    }
-  };
+  const needle = query.trim().toLowerCase();
+  const filtered = (communities.data ?? []).filter((community) => {
+    if (!needle) return true;
+    return (
+      community.name.toLowerCase().includes(needle) ||
+      (community.description?.toLowerCase().includes(needle) ?? false)
+    );
+  });
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={Colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Explore Communities</Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Input
-          placeholder="Search by name or topic..."
-          value={query}
-          onChangeText={handleSearch}
-          containerStyle={{ marginBottom: 0 }}
-        />
-      </View>
-
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => {
-          const isJoined = joinedIds.has(item.id);
-          return (
-            <View style={styles.card}>
-              <Avatar name={item.name} url={item.icon_url} size={48} />
-              <View style={styles.info}>
-                <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.desc} numberOfLines={2}>
-                  {item.description || 'No description provided.'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.joinBtn, isJoined && styles.joinedBtn]}
-                disabled={isJoined}
-                onPress={() => handleJoin(item.id)}
-              >
-                {isJoined ? (
-                  <Check size={16} color={Colors.textMuted} />
-                ) : (
-                  <Text style={styles.joinText}>Join</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Search size={40} color={Colors.textDim} style={{ marginBottom: 10 }} />
-            <Text style={styles.emptyText}>
-              {query ? 'No matching communities found' : 'Type to discover public communities'}
-            </Text>
-          </View>
+      <ScreenHeader
+        title="Explore"
+        subtitle="Find your community"
+        onBack={() => navigation.goBack()}
+        actions={
+          <Button
+            title="Create"
+            size="sm"
+            variant="secondary"
+            onPress={() => setCreateOpen(true)}
+            icon={<Plus size={15} color={Colors.text} />}
+          />
         }
+      />
+
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text style={styles.lede}>
+          From gaming and music to tech and art, find a public community — or start your own.
+        </Text>
+
+        <View style={styles.searchWrap}>
+          <Search size={16} color={Colors.textDim} />
+          <TextInput
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search by name or topic…"
+            placeholderTextColor={Colors.textDim}
+          />
+        </View>
+
+        {communities.error ? <Callout tone="danger" text={communities.error} /> : null}
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Communities</Text>
+          {communities.data ? <Badge text={filtered.length} /> : null}
+        </View>
+
+        {communities.loading ? <SkeletonRows rows={4} /> : null}
+
+        {!communities.loading && filtered.length === 0 ? (
+          <EmptyState
+            icon={<Compass size={26} color={Colors.textDim} />}
+            title="Nothing found"
+            description={
+              query ? `No community matched “${query.trim()}”.` : 'No communities yet.'
+            }
+            actionLabel={query ? 'Clear search' : 'Create a server'}
+            onAction={query ? () => setQuery('') : () => setCreateOpen(true)}
+          />
+        ) : null}
+
+        {filtered.map((community) => (
+          <Pressable
+            key={community.id}
+            onPress={() =>
+              navigation.navigate('CommunityDetail', {
+                communityId: community.id,
+                communityName: community.name,
+              })
+            }
+            style={styles.card}
+          >
+            <View
+              style={[
+                styles.banner,
+                { backgroundColor: `hsl(${hueFor(community.name)}, 45%, 26%)` },
+              ]}
+            />
+
+            <View style={styles.cardBody}>
+              <View style={styles.avatarWrap}>
+                <Avatar name={community.name} url={community.icon_url} size={48} />
+              </View>
+
+              <Text style={styles.name} numberOfLines={1}>
+                {community.name}
+              </Text>
+              <Text style={styles.description} numberOfLines={2}>
+                {community.description ||
+                  'Welcome to this community — join to hang out and chat.'}
+              </Text>
+
+              <View style={styles.cardFooter}>
+                <Text style={styles.tag}>Public community</Text>
+                <Button
+                  title="Join"
+                  size="sm"
+                  loading={joiningId === community.id}
+                  onPress={() => void join(community.id, community.name)}
+                />
+              </View>
+            </View>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <CreateCommunityModal
+        visible={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          setCreateOpen(false);
+          communities.reload();
+        }}
       />
     </SafeAreaView>
   );
@@ -120,76 +179,85 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg,
   },
-  header: {
+  content: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl * 2,
+    gap: Spacing.md,
+  },
+  lede: {
+    color: Colors.textSubtle,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    gap: Spacing.sm,
+    backgroundColor: Colors.sunken,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    height: 44,
   },
-  backBtn: {
-    marginRight: 12,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '800',
+  searchInput: {
+    flex: 1,
     color: Colors.text,
+    fontSize: 14,
   },
-  searchContainer: {
-    padding: 16,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
-  listContent: {
-    paddingHorizontal: 16,
+  sectionTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '800',
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    padding: 14,
-    marginBottom: 12,
+    borderRadius: Radius.xxl,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: 'hidden',
   },
-  info: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
+  banner: {
+    height: 56,
+  },
+  cardBody: {
+    padding: Spacing.lg,
+    paddingTop: 0,
+  },
+  avatarWrap: {
+    marginTop: -24,
+    marginBottom: Spacing.sm,
+    alignSelf: 'flex-start',
+    borderRadius: Radius.full,
+    borderWidth: 3,
+    borderColor: Colors.surface,
   },
   name: {
-    fontSize: 16,
-    fontWeight: '700',
     color: Colors.text,
-    marginBottom: 2,
-  },
-  desc: {
-    fontSize: 13,
-    color: Colors.textMuted,
-  },
-  joinBtn: {
-    backgroundColor: Colors.accent,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: Radius.pill,
-  },
-  joinedBtn: {
-    backgroundColor: Colors.sunken,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  joinText: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
-    color: Colors.accentContrast,
   },
-  emptyState: {
+  description: {
+    color: Colors.textSubtle,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  cardFooter: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
+    justifyContent: 'space-between',
+    marginTop: Spacing.md,
   },
-  emptyText: {
-    color: Colors.textMuted,
-    fontSize: 14,
+  tag: {
+    color: Colors.textDim,
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

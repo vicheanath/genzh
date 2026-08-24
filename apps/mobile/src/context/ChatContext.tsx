@@ -1,76 +1,55 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { ChatSocket, type ChatServerEvent, type Uuid } from '@genzh/shared';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { type Uuid } from '@genzh/shared';
+
 import { useAuth } from './AuthContext';
-import { getApiUrl } from '../api/config';
+import { chatSocket, syncSocketBaseUrl } from '../lib/socket';
 
 interface ChatContextType {
-  socket: ChatSocket;
+  socket: typeof chatSocket;
   isConnected: boolean;
   subscribeRoom: (roomId: Uuid) => void;
   unsubscribeRoom: (roomId: Uuid) => void;
   sendTyping: (roomId: Uuid, isTyping: boolean) => void;
-  unreadNotifications: number;
-  setUnreadNotifications: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
 
+/**
+ * Connection state for the app's one socket.
+ *
+ * The socket itself is a module singleton (`lib/socket`) so presence and the
+ * notification inbox can attach without being nested under this provider; what
+ * lives here is only the connected flag the chrome renders from.
+ */
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
-  const socketRef = useRef<ChatSocket>(new ChatSocket(getApiUrl()));
   const [isConnected, setIsConnected] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
-    const socket = socketRef.current;
-    socket.setBaseUrl(getApiUrl());
-
-    const unsubStatus = socket.on('status', (status) => {
+    syncSocketBaseUrl();
+    return chatSocket.on<string>('status', (status) => {
       setIsConnected(status === 'connected');
     });
-
-    const unsubNotification = socket.on('notification_created', () => {
-      setUnreadNotifications((prev) => prev + 1);
-    });
-
-    return () => {
-      unsubStatus();
-      unsubNotification();
-    };
   }, []);
 
   useEffect(() => {
-    const socket = socketRef.current;
     if (token) {
-      socket.setToken(token);
+      chatSocket.setToken(token);
     } else {
-      socket.disconnect();
+      chatSocket.disconnect();
       setIsConnected(false);
     }
   }, [token]);
 
-  const subscribeRoom = (roomId: Uuid) => {
-    socketRef.current.subscribe(roomId);
-  };
-
-  const unsubscribeRoom = (roomId: Uuid) => {
-    socketRef.current.unsubscribe(roomId);
-  };
-
-  const sendTyping = (roomId: Uuid, isTyping: boolean) => {
-    socketRef.current.sendTyping(roomId, isTyping);
-  };
-
   return (
     <ChatContext.Provider
       value={{
-        socket: socketRef.current,
+        socket: chatSocket,
         isConnected,
-        subscribeRoom,
-        unsubscribeRoom,
-        sendTyping,
-        unreadNotifications,
-        setUnreadNotifications,
+        subscribeRoom: (roomId: Uuid) => chatSocket.subscribe(roomId),
+        unsubscribeRoom: (roomId: Uuid) => chatSocket.unsubscribe(roomId),
+        sendTyping: (roomId: Uuid, isTyping: boolean) =>
+          chatSocket.sendTyping(roomId, isTyping),
       }}
     >
       {children}

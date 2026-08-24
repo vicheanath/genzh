@@ -1,204 +1,468 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MessageCircle, Check, X, Users, UserCheck } from 'lucide-react-native';
-import { useAuth } from '../../context/AuthContext';
-import { Avatar } from '../../components/Avatar';
+import {
+  Ban,
+  Check,
+  MessageSquare,
+  MoreHorizontal,
+  Search,
+  Shield,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react-native';
+import {
+  ApiError,
+  blocks as blocksApi,
+  formatRelative,
+  friends as friendsApi,
+  rooms as roomsApi,
+  type Uuid,
+} from '@genzh/shared';
+
 import { Button } from '../../components/Button';
-import { Colors, Radius } from '../../theme/tokens';
+import { Callout } from '../../components/Callout';
+import { EmptyState } from '../../components/EmptyState';
+import { Input } from '../../components/Input';
+import { Menu } from '../../components/Menu';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { SkeletonRows } from '../../components/Skeleton';
+import { Tabs } from '../../components/Tabs';
+import { useToast } from '../../components/Toast';
+import { UserRow } from '../../components/UserRow';
+import { useConfirm } from '../../components/useConfirm';
+import { useAuth } from '../../context/AuthContext';
+import { useAppStore, type FriendTab } from '../../lib/store';
+import { useAsync } from '../../lib/useAsync';
+import { usePresence } from '../../lib/usePresence';
+import { useProfiles } from '../../lib/useProfiles';
+import { Colors, Radius, Spacing } from '../../theme/tokens';
 
+/**
+ * Friends: online, all, pending both ways, blocked, and adding by user ID.
+ *
+ * This screen used to render a hardcoded Sophia and Marcus. Every list here is
+ * now the real endpoint, and the Online tab filters on the presence set rather
+ * than drawing a green dot on everybody.
+ */
 export function FriendsScreen({ navigation }: any) {
-  const { user } = useAuth();
-  const [tab, setTab] = useState<'all' | 'pending' | 'add'>('all');
-  const [friendHandle, setFriendHandle] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { getToken, user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { isOnline } = usePresence();
 
-  const [friendsList, setFriendsList] = useState<Array<{ id: string; handle: string; name: string; online: boolean; avatar?: string }>>([
-    { id: '1', handle: 'sophia', name: 'Sophia Chen', online: true },
-    { id: '2', handle: 'marcus_dev', name: 'Marcus Dev', online: false },
-  ]);
+  const tab = useAppStore((s) => s.friendsTab);
+  const setTab = useAppStore((s) => s.setFriendsTab);
+  const openProfile = useAppStore((s) => s.openProfile);
 
-  const [pendingRequests, setPendingRequests] = useState<Array<{ id: string; handle: string; name: string }>>([
-    { id: '3', handle: 'elena_w', name: 'Elena Wilson' },
-  ]);
+  const [search, setSearch] = useState('');
+  const [addId, setAddId] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [menuFor, setMenuFor] = useState<Uuid | null>(null);
 
-  const handleSendFriendRequest = () => {
-    if (!friendHandle.trim()) {
-      Alert.alert('Validation Error', 'Please enter a user handle.');
-      return;
+  const friends = useAsync(async () => friendsApi.list(await getToken()), [getToken]);
+  const requests = useAsync(async () => friendsApi.pending(await getToken()), [getToken]);
+  const sent = useAsync(async () => friendsApi.sent(await getToken()), [getToken]);
+  const blocked = useAsync(async () => blocksApi.list(await getToken()), [getToken]);
+
+  // Local overlay on the fetched list, so blocking and unblocking take effect
+  // without a round trip. Null means "nothing changed here yet".
+  const [blockOverride, setBlockOverride] = useState<Uuid[] | null>(null);
+  const blockedUsers = blockOverride ?? blocked.data ?? [];
+
+  const allIds = [
+    ...(friends.data ?? []),
+    ...(requests.data ?? []).map((r) => r.requester_id),
+    ...(sent.data ?? []).map((r) => r.addressee_id),
+    ...blockedUsers,
+  ];
+  const lookup = useProfiles(allIds);
+
+  const reloadFriends = friends.reload;
+  const reloadRequests = requests.reload;
+  const reloadSent = sent.reload;
+  const refresh = useCallback(() => {
+    reloadFriends();
+    reloadRequests();
+    reloadSent();
+  }, [reloadFriends, reloadRequests, reloadSent]);
+
+  async function openDM(friendId: Uuid) {
+    try {
+      const room = await roomsApi.openDM(await getToken(), friendId);
+      navigation.navigate('RoomChat', {
+        roomId: room.id,
+        roomName: lookup(friendId)?.display_name ?? room.name,
+      });
+    } catch {
+      toast.error('Could not start direct chat');
     }
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert('Request Sent', `Friend request sent to @${friendHandle.trim()}`);
-      setFriendHandle('');
-      setTab('all');
-    }, 400);
-  };
+  }
 
-  const handleAccept = (id: string) => {
-    const req = pendingRequests.find((p) => p.id === id);
-    if (req) {
-      setPendingRequests((prev) => prev.filter((p) => p.id !== id));
-      setFriendsList((prev) => [...prev, { ...req, online: true }]);
+  async function sendRequest() {
+    const id = addId.trim();
+    if (!id) return;
+
+    setError(null);
+    setBusy(true);
+    try {
+      await friendsApi.request(await getToken(), id);
+      setAddId('');
+      toast.success('Friend request sent');
+      refresh();
+      setTab('pending');
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Could not send request');
+    } finally {
+      setBusy(false);
     }
-  };
+  }
 
-  const handleDecline = (id: string) => {
-    setPendingRequests((prev) => prev.filter((p) => p.id !== id));
-  };
+  async function respond(requesterId: Uuid, accept: boolean) {
+    try {
+      await friendsApi.respond(await getToken(), requesterId, accept);
+      toast.success(accept ? 'Friend request accepted' : 'Friend request declined');
+      refresh();
+    } catch (cause) {
+      toast.error(
+        'Could not respond to request',
+        cause instanceof ApiError ? cause.message : undefined,
+      );
+    }
+  }
+
+  async function removeFriend(friendId: Uuid) {
+    const ok = await confirm({
+      title: 'Remove this friend?',
+      description:
+        'You will both drop off each other’s friend list. Either of you can send a new request later.',
+      confirmLabel: 'Remove friend',
+      tone: 'danger',
+    });
+    if (!ok) return;
+
+    try {
+      await friendsApi.remove(await getToken(), friendId);
+      toast.success('Friend removed');
+      refresh();
+    } catch (cause) {
+      toast.error('Could not remove friend', cause instanceof ApiError ? cause.message : undefined);
+    }
+  }
+
+  async function blockUser(otherId: Uuid) {
+    try {
+      await blocksApi.block(await getToken(), otherId);
+      if (!blockedUsers.includes(otherId)) setBlockOverride([...blockedUsers, otherId]);
+      toast.success('User blocked', 'They can no longer message or interact with you.');
+      refresh();
+    } catch (cause) {
+      toast.error('Could not block user', cause instanceof ApiError ? cause.message : undefined);
+    }
+  }
+
+  async function unblockUser(otherId: Uuid) {
+    try {
+      await blocksApi.unblock(await getToken(), otherId);
+      setBlockOverride(blockedUsers.filter((id) => id !== otherId));
+      toast.success('User unblocked');
+      refresh();
+    } catch (cause) {
+      toast.error('Could not unblock user', cause instanceof ApiError ? cause.message : undefined);
+    }
+  }
+
+  // Both directions: a request you sent is as pending as one you received, and
+  // the sender otherwise has no way to see theirs at all.
+  const pendingCount = (requests.data?.length ?? 0) + (sent.data?.length ?? 0);
+
+  const filteredFriends = (friends.data ?? []).filter((friendId) => {
+    if (tab === 'online' && !isOnline(friendId)) return false;
+    if (!search) return true;
+
+    const profile = lookup(friendId);
+    const query = search.toLowerCase();
+    return (
+      profile?.display_name.toLowerCase().includes(query) ||
+      profile?.handle.toLowerCase().includes(query) ||
+      friendId.toLowerCase().includes(query)
+    );
+  });
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Direct Messages</Text>
-      </View>
+      <ScreenHeader
+        title="Friends"
+        below={
+          <View style={styles.strip}>
+            <Tabs
+              value={tab}
+              onValueChange={(next) => setTab(next as FriendTab)}
+              scrollable
+              items={[
+                { value: 'online', label: 'Online' },
+                { value: 'all', label: 'All', badge: friends.data?.length },
+                { value: 'pending', label: 'Pending', badge: pendingCount || undefined },
+                { value: 'blocked', label: 'Blocked', badge: blockedUsers.length || undefined },
+                { value: 'add', label: 'Add friend' },
+              ]}
+            />
+          </View>
+        }
+      />
 
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'all' && styles.tabBtnActive]}
-          onPress={() => setTab('all')}
-        >
-          <Text style={[styles.tabText, tab === 'all' && styles.tabTextActive]}>
-            Friends ({friendsList.length})
-          </Text>
-        </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {tab !== 'add' && (
+          <View style={styles.searchWrap}>
+            <Search size={16} color={Colors.textDim} />
+            <TextInput
+              style={styles.searchInput}
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search friends…"
+              placeholderTextColor={Colors.textDim}
+            />
+          </View>
+        )}
 
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'pending' && styles.tabBtnActive]}
-          onPress={() => setTab('pending')}
-        >
-          <Text style={[styles.tabText, tab === 'pending' && styles.tabTextActive]}>
-            Pending ({pendingRequests.length})
-          </Text>
-        </TouchableOpacity>
+        {(tab === 'all' || tab === 'online') && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {tab === 'online' ? 'Online' : 'All friends'} — {filteredFriends.length}
+            </Text>
 
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'add' && styles.tabBtnActive]}
-          onPress={() => setTab('add')}
-        >
-          <Text style={[styles.tabText, tab === 'add' && styles.tabTextActive]}>
-            Add Friend
-          </Text>
-        </TouchableOpacity>
-      </View>
+            {friends.loading ? <SkeletonRows rows={3} /> : null}
 
-      {tab === 'all' && (
-        <FlatList
-          data={friendsList}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.friendCard}
-              activeOpacity={0.8}
-              onPress={() =>
-                navigation.navigate('RoomChat', {
-                  roomId: item.id,
-                  roomName: item.handle,
-                  roomType: 'text',
-                })
-              }
-            >
-              <Avatar name={item.name} url={item.avatar} size={46} online={item.online} />
-              <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>{item.name}</Text>
-                <Text style={styles.friendHandle}>@{item.handle}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.msgBtn}
-                onPress={() =>
-                  navigation.navigate('RoomChat', {
-                    roomId: item.id,
-                    roomName: item.handle,
-                    roomType: 'text',
-                  })
+            {!friends.loading && filteredFriends.length === 0 ? (
+              <EmptyState
+                icon={<Users size={28} color={Colors.textDim} />}
+                title={search ? 'No matches' : 'No friends yet'}
+                description={
+                  search
+                    ? `Nobody matched “${search}”.`
+                    : 'Add someone by their user ID to start a conversation.'
                 }
-              >
-                <MessageCircle size={18} color={Colors.text} />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Users size={44} color={Colors.textDim} style={{ marginBottom: 10 }} />
-              <Text style={styles.emptyTitle}>No friends added yet</Text>
-              <Text style={styles.emptySubtitle}>Use the Add Friend tab to connect with other users.</Text>
-            </View>
-          }
-        />
-      )}
+                actionLabel={search ? undefined : 'Add friend'}
+                onAction={search ? undefined : () => setTab('add')}
+              />
+            ) : null}
 
-      {tab === 'pending' && (
-        <FlatList
-          data={pendingRequests}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View style={styles.friendCard}>
-              <Avatar name={item.name} size={46} />
-              <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>{item.name}</Text>
-                <Text style={styles.friendHandle}>@{item.handle}</Text>
+            {filteredFriends.map((friendId) => {
+              const profile = lookup(friendId);
+              return (
+                <UserRow
+                  key={friendId}
+                  name={profile?.display_name ?? 'Loading…'}
+                  avatarUrl={profile?.avatar_url}
+                  accentColor={profile?.accent_color}
+                  presence={isOnline(friendId) ? 'online' : 'offline'}
+                  secondary={`@${profile?.handle ?? friendId.slice(0, 8)}`}
+                  onSelect={() => openProfile(friendId)}
+                  actions={
+                    <>
+                      <Button
+                        title=""
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => void openDM(friendId)}
+                        icon={<MessageSquare size={17} color={Colors.textMuted} />}
+                      />
+                      <Button
+                        title=""
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => setMenuFor(friendId)}
+                        icon={<MoreHorizontal size={17} color={Colors.textMuted} />}
+                      />
+                    </>
+                  }
+                />
+              );
+            })}
+          </View>
+        )}
+
+        {tab === 'pending' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Incoming — {requests.data?.length ?? 0}</Text>
+
+            {requests.loading ? <SkeletonRows rows={2} /> : null}
+
+            {!requests.loading && pendingCount === 0 ? (
+              <EmptyState
+                title="Nothing pending"
+                description="No requests waiting, none awaiting a reply."
+              />
+            ) : null}
+
+            {(requests.data ?? []).map((request) => {
+              const profile = lookup(request.requester_id);
+              return (
+                <UserRow
+                  key={request.requester_id}
+                  name={profile?.display_name ?? 'Loading…'}
+                  avatarUrl={profile?.avatar_url}
+                  accentColor={profile?.accent_color}
+                  presence={isOnline(request.requester_id) ? 'online' : 'offline'}
+                  secondary={`Wants to be friends · ${formatRelative(request.created_at)}`}
+                  onSelect={() => openProfile(request.requester_id)}
+                  actions={
+                    <>
+                      <Button
+                        title=""
+                        size="sm"
+                        onPress={() => void respond(request.requester_id, true)}
+                        icon={<Check size={16} color={Colors.accentContrast} />}
+                      />
+                      <Button
+                        title=""
+                        size="sm"
+                        variant="ghost"
+                        onPress={() => void respond(request.requester_id, false)}
+                        icon={<X size={16} color={Colors.textMuted} />}
+                      />
+                    </>
+                  }
+                />
+              );
+            })}
+
+            {sent.data && sent.data.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitle}>Sent — {sent.data.length}</Text>
+                {sent.data.map((request) => {
+                  const profile = lookup(request.addressee_id);
+                  return (
+                    <UserRow
+                      key={request.addressee_id}
+                      name={profile?.display_name ?? 'Loading…'}
+                      avatarUrl={profile?.avatar_url}
+                      accentColor={profile?.accent_color}
+                      presence={isOnline(request.addressee_id) ? 'online' : 'offline'}
+                      secondary={`Awaiting their reply · sent ${formatRelative(request.created_at)}`}
+                      actions={
+                        // Withdrawing is the same operation as unfriending: it
+                        // deletes the row either way.
+                        <Button
+                          title="Cancel"
+                          size="sm"
+                          variant="ghost"
+                          onPress={() => void removeFriend(request.addressee_id)}
+                        />
+                      }
+                    />
+                  );
+                })}
+              </>
+            ) : null}
+          </View>
+        )}
+
+        {tab === 'blocked' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Blocked — {blockedUsers.length}</Text>
+
+            {blockedUsers.length === 0 ? (
+              <EmptyState
+                icon={<Ban size={28} color={Colors.textDim} />}
+                title="Nobody blocked"
+                description="People you block cannot message you or send friend requests."
+              />
+            ) : null}
+
+            {blockedUsers.map((blockedId) => {
+              const profile = lookup(blockedId);
+              return (
+                <UserRow
+                  key={blockedId}
+                  name={profile?.display_name ?? blockedId}
+                  avatarUrl={profile?.avatar_url}
+                  accentColor={profile?.accent_color}
+                  secondary={`@${profile?.handle ?? blockedId.slice(0, 8)}`}
+                  actions={
+                    <Button
+                      title="Unblock"
+                      size="sm"
+                      variant="secondary"
+                      onPress={() => void unblockUser(blockedId)}
+                    />
+                  }
+                />
+              );
+            })}
+          </View>
+        )}
+
+        {tab === 'add' && (
+          <View style={styles.section}>
+            <Text style={styles.addTitle}>Add friend</Text>
+            <Text style={styles.addDescription}>
+              You can add friends using their unique genzh user ID.
+            </Text>
+
+            {error ? <Callout tone="danger" text={error} /> : null}
+
+            <Input
+              value={addId}
+              onChangeText={setAddId}
+              placeholder="Paste user ID (e.g. 6f1c7d2e-…)"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Button
+              title="Send friend request"
+              onPress={() => void sendRequest()}
+              loading={busy}
+              disabled={!addId.trim()}
+              icon={<UserPlus size={16} color={Colors.accentContrast} />}
+            />
+
+            {user ? (
+              <View style={styles.myId}>
+                <Text style={styles.myIdLabel}>Your user ID</Text>
+                <TextInput
+                  style={styles.myIdValue}
+                  value={user.id}
+                  editable={false}
+                  selectTextOnFocus
+                />
+                <Text style={styles.myIdHint}>Long-press to select and copy.</Text>
               </View>
-              <View style={styles.reqActions}>
-                <TouchableOpacity
-                  style={[styles.reqBtn, styles.acceptBtn]}
-                  onPress={() => handleAccept(item.id)}
-                >
-                  <Check size={16} color={Colors.accentContrast} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.reqBtn, styles.declineBtn]}
-                  onPress={() => handleDecline(item.id)}
-                >
-                  <X size={16} color={Colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <UserCheck size={44} color={Colors.textDim} style={{ marginBottom: 10 }} />
-              <Text style={styles.emptyTitle}>No pending requests</Text>
-            </View>
-          }
-        />
-      )}
+            ) : null}
+          </View>
+        )}
+      </ScrollView>
 
-      {tab === 'add' && (
-        <View style={styles.addSection}>
-          <Text style={styles.addTitle}>Add Friend by Handle</Text>
-          <Text style={styles.addSubtitle}>
-            Enter the exact user handle to send a friend request.
-          </Text>
-
-          <TextInput
-            style={styles.addInput}
-            placeholder="e.g. alex_smith"
-            placeholderTextColor={Colors.textDim}
-            autoCapitalize="none"
-            value={friendHandle}
-            onChangeText={setFriendHandle}
-            selectionColor={Colors.accent}
-          />
-
-          <Button
-            title="Send Friend Request"
-            onPress={handleSendFriendRequest}
-            loading={loading}
-            style={{ marginTop: 14 }}
-          />
-        </View>
-      )}
+      <Menu
+        open={menuFor !== null}
+        onOpenChange={(open) => !open && setMenuFor(null)}
+        title={menuFor ? lookup(menuFor)?.display_name : undefined}
+        items={[
+          {
+            key: 'message',
+            label: 'Send message',
+            icon: <MessageSquare size={17} color={Colors.textMuted} />,
+            onPress: () => menuFor && void openDM(menuFor),
+          },
+          {
+            key: 'remove',
+            label: 'Remove friend',
+            icon: <Trash2 size={17} color={Colors.textMuted} />,
+            onPress: () => menuFor && void removeFriend(menuFor),
+          },
+          {
+            key: 'block',
+            label: 'Block user',
+            tone: 'danger',
+            separated: true,
+            icon: <Shield size={17} color={Colors.danger} />,
+            onPress: () => menuFor && void blockUser(menuFor),
+          },
+        ]}
+      />
     </SafeAreaView>
   );
 }
@@ -208,142 +472,75 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+  strip: {
+    paddingBottom: Spacing.xs,
   },
-  title: {
-    fontSize: 26,
+  content: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl * 2,
+    gap: Spacing.md,
+  },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.sunken,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    height: 44,
+  },
+  searchInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 14,
+  },
+  section: {
+    gap: Spacing.xs,
+  },
+  sectionTitle: {
+    color: Colors.textSubtle,
+    fontSize: 11,
     fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: -0.5,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: Colors.sunken,
-    borderRadius: Radius.pill,
-    marginHorizontal: 16,
-    marginVertical: 12,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: Radius.pill,
-  },
-  tabBtnActive: {
-    backgroundColor: Colors.surfaceRaised,
-  },
-  tabText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.textMuted,
-  },
-  tabTextActive: {
-    color: Colors.text,
-  },
-  listContent: {
-    padding: 16,
-  },
-  friendCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  friendInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  friendName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  friendHandle: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  msgBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.sunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  reqActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  reqBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  acceptBtn: {
-    backgroundColor: Colors.accent,
-  },
-  declineBtn: {
-    backgroundColor: Colors.sunken,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  addSection: {
-    padding: 24,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
   },
   addTitle: {
+    color: Colors.text,
     fontSize: 18,
     fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 6,
   },
-  addSubtitle: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    marginBottom: 20,
-    lineHeight: 20,
+  addDescription: {
+    color: Colors.textSubtle,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: Spacing.md,
   },
-  addInput: {
-    backgroundColor: Colors.sunken,
-    borderRadius: Radius.pill,
+  myId: {
+    marginTop: Spacing.xl,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: Colors.text,
-    fontSize: 15,
+    gap: 2,
   },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 32,
+  myIdLabel: {
+    color: Colors.textSubtle,
+    fontSize: 12,
+    fontWeight: '700',
   },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 6,
+  myIdValue: {
+    color: Colors.accentText,
+    fontFamily: 'monospace',
+    fontSize: 12,
+    padding: 0,
   },
-  emptySubtitle: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
+  myIdHint: {
+    color: Colors.textDim,
+    fontSize: 11,
   },
 });

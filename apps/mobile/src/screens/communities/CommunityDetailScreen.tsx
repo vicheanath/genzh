@@ -1,169 +1,249 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LogOut, MoreHorizontal, Settings, Users } from 'lucide-react-native';
 import {
-  ArrowLeft,
-  Hash,
-  Volume2,
-  Video,
-  BarChart2,
-  Scale,
-  Gamepad2,
-  Lock,
-  Flame,
-  MessageSquare,
-} from 'lucide-react-native';
-import { rooms, communities, type Room, type CommunityWithPermissions } from '@genzh/shared';
-import { useAuth } from '../../context/AuthContext';
-import { useVoice } from '../../context/VoiceContext';
+  ApiError,
+  communities as communitiesApi,
+  rooms as roomsApi,
+  type Room,
+} from '@genzh/shared';
+
 import { Avatar } from '../../components/Avatar';
-import { Badge, type BadgeTone } from '../../components/Badge';
-import { Colors, Radius } from '../../theme/tokens';
+import { Badge } from '../../components/Badge';
+import { Button } from '../../components/Button';
+import { Callout } from '../../components/Callout';
+import { Collapsible } from '../../components/Collapsible';
+import { EmptyState } from '../../components/EmptyState';
+import { Menu } from '../../components/Menu';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { LoadingPanel } from '../../components/Spinner';
+import { useToast } from '../../components/Toast';
+import { useConfirm } from '../../components/useConfirm';
+import { useAuth } from '../../context/AuthContext';
+import {
+  abilitiesFor,
+  canOpenSettings,
+} from '../../features/community-settings/tabs';
+import { isExperienceRoom, roomTypeIcon } from '../../lib/roomTypes';
+import { useAsync } from '../../lib/useAsync';
+import { Colors, Radius, Spacing } from '../../theme/tokens';
 
+/**
+ * One community: its channels, grouped the way the sidebar groups them.
+ *
+ * The web app shows this as a permanent sidebar; here it is a screen, with the
+ * same three affordances hanging off the header — members, settings (only for
+ * people who can actually change something), and leaving.
+ */
 export function CommunityDetailScreen({ route, navigation }: any) {
-  const { communityId, name } = route.params;
-  const { token } = useAuth();
-  const { joinRoom } = useVoice();
-  const [community, setCommunity] = useState<CommunityWithPermissions | null>(null);
-  const [roomList, setRoomList] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { communityId, communityName, name } = route.params ?? {};
+  const { getToken, user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
 
-  const fetchData = useCallback(async () => {
-    if (!token) return;
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const community = useAsync(
+    async () => communitiesApi.get(await getToken(), communityId),
+    [getToken, communityId],
+  );
+  const rooms = useAsync(
+    async () => roomsApi.list(await getToken(), communityId),
+    [getToken, communityId],
+  );
+
+  function openRoom(room: Room) {
+    navigation.navigate(isExperienceRoom(room.room_type) ? 'ExperienceRoom' : 'RoomChat', {
+      roomId: room.id,
+      roomName: room.name,
+      roomType: room.room_type,
+    });
+  }
+
+  async function leave() {
+    if (!user) return;
+
+    const ok = await confirm({
+      title: `Leave ${community.data?.name ?? 'this server'}?`,
+      description: 'You lose access to its channels until somebody invites you back.',
+      confirmLabel: 'Leave server',
+      tone: 'danger',
+    });
+    if (!ok) return;
+
     try {
-      const [commData, roomsData] = await Promise.all([
-        communities.get(token, communityId),
-        rooms.list(token, communityId),
-      ]);
-      setCommunity(commData);
-      setRoomList(roomsData);
-    } catch {
-      // Ignore
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      await communitiesApi.leave(await getToken(), communityId, user.id);
+      toast.success('Left the server');
+      navigation.goBack();
+    } catch (cause) {
+      toast.error('Could not leave', cause instanceof ApiError ? cause.message : undefined);
     }
-  }, [token, communityId]);
+  }
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  if (community.loading) return <LoadingPanel />;
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchData();
-  };
+  const data = community.data;
+  const abilities = data ? abilitiesFor(data, user?.id) : null;
 
-  const getChannelConfig = (type: string): { icon: React.ReactNode; tone: BadgeTone } => {
-    switch (type) {
-      case 'voice':
-        return { icon: <Volume2 size={16} color={Colors.live} />, tone: 'mint' };
-      case 'video':
-        return { icon: <Video size={16} color={Colors.live} />, tone: 'mint' };
-      case 'poll':
-        return { icon: <BarChart2 size={16} color="#f4c423" />, tone: 'accent' };
-      case 'debate':
-        return { icon: <Scale size={16} color="#ff5f5b" />, tone: 'danger' };
-      case 'game':
-        return { icon: <Gamepad2 size={16} color="#a361fb" />, tone: 'accent' };
-      case 'confession':
-        return { icon: <Lock size={16} color="#ff8e29" />, tone: 'neutral' };
-      case 'activity':
-        return { icon: <Flame size={16} color="#f24bba" />, tone: 'accent' };
-      default:
-        return { icon: <Hash size={16} color={Colors.textMuted} />, tone: 'neutral' };
-    }
-  };
-
-  const handleRoomPress = (room: Room) => {
-    if (room.room_type === 'voice' || room.room_type === 'video') {
-      joinRoom(room.id, room.name);
-      navigation.navigate('RoomChat', { roomId: room.id, roomName: room.name, roomType: room.room_type });
-    } else if (['poll', 'debate', 'game', 'confession', 'activity'].includes(room.room_type)) {
-      navigation.navigate('ExperienceRoom', { roomId: room.id, roomName: room.name, roomType: room.room_type });
-    } else {
-      navigation.navigate('RoomChat', { roomId: room.id, roomName: room.name, roomType: room.room_type });
-    }
-  };
+  // Channels arrive flat with a category on each. Grouping here matches the
+  // sidebar and keeps a server with forty channels readable.
+  const grouped = new Map<string, Room[]>();
+  for (const room of rooms.data ?? []) {
+    const key = room.category || 'general';
+    grouped.set(key, [...(grouped.get(key) ?? []), room]);
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={Colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>
-          {name || community?.name || 'Community'}
-        </Text>
-      </View>
+      <ScreenHeader
+        title={data?.name ?? communityName ?? name ?? 'Community'}
+        subtitle={data?.description ?? undefined}
+        onBack={() => navigation.goBack()}
+        actions={
+          <>
+            <Button
+              title=""
+              size="sm"
+              variant="ghost"
+              onPress={() =>
+                navigation.navigate('MemberList', {
+                  communityId,
+                  title: data?.name,
+                })
+              }
+              icon={<Users size={18} color={Colors.textMuted} />}
+            />
+            <Button
+              title=""
+              size="sm"
+              variant="ghost"
+              onPress={() => setMenuOpen(true)}
+              icon={<MoreHorizontal size={18} color={Colors.textMuted} />}
+            />
+          </>
+        }
+      />
 
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={Colors.accent} />
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
-          }
-        >
-          {community && (
-            <View style={styles.banner}>
-              <Avatar name={community.name} url={community.icon_url} size={54} />
-              <View style={styles.bannerInfo}>
-                <Text style={styles.bannerName}>{community.name}</Text>
-                {community.description && (
-                  <Text style={styles.bannerDesc}>{community.description}</Text>
-                )}
-              </View>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={rooms.loading}
+            tintColor={Colors.accent}
+            onRefresh={() => {
+              community.reload();
+              rooms.reload();
+            }}
+          />
+        }
+      >
+        {data ? (
+          <View style={styles.identity}>
+            <Avatar name={data.name} url={data.icon_url} size={56} />
+            <View style={styles.identityText}>
+              <Text style={styles.identityName} numberOfLines={1}>
+                {data.name}
+              </Text>
+              <Text style={styles.identityMeta} numberOfLines={2}>
+                {data.description ?? 'No description yet.'}
+              </Text>
             </View>
-          )}
+          </View>
+        ) : null}
 
-          <Text style={styles.sectionTitle}>CHANNELS & ROOMS</Text>
+        {community.error ? <Callout tone="danger" text={community.error} /> : null}
+        {rooms.error ? <Callout tone="danger" text={rooms.error} /> : null}
 
-          {roomList.length === 0 ? (
-            <View style={styles.emptyRooms}>
-              <MessageSquare size={32} color={Colors.textDim} style={{ marginBottom: 8 }} />
-              <Text style={styles.emptyRoomsText}>No channels created yet</Text>
-            </View>
-          ) : (
-            roomList.map((room) => {
-              const { icon, tone } = getChannelConfig(room.room_type);
+        {!rooms.loading && (rooms.data?.length ?? 0) === 0 ? (
+          <EmptyState
+            title="No channels yet"
+            description={
+              abilities?.rooms
+                ? 'Create the first one in server settings.'
+                : 'An admin has not made any channels yet.'
+            }
+            actionLabel={abilities?.rooms ? 'Open settings' : undefined}
+            onAction={
+              abilities?.rooms
+                ? () =>
+                    navigation.navigate('CommunitySettings', {
+                      communityId,
+                      communityName: data?.name,
+                    })
+                : undefined
+            }
+          />
+        ) : null}
+
+        {[...grouped.entries()].map(([category, list]) => (
+          <Collapsible key={category} title={category} section adornment={<Badge text={list.length} />}>
+            {list.map((room) => {
+              const Icon = roomTypeIcon(room.room_type);
+
               return (
-                <TouchableOpacity
+                <Pressable
                   key={room.id}
-                  style={styles.roomItem}
-                  activeOpacity={0.8}
-                  onPress={() => handleRoomPress(room)}
+                  onPress={() => openRoom(room)}
+                  style={({ pressed }) => [styles.channel, pressed && styles.channelPressed]}
                 >
-                  <View style={styles.roomIconWrapper}>{icon}</View>
-                  <View style={styles.roomDetails}>
-                    <Text style={styles.roomName}>{room.name}</Text>
-                    {room.topic && <Text style={styles.roomTopic} numberOfLines={1}>{room.topic}</Text>}
+                  <Icon size={16} color={Colors.textMuted} />
+                  <View style={styles.channelText}>
+                    <Text style={styles.channelName} numberOfLines={1}>
+                      {room.name}
+                    </Text>
+                    {room.topic ? (
+                      <Text style={styles.channelTopic} numberOfLines={1}>
+                        {room.topic}
+                      </Text>
+                    ) : null}
                   </View>
-                  {room.room_type !== 'text' && (
-                    <Badge
-                      text={room.room_type}
-                      tone={tone}
-                      dot={room.room_type === 'voice' || room.room_type === 'video'}
-                    />
-                  )}
-                </TouchableOpacity>
+                  {room.current_participants > 0 ? (
+                    <Badge text={room.current_participants} tone="mint" />
+                  ) : null}
+                </Pressable>
               );
-            })
-          )}
-        </ScrollView>
-      )}
+            })}
+          </Collapsible>
+        ))}
+      </ScrollView>
+
+      <Menu
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        title={data?.name}
+        items={[
+          {
+            key: 'members',
+            label: 'View members',
+            icon: <Users size={17} color={Colors.textMuted} />,
+            onPress: () =>
+              navigation.navigate('MemberList', { communityId, title: data?.name }),
+          },
+          ...(abilities && canOpenSettings(abilities)
+            ? [
+                {
+                  key: 'settings',
+                  label: 'Server settings',
+                  icon: <Settings size={17} color={Colors.textMuted} />,
+                  onPress: () =>
+                    navigation.navigate('CommunitySettings', {
+                      communityId,
+                      communityName: data?.name,
+                    }),
+                },
+              ]
+            : []),
+          {
+            key: 'leave',
+            label: 'Leave server',
+            tone: 'danger' as const,
+            separated: true,
+            icon: <LogOut size={17} color={Colors.danger} />,
+            onPress: () => void leave(),
+          },
+        ]}
+      />
     </SafeAreaView>
   );
 }
@@ -173,103 +253,57 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  backBtn: {
-    marginRight: 12,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.text,
-    flex: 1,
-  },
-  centerContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   content: {
-    padding: 16,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl * 2,
+    gap: Spacing.md,
   },
-  banner: {
+  identity: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.lg,
     backgroundColor: Colors.surface,
     borderRadius: Radius.xl,
-    padding: 16,
-    marginBottom: 24,
     borderWidth: 1,
     borderColor: Colors.border,
+    padding: Spacing.lg,
   },
-  bannerInfo: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  bannerName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  bannerDesc: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    lineHeight: 18,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Colors.textDim,
-    letterSpacing: 0.8,
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-  roomItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  roomIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.sunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  roomDetails: {
+  identityText: {
     flex: 1,
   },
-  roomName: {
-    fontSize: 15,
-    fontWeight: '700',
+  identityName: {
     color: Colors.text,
+    fontSize: 17,
+    fontWeight: '800',
   },
-  roomTopic: {
+  identityMeta: {
+    color: Colors.textSubtle,
     fontSize: 12,
-    color: Colors.textMuted,
+    lineHeight: 17,
     marginTop: 2,
   },
-  emptyRooms: {
+  channel: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 40,
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.lg,
   },
-  emptyRoomsText: {
-    color: Colors.textMuted,
-    fontSize: 14,
+  channelPressed: {
+    backgroundColor: Colors.hover,
+  },
+  channelText: {
+    flex: 1,
+  },
+  channelName: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  channelTopic: {
+    color: Colors.textSubtle,
+    fontSize: 12,
+    marginTop: 1,
   },
 });

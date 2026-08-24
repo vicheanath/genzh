@@ -1,24 +1,50 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { Image, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { hueFor } from '@genzh/shared';
-import { Colors, Radius } from '../theme/tokens';
+
+import { PresenceDot, type Presence } from './PresenceDot';
+import { Colors } from '../theme/tokens';
 
 export interface AvatarProps {
   name: string;
   url?: string | null;
   size?: number;
   speaking?: boolean;
+  /**
+   * Presence, as the four states the app actually distinguishes.
+   *
+   * `online` is also accepted as a bare boolean, which is what most callers
+   * have to hand — the presence set answers "is this id in it", not which of
+   * four states it is in.
+   */
+  presence?: Presence;
   online?: boolean;
   accent?: string | null;
+  /** The surface the avatar sits on, so the presence dot punches out of it. */
+  ringColor?: string;
+  style?: ViewStyle;
 }
 
-export function Avatar({ name, url, size = 42, speaking = false, online, accent }: AvatarProps) {
+export function Avatar({
+  name,
+  url,
+  size = 42,
+  speaking = false,
+  presence,
+  online,
+  accent,
+  ringColor = Colors.bg,
+  style,
+}: AvatarProps) {
   const hue = hueFor(name || 'User');
   const bgColor = accent || `hsl(${hue}, 60%, 35%)`;
   const initial = (name || '?').charAt(0).toUpperCase();
 
+  const resolved: Presence | null =
+    presence ?? (online === undefined ? null : online ? 'online' : 'offline');
+
   return (
-    <View style={[styles.wrapper, { width: size, height: size }]}>
+    <View style={[styles.wrapper, { width: size, height: size }, style]}>
       <View
         style={[
           styles.circle,
@@ -43,17 +69,12 @@ export function Avatar({ name, url, size = 42, speaking = false, online, accent 
         )}
       </View>
 
-      {online !== undefined && (
-        <View
-          style={[
-            styles.presenceDot,
-            {
-              width: Math.max(10, size * 0.28),
-              height: Math.max(10, size * 0.28),
-              borderRadius: size * 0.14,
-              backgroundColor: online ? Colors.online : Colors.offline,
-            },
-          ]}
+      {resolved && (
+        <PresenceDot
+          presence={resolved}
+          size={Math.max(10, size * 0.28)}
+          ringColor={ringColor}
+          style={styles.presenceDot}
         />
       )}
     </View>
@@ -92,7 +113,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -1,
     right: -1,
-    borderWidth: 2,
-    borderColor: Colors.bg,
   },
 });

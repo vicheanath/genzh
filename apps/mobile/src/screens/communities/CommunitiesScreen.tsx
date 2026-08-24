@@ -12,45 +12,32 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Compass, Users, ChevronRight } from 'lucide-react-native';
 import { communities, type Community } from '@genzh/shared';
 import { useAuth } from '../../context/AuthContext';
+import { useAsync } from '../../lib/useAsync';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { Colors, Radius } from '../../theme/tokens';
 import { CreateCommunityModal } from './CreateCommunityModal';
 
 export function CommunitiesScreen({ navigation }: any) {
-  const { token } = useAuth();
-  const [list, setList] = useState<Community[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { getToken } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const fetchCommunities = useCallback(async () => {
-    if (!token) return;
-    try {
-      const data = await communities.list(token);
-      setList(data);
-    } catch {
-      // Ignore
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [token]);
+  const query = useAsync(async () => communities.list(await getToken()), [getToken]);
+  const list = query.data ?? [];
+  const loading = query.loading;
 
-  useEffect(() => {
-    fetchCommunities();
-  }, [fetchCommunities]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchCommunities();
-  };
+  const onRefresh = () => query.reload();
 
   const renderCommunityItem = ({ item }: { item: Community }) => (
     <TouchableOpacity
       style={styles.communityCard}
       activeOpacity={0.8}
-      onPress={() => navigation.navigate('CommunityDetail', { communityId: item.id, name: item.name })}
+      onPress={() =>
+        navigation.navigate('CommunityDetail', {
+          communityId: item.id,
+          communityName: item.name,
+        })
+      }
     >
       <Avatar name={item.name} url={item.icon_url} size={50} />
       <View style={styles.communityInfo}>
@@ -99,7 +86,7 @@ export function CommunitiesScreen({ navigation }: any) {
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
+              refreshing={loading}
               onRefresh={onRefresh}
               tintColor={Colors.accent}
             />
@@ -126,7 +113,7 @@ export function CommunitiesScreen({ navigation }: any) {
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
           setShowCreateModal(false);
-          fetchCommunities();
+          query.reload();
         }}
       />
     </SafeAreaView>

@@ -5,15 +5,15 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { X } from 'lucide-react-native';
-import { communities } from '@genzh/shared';
+import { ApiError, communities } from '@genzh/shared';
 import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
+import { useToast } from '../../components/Toast';
 import { Colors, Radius } from '../../theme/tokens';
 
 interface Props {
@@ -23,7 +23,8 @@ interface Props {
 }
 
 export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
-  const { token } = useAuth();
+  const { getToken } = useAuth();
+  const toast = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [iconUrl, setIconUrl] = useState('');
@@ -31,14 +32,13 @@ export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      Alert.alert('Validation Error', 'Please enter a community name.');
+      toast.error('A community needs a name');
       return;
     }
-    if (!token) return;
 
     setLoading(true);
     try {
-      await communities.create(token, {
+      await communities.create(await getToken(), {
         name: name.trim(),
         description: description.trim() || undefined,
         icon_url: iconUrl.trim() || undefined,
@@ -46,9 +46,13 @@ export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
       setName('');
       setDescription('');
       setIconUrl('');
+      toast.success('Community created');
       onCreated();
-    } catch (err: any) {
-      Alert.alert('Creation Failed', err?.message || 'Could not create community');
+    } catch (cause) {
+      toast.error(
+        'Could not create community',
+        cause instanceof ApiError ? cause.message : undefined,
+      );
     } finally {
       setLoading(false);
     }

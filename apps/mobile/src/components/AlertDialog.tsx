@@ -1,0 +1,115 @@
+import React from 'react';
+import { Modal, StyleSheet, Text, View } from 'react-native';
+
+import { Button } from './Button';
+import { Colors, Radius, Spacing } from '../theme/tokens';
+
+export interface AlertDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description?: string;
+  children?: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  /** `danger` for anything that destroys data. */
+  tone?: 'default' | 'danger';
+  onConfirm?: () => void;
+}
+
+/**
+ * A dialog that interrupts to ask something you cannot undo.
+ *
+ * Distinct from `Dialog` in the one way that matters: it has no dismiss path
+ * other than the two buttons. There is no scrim press to cancel and no
+ * `onRequestClose` shortcut — which is the entire reason to use it for "delete
+ * this community" rather than a regular dialog with scarier words in it.
+ */
+export function AlertDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  tone = 'default',
+  onConfirm,
+}: AlertDialogProps) {
+  return (
+    <Modal
+      visible={open}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      // Android's back button is the one dismissal that cannot be taken away;
+      // it answers the same as Cancel rather than leaving the caller hanging.
+      onRequestClose={() => onOpenChange(false)}
+    >
+      <View style={styles.backdrop}>
+        <View style={styles.popup}>
+          <Text style={styles.title}>{title}</Text>
+          {description ? <Text style={styles.description}>{description}</Text> : null}
+          {children}
+
+          <View style={styles.actions}>
+            <Button
+              title={cancelLabel}
+              variant="secondary"
+              style={styles.action}
+              onPress={() => onOpenChange(false)}
+            />
+            <Button
+              title={confirmLabel}
+              variant={tone === 'danger' ? 'danger' : 'primary'}
+              style={styles.action}
+              onPress={() => {
+                onConfirm?.();
+                onOpenChange(false);
+              }}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  popup: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+  },
+  title: {
+    color: Colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  description: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: Spacing.sm,
+  },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: Spacing.sm,
+    marginTop: Spacing.xl,
+  },
+  action: {
+    minWidth: 96,
+  },
+});
