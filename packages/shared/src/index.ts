@@ -1,4 +1,6 @@
 export * from './api'
+export * from './queries'
+export * from './viewmodels'
 export * from './chat'
 export * from './media'
 export * from './ws'

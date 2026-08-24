@@ -1,3 +1,1 @@
-export * from './client'
-export * from './endpoints'
-export type * from './types'
+export * from '@genzh/shared'

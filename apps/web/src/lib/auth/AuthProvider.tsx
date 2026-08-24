@@ -7,7 +7,13 @@ import {
   type ReactNode,
 } from 'react'
 
-import { ApiError, auth as authApi, type CurrentUser, type Profile } from '@/lib/api'
+import {
+  ApiError,
+  auth as authApi,
+  setTokenProvider,
+  type CurrentUser,
+  type Profile,
+} from '@/lib/api'
 
 import { AuthContext, type AuthValue } from './context'
 
@@ -59,6 +65,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return refreshing.current
   }, [signOutLocally])
+
+  useEffect(() => {
+    setTokenProvider(getToken)
+    return () => {
+      setTokenProvider(null)
+    }
+  }, [getToken])
 
   // Restore a persisted session on first load.
   useEffect(() => {

@@ -1,3 +1,10 @@
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from 'axios'
+
 /**
  * A failure the API reported, in its documented envelope:
  * `{ "error": { "code": "…", "message": "…" } }`.
@@ -36,84 +43,127 @@ export class ApiError extends Error {
   }
 }
 
+export type TokenProvider = () => string | null | Promise<string | null>
+
+let defaultBaseUrl = ''
+let globalToken: string | null = null
+let tokenProvider: TokenProvider | null = null
+
+export function setApiBaseUrl(url: string): void {
+  defaultBaseUrl = url.replace(/\/$/, '')
+  apiClient.defaults.baseURL = defaultBaseUrl
+}
+
+export function getApiBaseUrl(): string {
+  return defaultBaseUrl || apiClient.defaults.baseURL || ''
+}
+
+export function setAuthToken(token: string | null): void {
+  globalToken = token
+}
+
+export function setTokenProvider(provider: TokenProvider | null): void {
+  tokenProvider = provider
+}
+
+/**
+ * Shared Axios instance for all API calls across web and mobile.
+ */
+export const apiClient: AxiosInstance = axios.create({
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// Request interceptor: inject base URL & authorization token
+apiClient.interceptors.request.use(
+  async (config: InternalAxiosRequestConfig) => {
+    if (!config.baseURL && defaultBaseUrl) {
+      config.baseURL = defaultBaseUrl
+    }
+
+    // Don't overwrite explicit authorization header if provided in request config
+    if (!config.headers.Authorization) {
+      let token = globalToken
+      if (!token && tokenProvider) {
+        token = await tokenProvider()
+      }
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    }
+    return config
+  },
+  (error) => Promise.reject(error),
+)
+
+// Response interceptor: convert errors into typed ApiError
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError<{ error?: { code?: string; message?: string } }>) => {
+    if (axios.isCancel(error)) {
+      return Promise.reject(error)
+    }
+
+    if (!error.response) {
+      // Network or transport failure
+      return Promise.reject(new ApiError(0, 'NETWORK_ERROR', 'Could not reach the server'))
+    }
+
+    const status = error.response.status
+    const data = error.response.data
+    const retryAfterHeader = error.response.headers?.['retry-after']
+    const retryAfter = Number(retryAfterHeader)
+
+    const code = data?.error?.code ?? 'UNKNOWN'
+    const message = data?.error?.message ?? error.message ?? `Request failed (${status})`
+
+    return Promise.reject(
+      new ApiError(
+        status,
+        code,
+        message,
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+      ),
+    )
+  },
+)
+
 export interface RequestOptions {
   baseUrl?: string
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
   token?: string | null
   signal?: AbortSignal
-}
-
-let defaultBaseUrl = ''
-
-export function setApiBaseUrl(url: string): void {
-  defaultBaseUrl = url.replace(/\/$/, '')
-}
-
-export function getApiBaseUrl(): string {
-  return defaultBaseUrl
+  params?: Record<string, unknown>
 }
 
 /**
- * One request against the API.
- *
- * Everything goes through here so that the error envelope is decoded in exactly
- * one place; callers see either a typed result or an `ApiError`, never a raw
- * `Response`.
+ * Unified request function powered by Axios.
  */
 export async function request<T>(
   path: string,
-  { baseUrl, method = 'GET', body, token, signal }: RequestOptions = {},
+  { baseUrl, method = 'GET', body, token, signal, params }: RequestOptions = {},
 ): Promise<T> {
-  const host = baseUrl ?? defaultBaseUrl
-  const url = `${host}${path}`
-
-  let response: Response
-  try {
-    response = await fetch(url, {
-      method,
-      headers: {
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal,
-    })
-  } catch (cause) {
-    // fetch only rejects on transport failure, which is worth distinguishing
-    // from a 500: one means "the server said no", the other "we never reached
-    // the server".
-    if (signal?.aborted) throw cause
-    throw new ApiError(0, 'NETWORK_ERROR', 'Could not reach the server')
+  const config: AxiosRequestConfig = {
+    url: path,
+    method,
+    data: body,
+    signal,
+    params,
   }
 
-  if (response.status === 204) {
-    return undefined as T
+  if (baseUrl) {
+    config.baseURL = baseUrl
   }
 
-  const text = await response.text()
-  const payload: unknown = text ? safeParse(text) : null
-
-  if (!response.ok) {
-    const envelope = payload as
-      | { error?: { code?: string; message?: string } }
-      | null
-    const retryAfter = Number(response.headers.get('retry-after'))
-    throw new ApiError(
-      response.status,
-      envelope?.error?.code ?? 'UNKNOWN',
-      envelope?.error?.message ?? `Request failed (${response.status})`,
-      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-    )
+  if (token !== undefined) {
+    config.headers = {
+      ...(config.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
   }
 
-  return payload as T
-}
-
-function safeParse(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
+  const response = await apiClient.request<T>(config)
+  return response.data
 }
