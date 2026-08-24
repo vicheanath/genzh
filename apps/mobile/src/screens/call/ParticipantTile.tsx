@@ -13,7 +13,7 @@ import { SPRING_CONTROL } from '../../theme/motion';
 import { Colors, Radius, Spacing, Stage } from '../../theme/tokens';
 
 import { SpeakingWave } from './SpeakingWave';
-import type { CallMember } from './useCallRoster';
+import type { CallTile } from './useCallRoster';
 
 export type TileVariant = 'solo' | 'grid' | 'strip';
 
@@ -36,7 +36,7 @@ export function ParticipantTile({
   pinned = false,
   onPress,
 }: {
-  member: CallMember;
+  member: CallTile;
   variant?: TileVariant;
   /** Marks the tile the spotlight is currently on. */
   pinned?: boolean;
@@ -49,13 +49,13 @@ export function ParticipantTile({
   }));
 
   const strip = variant === 'strip';
-  const showsVideo = Boolean(member.isCameraOn && member.stream && webrtcModule?.RTCView);
+  const showsVideo = Boolean(member.cameraOn && member.cameraStream && webrtcModule?.RTCView);
   const avatarSize = strip ? 44 : variant === 'solo' ? 92 : 64;
 
   return (
     <AnimatedPressable
       accessibilityRole="button"
-      accessibilityLabel={`${member.displayName}${member.isSelf ? ', you' : ''}${
+      accessibilityLabel={`${member.name}${member.isSelf ? ', you' : ''}${
         member.muted ? ', muted' : ''
       }`}
       accessibilityState={{ selected: pinned }}
@@ -71,14 +71,14 @@ export function ParticipantTile({
         styles.tile,
         strip ? styles.tileStrip : styles.tileFull,
         showsVideo && styles.tileVideo,
-        member.isSpeaking && styles.tileSpeaking,
-        pinned && !member.isSpeaking && styles.tilePinned,
+        member.speaking && styles.tileSpeaking,
+        pinned && !member.speaking && styles.tilePinned,
         pressStyle,
       ]}
     >
       {showsVideo ? (
         <webrtcModule.RTCView
-          streamURL={member.stream.toURL()}
+          streamURL={(member.cameraStream as any).toURL()}
           style={StyleSheet.absoluteFillObject}
           objectFit="cover"
           // You expect your own camera to behave like a mirror.
@@ -88,15 +88,15 @@ export function ParticipantTile({
         <View style={styles.avatarWrap}>
           <Avatar
             url={member.avatarUrl}
-            name={member.displayName}
-            speaking={member.isSpeaking}
+            name={member.name}
+            speaking={member.speaking}
             size={avatarSize}
             ringColor={Stage.surface}
           />
           {/* Only where there is room under the avatar for it. On a grid tile
               the accent border and the avatar's own ring already say this, and
               a third signal would collide with the name pill. */}
-          {member.isSpeaking && variant === 'solo' ? (
+          {member.speaking && variant === 'solo' ? (
             <View style={styles.wave}>
               <SpeakingWave />
             </View>
@@ -104,7 +104,7 @@ export function ParticipantTile({
         </View>
       )}
 
-      {member.isHandRaised ? (
+      {member.handRaised ? (
         <View style={[styles.handTag, strip && styles.handTagStrip]}>
           <Hand size={strip ? 9 : 11} color={Colors.textInverted} />
           {!strip ? <Text style={styles.handText}>Hand raised</Text> : null}
@@ -114,7 +114,7 @@ export function ParticipantTile({
       {strip ? (
         <>
           <Text style={styles.stripName} numberOfLines={1}>
-            {member.displayName}
+            {member.name}
           </Text>
           {member.muted ? (
             <View style={styles.stripMuteBadge}>
@@ -128,7 +128,7 @@ export function ParticipantTile({
               a camera feed as well as over the tile's own surface. */}
           <View style={styles.namePill}>
             <Text style={styles.nameText} numberOfLines={1}>
-              {member.displayName}
+              {member.name}
               {member.isSelf ? ' (You)' : ''}
             </Text>
           </View>
@@ -139,7 +139,7 @@ export function ParticipantTile({
                 <MicOff size={11} color="#fff" />
               </View>
             ) : null}
-            {member.isCameraOn ? (
+            {member.cameraOn ? (
               <View style={styles.cameraPill}>
                 <Video size={11} color={Colors.accentText} />
               </View>

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { communities as communitiesApi, rooms as roomsApi } from '@genzh/shared';
+import { useCommunityMembersQuery, useRoomParticipantsQuery, rooms as roomsApi } from '@genzh/shared';
 
 import { Callout } from '../../components/Callout';
 import { ScreenHeader } from '../../components/ScreenHeader';
@@ -9,7 +9,6 @@ import { SkeletonRows } from '../../components/Skeleton';
 import { UserRow } from '../../components/UserRow';
 import { useAuth } from '../../context/AuthContext';
 import { useAppStore } from '../../lib/store';
-import { useAsync } from '../../lib/useAsync';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
@@ -23,34 +22,35 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  */
 export function MemberListScreen({ route, navigation }: any) {
   const { communityId, roomId, title } = route.params ?? {};
-  const { getToken, user } = useAuth();
+  const { token, user } = useAuth();
   const { isOnline } = usePresence();
   const openProfile = useAppStore((s) => s.openProfile);
 
-  const members = useAsync(async () => {
-    const token = await getToken();
-    if (communityId) {
-      const list = await communitiesApi.members(token, communityId);
-      return list.map((member) => ({
-        user_id: member.user_id,
-        nickname: member.nickname as string | undefined,
-      }));
-    }
-    if (roomId) {
-      const list = await roomsApi.participants(token, roomId);
-      return list.map((participant) => ({
-        user_id: participant.user_id,
-        nickname: undefined as string | undefined,
-      }));
-    }
-    return [];
-  }, [getToken, communityId, roomId]);
+  // This screen is opened for a community *or* for a room, never both, so each
+  // query is enabled only when its id is the one that arrived.
+  const communityMembers = useCommunityMembersQuery(token, communityId ?? null);
+  const roomParticipants = useRoomParticipantsQuery(token, communityId ? null : roomId);
 
-  const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? []);
+  const members = useMemo(
+    () =>
+      communityId
+        ? (communityMembers.data ?? []).map((member) => ({
+            user_id: member.user_id,
+            nickname: member.nickname as string | undefined,
+          }))
+        : (roomParticipants.data ?? []).map((participant) => ({
+            user_id: participant.user_id,
+            nickname: undefined as string | undefined,
+          })),
+    [communityId, communityMembers.data, roomParticipants.data],
+  );
+
+  const loading = communityId ? communityMembers.isLoading : roomParticipants.isLoading;
+  const lookup = useProfiles(members.map((member) => member.user_id));
 
   // Online first. A member list sorted by join order buries the people you can
   // actually talk to right now.
-  const sorted = [...(members.data ?? [])].sort(
+  const sorted = [...members].sort(
     (a, b) => Number(isOnline(b.user_id)) - Number(isOnline(a.user_id)),
   );
 
@@ -63,10 +63,12 @@ export function MemberListScreen({ route, navigation }: any) {
       />
 
       <ScrollView contentContainerStyle={styles.content}>
-        {members.loading ? <SkeletonRows rows={6} /> : null}
-        {members.error ? <Callout tone="danger" text={members.error} /> : null}
+        {loading ? <SkeletonRows rows={6} /> : null}
+        {communityMembers.error || roomParticipants.error ? (
+        <Callout tone="danger" text="Could not load the member list." />
+      ) : null}
 
-        {!members.loading && sorted.length === 0 ? (
+        {!loading && sorted.length === 0 ? (
           <Text style={styles.message}>Nobody here yet.</Text>
         ) : null}
 

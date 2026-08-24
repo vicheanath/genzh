@@ -52,13 +52,13 @@ export function VoiceOverlay() {
   const {
     status,
     error,
-    audioAvailable,
+    capabilities,
     activeRoomName,
-    participants,
+    members,
     muted,
     isCameraOn,
     toggleMute,
-    leaveRoom,
+    leave,
   } = useVoice();
 
   const navigation = useNavigation<any>();
@@ -175,19 +175,21 @@ export function VoiceOverlay() {
 
   const label =
     status === 'connected'
-      ? audioAvailable
+      ? capabilities.audio
         ? isCameraOn
           ? 'On video'
           : 'Connected'
         : 'Audio off'
-      : status === 'error'
+      : status === 'failed'
         ? 'Disconnected'
-        : 'Connecting…';
+        : status === 'reconnecting'
+          ? 'Reconnecting…'
+          : 'Connecting…';
 
   const statusColor =
-    status === 'error'
+    status === 'failed'
       ? Colors.danger
-      : status === 'connected' && audioAvailable
+      : status === 'connected' && capabilities.audio
         ? isCameraOn
           ? Colors.accent
           : Colors.live
@@ -212,10 +214,10 @@ export function VoiceOverlay() {
               <Text style={styles.statusText} numberOfLines={1}>
                 {label.toUpperCase()}
               </Text>
-              {participants.length > 0 ? (
+              {members.length > 0 ? (
                 <>
                   <Users size={11} color={Colors.textDim} />
-                  <Text style={styles.count}>{participants.length + 1}</Text>
+                  <Text style={styles.count}>{members.length + 1}</Text>
                 </>
               ) : null}
             </View>
@@ -243,7 +245,7 @@ export function VoiceOverlay() {
             tone="disconnect"
             surface="page"
             size={36}
-            onPress={() => void leaveRoom()}
+            onPress={() => void leave()}
           >
             {(color) => <PhoneOff size={17} color={color} />}
           </CallControlButton>

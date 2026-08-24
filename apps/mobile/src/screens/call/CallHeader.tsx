@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ChevronDown, Users } from 'lucide-react-native';
 
-import type { VoiceStatus } from '../../context/VoiceContext';
+import type { CallStatus } from '@genzh/shared';
 import { Colors, Radius, Spacing, Stage } from '../../theme/tokens';
 
 /** `mm:ss`, or `h:mm:ss` once a call has run past the hour. */
@@ -35,7 +35,7 @@ export function CallHeader({
   onOpenRoster,
 }: {
   roomName: string;
-  status: VoiceStatus;
+  status: CallStatus;
   duration: number;
   headcount: number;
   onMinimize: () => void;
@@ -65,7 +65,7 @@ export function CallHeader({
               styles.statusDot,
               {
                 backgroundColor:
-                  status === 'error'
+                  status === 'failed'
                     ? Colors.danger
                     : connected
                       ? Colors.live
@@ -74,8 +74,10 @@ export function CallHeader({
             ]}
           />
           <Text style={styles.metaText}>
-            {status === 'error'
+            {status === 'failed'
               ? 'Connection lost'
+              : status === 'reconnecting'
+                ? 'Reconnecting…'
               : connected
                 ? formatDuration(duration)
                 : 'Connecting…'}

@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react-native';
 import {
   ApiError,
   rooms as roomsApi,
+  useCommunityDetailVM,
   type CommunityWithPermissions,
   type RoomType,
   type Uuid,
@@ -18,7 +19,6 @@ import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 import { roomTypeIcon } from '../../lib/roomTypes';
-import { useAsync } from '../../lib/useAsync';
 import { Colors } from '../../theme/tokens';
 
 import { PanelList, PanelSkeleton } from './PanelList';
@@ -45,14 +45,11 @@ export function ChannelsTab({
   community: CommunityWithPermissions;
   abilities: CommunityAbilities;
 }) {
-  const { getToken } = useAuth();
+  const { token, getToken } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
 
-  const rooms = useAsync(
-    async () => roomsApi.list(await getToken(), community.id),
-    [getToken, community.id],
-  );
+  const vm = useCommunityDetailVM(token, community.id);
 
   const [name, setName] = useState('');
   const [type, setType] = useState<RoomType>('text');
@@ -71,7 +68,7 @@ export function ChannelsTab({
       });
       setName('');
       setTopic('');
-      rooms.reload();
+      void vm.refetchRooms();
       toast.success('Channel created');
     } catch (cause) {
       toast.error(
@@ -94,7 +91,7 @@ export function ChannelsTab({
 
     try {
       await roomsApi.delete(await getToken(), roomId);
-      rooms.reload();
+      void vm.refetchRooms();
       toast.success('Channel deleted');
     } catch (cause) {
       toast.error(
@@ -150,19 +147,19 @@ export function ChannelsTab({
       ) : null}
 
       <Text style={panel.listHeading}>
-        {rooms.data
-          ? `${rooms.data.length} channel${rooms.data.length === 1 ? '' : 's'}`
+        {vm.rooms.length > 0
+          ? `${vm.rooms.length} channel${vm.rooms.length === 1 ? '' : 's'}`
           : 'Channels'}
       </Text>
 
-      {rooms.error ? <Callout tone="danger" text={rooms.error} /> : null}
-      {rooms.loading ? <PanelSkeleton rows={4} /> : null}
+      {vm.error ? <Callout tone="danger" text="Could not load channels." /> : null}
+      {vm.isLoading ? <PanelSkeleton rows={4} /> : null}
 
       <PanelList
-        empty={!rooms.loading && (rooms.data?.length ?? 0) === 0}
+        empty={!vm.isLoading && vm.rooms.length === 0}
         emptyText="No channels yet. The first one is usually #general."
       >
-        {rooms.data?.map((room) => {
+        {vm.rooms.map((room) => {
           const Icon = roomTypeIcon(room.room_type);
           return (
             <View key={room.id} style={panel.listItem}>

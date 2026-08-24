@@ -4,8 +4,9 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Compass, Lock, MessageSquare, Plus, Sparkles, Users } from 'lucide-react-native';
 import {
-  communities as communitiesApi,
   rooms as roomsApi,
+  useCommunitiesVM,
+  useRoomsVM,
   type Room,
   type RoomType,
   type UserRoom,
@@ -22,7 +23,6 @@ import { useToast } from '../../components/Toast';
 import { UserRow } from '../../components/UserRow';
 import { useAuth } from '../../context/AuthContext';
 import { isExperienceRoom, roomTypeIcon, roomTypeLabel } from '../../lib/roomTypes';
-import { useAsync } from '../../lib/useAsync';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
@@ -51,7 +51,7 @@ const CATEGORIES = [
  * messages the mobile app previously had no way to reach at all.
  */
 export function HomeScreen({ navigation }: any) {
-  const { getToken } = useAuth();
+  const { token, getToken } = useAuth();
   const toast = useToast();
   const { isOnline } = usePresence();
 
@@ -59,14 +59,17 @@ export function HomeScreen({ navigation }: any) {
   const [createOpen, setCreateOpen] = useState(false);
   const [matching, setMatching] = useState(false);
 
-  const communities = useAsync(async () => communitiesApi.list(await getToken()), [getToken]);
-  const discovery = useAsync(
-    async () => roomsApi.discovery(await getToken(), category || undefined),
-    [getToken, category],
-  );
-  const myRooms = useAsync(async () => roomsApi.mine(await getToken()), [getToken]);
+  // One view model per concern, both from `@genzh/shared`. They are backed by
+  // react-query, so coming back to this screen paints from cache and refreshes
+  // behind the paint — the hand-rolled fetch hook this replaced refetched
+  // everything from scratch on every mount and showed skeletons each time.
+  const communitiesVM = useCommunitiesVM(token);
+  const roomsVM = useRoomsVM(token, {
+    discovery: { enabled: true, category: category || undefined },
+    includeMine: true,
+  });
 
-  const directRooms = (myRooms.data ?? []).filter((room) => room.category === 'dm');
+  const directRooms = roomsVM.myRooms.filter((room) => room.category === 'dm');
   const peerIds = directRooms.flatMap((room) => (room.dm_peer_id ? [room.dm_peer_id] : []));
   const lookup = useProfiles(peerIds);
 
@@ -96,7 +99,13 @@ export function HomeScreen({ navigation }: any) {
     }
   }
 
-  const refreshing = discovery.loading && communities.loading;
+  const refreshing = roomsVM.isLoadingDiscovery && communitiesVM.isLoading;
+
+  function refreshAll() {
+    void roomsVM.refreshDiscovery();
+    void roomsVM.refreshMine();
+    void communitiesVM.refresh();
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -121,9 +130,7 @@ export function HomeScreen({ navigation }: any) {
             refreshing={refreshing}
             tintColor={Colors.accent}
             onRefresh={() => {
-              discovery.reload();
-              communities.reload();
-              myRooms.reload();
+              refreshAll();
             }}
           />
         }
@@ -170,12 +177,12 @@ export function HomeScreen({ navigation }: any) {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>🔥 Trending moments</Text>
-          {discovery.data?.rooms ? <Badge text={discovery.data.rooms.length} /> : null}
+          {roomsVM.discovery.length > 0 ? <Badge text={roomsVM.discovery.length} /> : null}
         </View>
 
-        {discovery.loading ? <SkeletonRows rows={3} /> : null}
+        {roomsVM.isLoadingDiscovery ? <SkeletonRows rows={3} /> : null}
 
-        {!discovery.loading && (discovery.data?.rooms?.length ?? 0) === 0 ? (
+        {!roomsVM.isLoadingDiscovery && roomsVM.discovery.length === 0 ? (
           <EmptyState
             icon={<Sparkles size={26} color={Colors.textDim} />}
             title="No active moments"
@@ -185,7 +192,7 @@ export function HomeScreen({ navigation }: any) {
           />
         ) : null}
 
-        {(discovery.data?.rooms ?? []).map((room: Room, index: number) => {
+        {roomsVM.discovery.map((room: Room, index: number) => {
           const Icon = roomTypeIcon(room.room_type);
           return (
             // Cards land one after another rather than all at once — the feed
@@ -242,9 +249,9 @@ export function HomeScreen({ navigation }: any) {
           <Text style={styles.sectionTitle}>Direct messages</Text>
         </View>
 
-        {myRooms.loading ? <SkeletonRows rows={2} /> : null}
+        {roomsVM.isLoadingMine ? <SkeletonRows rows={2} /> : null}
 
-        {!myRooms.loading && directRooms.length === 0 ? (
+        {!roomsVM.isLoadingMine && directRooms.length === 0 ? (
           <EmptyState
             icon={<MessageSquare size={26} color={Colors.textDim} />}
             title="No conversations yet"
@@ -287,9 +294,9 @@ export function HomeScreen({ navigation }: any) {
           />
         </View>
 
-        {communities.loading ? <SkeletonRows rows={2} /> : null}
+        {communitiesVM.isLoading ? <SkeletonRows rows={2} /> : null}
 
-        {!communities.loading && (communities.data?.length ?? 0) === 0 ? (
+        {!communitiesVM.isLoading && communitiesVM.communities.length === 0 ? (
           <EmptyState
             icon={<Compass size={26} color={Colors.textDim} />}
             title="No communities yet"
@@ -299,7 +306,7 @@ export function HomeScreen({ navigation }: any) {
           />
         ) : null}
 
-        {(communities.data ?? []).map((community, index) => (
+        {communitiesVM.communities.map((community, index) => (
           <Animated.View
             key={community.id}
             entering={FadeInDown.delay(Math.min(index, 6) * 45).duration(260)}
@@ -331,8 +338,7 @@ export function HomeScreen({ navigation }: any) {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={() => {
-          discovery.reload();
-          communities.reload();
+          refreshAll();
         }}
         onOpenRoom={openRoom}
       />

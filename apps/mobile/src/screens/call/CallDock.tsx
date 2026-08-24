@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import {
   Hand,
+  SwitchCamera,
   HeadphoneOff,
   Headphones,
   LayoutGrid,
@@ -30,6 +31,10 @@ export interface CallDockProps {
   isScreenSharing: boolean;
   isHandRaised: boolean;
   speakerphone: boolean;
+  /** False on a platform or build that cannot share a screen. */
+  canShareScreen: boolean;
+  /** Shown when the screen-share control is disabled. */
+  screenShareUnavailableReason: string;
   gridView: boolean;
   reactionsOpen: boolean;
   bottomInset: number;
@@ -37,6 +42,7 @@ export interface CallDockProps {
   onToggleDeafen: () => void;
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
+  onSwitchCamera: () => void;
   onToggleHandRaise: () => void;
   onToggleSpeakerphone: () => void;
   onToggleView: () => void;
@@ -71,6 +77,8 @@ export function CallDock({
   isScreenSharing,
   isHandRaised,
   speakerphone,
+  canShareScreen,
+  screenShareUnavailableReason,
   gridView,
   reactionsOpen,
   bottomInset,
@@ -78,6 +86,7 @@ export function CallDock({
   onToggleDeafen,
   onToggleCamera,
   onToggleScreenShare,
+  onSwitchCamera,
   onToggleHandRaise,
   onToggleSpeakerphone,
   onToggleView,
@@ -110,9 +119,16 @@ export function CallDock({
       <View style={styles.dock}>
         <View style={styles.secondaryRow}>
           <CallControlButton
-            accessibilityLabel={isScreenSharing ? 'Stop sharing your screen' : 'Share your screen'}
+            accessibilityLabel={
+              canShareScreen
+                ? isScreenSharing
+                  ? 'Stop sharing your screen'
+                  : 'Share your screen'
+                : `Screen sharing unavailable. ${screenShareUnavailableReason}`
+            }
             tone={isScreenSharing ? 'on' : 'off'}
             size={38}
+            disabled={!canShareScreen}
             onPress={onToggleScreenShare}
           >
             {(color) =>
@@ -176,6 +192,16 @@ export function CallDock({
               isCameraOn ? <Video size={22} color={color} /> : <VideoOff size={22} color={color} />
             }
           </CallControlButton>
+
+          {isCameraOn ? (
+            <CallControlButton
+              accessibilityLabel="Switch between the front and back camera"
+              tone="off"
+              onPress={onSwitchCamera}
+            >
+              {(color) => <SwitchCamera size={22} color={color} />}
+            </CallControlButton>
+          ) : null}
 
           <CallControlButton
             accessibilityLabel={deafened ? 'Turn call audio back on' : 'Deafen yourself'}

@@ -10,23 +10,22 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Compass, Users, ChevronRight } from 'lucide-react-native';
-import { communities, type Community } from '@genzh/shared';
+import { useCommunitiesVM, type Community } from '@genzh/shared';
 import { useAuth } from '../../context/AuthContext';
-import { useAsync } from '../../lib/useAsync';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { Colors, Radius } from '../../theme/tokens';
 import { CreateCommunityModal } from './CreateCommunityModal';
 
 export function CommunitiesScreen({ navigation }: any) {
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const query = useAsync(async () => communities.list(await getToken()), [getToken]);
-  const list = query.data ?? [];
-  const loading = query.loading;
+  const vm = useCommunitiesVM(token);
+  const list = vm.communities;
+  const loading = vm.isLoading;
 
-  const onRefresh = () => query.reload();
+  const onRefresh = () => void vm.refresh();
 
   const renderCommunityItem = ({ item }: { item: Community }) => (
     <TouchableOpacity
@@ -113,7 +112,7 @@ export function CommunitiesScreen({ navigation }: any) {
         onClose={() => setShowCreateModal(false)}
         onCreated={() => {
           setShowCreateModal(false);
-          query.reload();
+          void vm.refresh();
         }}
       />
     </SafeAreaView>

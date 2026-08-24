@@ -7,7 +7,12 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQueryClient } from '@tanstack/react-query';
 import {
+  useLoginMutation,
+  useLogoutMutation,
+  useRegisterMutation,
+  useUpdateProfileMutation,
   ApiError,
   auth,
   setTokenProvider,
@@ -90,6 +95,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     status: 'loading',
     error: null,
   });
+
+  /*
+   * The mutations come from `@genzh/shared`, the session does not.
+   *
+   * `useAuthVM` is not used wholesale here on purpose. Its `useCurrentUserQuery`
+   * would fetch `me` a second time on boot and, worse, would do it in parallel
+   * with the hydration below — and hydration has to validate the *stored* token
+   * (refreshing it first if it is stale) before anything is allowed to trust
+   * it. That ordering is the whole point of the single-flight refresh, and a
+   * query firing beside it races it. So this takes the four mutations, which
+   * are the duplicated part, and keeps the session machinery that is genuinely
+   * this platform's.
+   */
+  const queryClient = useQueryClient();
+  const loginMutation = useLoginMutation();
+  const registerMutation = useRegisterMutation();
+  const logoutMutation = useLogoutMutation();
+  // Takes the current access token; the interceptor refreshes it if stale.
+  const updateProfileMutation = useUpdateProfileMutation(state.token);
 
   const session = useRef<Session | null>(null);
   // De-duplicates concurrent refreshes: five screens noticing an expired token
@@ -212,8 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (identifier: string, pass: string) => {
     setState((s) => ({ ...s, error: null }));
     try {
-      const res = await auth.login({ identifier, password: pass });
-      await handleAuthSuccess(res);
+      await handleAuthSuccess(await loginMutation.mutateAsync({ identifier, password: pass }));
     } catch (err: any) {
       setState((s) => ({ ...s, error: err?.message || 'Login failed' }));
       throw err;
@@ -228,8 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }) => {
     setState((s) => ({ ...s, error: null }));
     try {
-      const res = await auth.register(data);
-      await handleAuthSuccess(res);
+      await handleAuthSuccess(await registerMutation.mutateAsync(data));
     } catch (err: any) {
       setState((s) => ({ ...s, error: err?.message || 'Registration failed' }));
       throw err;
@@ -241,9 +263,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Sign out locally first: the user should never be stuck signed in because
     // the network is down.
     signOutLocally();
+    // Every cached query was fetched as the person signing out. Dropping the
+    // cache here is what stops the next account seeing their rooms for a frame.
+    queryClient.clear();
     if (current) {
       try {
-        await auth.logout(current.refreshToken);
+        await logoutMutation.mutateAsync(current.refreshToken);
       } catch {
         // The server-side session expires on its own.
       }
@@ -256,7 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = async (input: UpdateProfileInput) => {
     try {
-      const updated = await auth.updateProfile(await getToken(), input);
+      const updated = await updateProfileMutation.mutateAsync(input);
       applyProfile(updated);
       return updated;
     } catch (err: any) {

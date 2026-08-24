@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { ApiError, blocks as blocksApi, type Uuid } from '@genzh/shared';
+import { ApiError, useBlockedUsersVM, type Uuid } from '@genzh/shared';
 
 import { Button } from '../../components/Button';
 import { Callout } from '../../components/Callout';
@@ -9,7 +9,6 @@ import { Spinner } from '../../components/Spinner';
 import { useToast } from '../../components/Toast';
 import { UserRow } from '../../components/UserRow';
 import { useAuth } from '../../context/AuthContext';
-import { useAsync } from '../../lib/useAsync';
 import { useProfiles } from '../../lib/useProfiles';
 
 import { useSubmission } from './useSubmission';
@@ -17,16 +16,17 @@ import { panel } from './styles';
 
 /** Blocked users cannot send you friend requests or reach you directly. */
 export function BlockedTab() {
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
   const submit = useSubmission();
   const [userId, setUserId] = useState('');
 
   // The list is fetched, not accumulated: anyone blocked before this screen was
-  // opened has to be here too, or there is no way to undo it.
-  const blocked = useAsync(async () => blocksApi.list(await getToken()), [getToken]);
-  const [ids, setIds] = useState<Uuid[] | null>(null);
-  const current = ids ?? blocked.data ?? [];
+  // opened has to be here too, or there is no way to undo it. The local mirror
+  // this used to keep alongside it is gone — the mutations invalidate the
+  // query, so there is one list and it is always the server's.
+  const blockedVM = useBlockedUsersVM(token);
+  const current = blockedVM.blockedUsers;
   const lookup = useProfiles(current);
 
   async function handleBlock() {
@@ -34,20 +34,18 @@ export function BlockedTab() {
     if (!targetId) return;
 
     const done = await submit.run(async () => {
-      await blocksApi.block(await getToken(), targetId);
+      await blockedVM.blockUser(targetId);
       return true;
     });
     if (!done) return;
 
-    setIds(current.includes(targetId) ? current : [targetId, ...current]);
     setUserId('');
     toast.success('User blocked', 'They can no longer reach you.');
   }
 
   async function handleUnblock(id: Uuid) {
     try {
-      await blocksApi.unblock(await getToken(), id);
-      setIds(current.filter((item) => item !== id));
+      await blockedVM.unblockUser(id);
       toast.success('User unblocked');
     } catch (cause) {
       toast.error(
@@ -65,7 +63,9 @@ export function BlockedTab() {
       </Text>
 
       {submit.error ? <Callout tone="danger" text={submit.error} /> : null}
-      {blocked.error ? <Callout tone="danger" text={blocked.error} /> : null}
+      {blockedVM.error ? (
+        <Callout tone="danger" text="Could not load your blocked list." />
+      ) : null}
 
       <View style={panel.section}>
         <Input
@@ -87,9 +87,9 @@ export function BlockedTab() {
       <View style={panel.section}>
         <Text style={panel.sectionTitle}>Blocked</Text>
 
-        {blocked.loading && ids === null ? <Spinner /> : null}
+        {blockedVM.isLoading ? <Spinner /> : null}
 
-        {!blocked.loading && current.length === 0 ? (
+        {!blockedVM.isLoading && current.length === 0 ? (
           <Text style={panel.emptyNote}>You haven’t blocked anyone.</Text>
         ) : null}
 

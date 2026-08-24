@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Compass, Plus, Search } from 'lucide-react-native';
-import { ApiError, communities as communitiesApi, hueFor, type Uuid } from '@genzh/shared';
+import { ApiError, hueFor, useCommunitiesVM, type Uuid } from '@genzh/shared';
 
 import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
@@ -13,30 +13,25 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { SkeletonRows } from '../../components/Skeleton';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { useAsync } from '../../lib/useAsync';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
 
 import { CreateCommunityModal } from './CreateCommunityModal';
 
 /** Browse public communities, search them, and join. */
 export function ExploreScreen({ navigation }: any) {
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
 
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [joiningId, setJoiningId] = useState<Uuid | null>(null);
 
-  const communities = useAsync(
-    async () => communitiesApi.list(await getToken()),
-    [getToken],
-  );
+  const vm = useCommunitiesVM(token);
 
   async function join(communityId: Uuid, communityName: string) {
     setJoiningId(communityId);
     try {
-      await communitiesApi.join(await getToken(), communityId);
-      communities.reload();
+      await vm.joinCommunity(communityId);
       toast.success('Joined community');
       navigation.navigate('CommunityDetail', { communityId, communityName });
     } catch (cause) {
@@ -55,7 +50,7 @@ export function ExploreScreen({ navigation }: any) {
   }
 
   const needle = query.trim().toLowerCase();
-  const filtered = (communities.data ?? []).filter((community) => {
+  const filtered = vm.communities.filter((community) => {
     if (!needle) return true;
     return (
       community.name.toLowerCase().includes(needle) ||
@@ -96,16 +91,16 @@ export function ExploreScreen({ navigation }: any) {
           />
         </View>
 
-        {communities.error ? <Callout tone="danger" text={communities.error} /> : null}
+        {vm.error ? <Callout tone="danger" text="Could not load communities." /> : null}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Communities</Text>
-          {communities.data ? <Badge text={filtered.length} /> : null}
+          {vm.communities.length > 0 ? <Badge text={filtered.length} /> : null}
         </View>
 
-        {communities.loading ? <SkeletonRows rows={4} /> : null}
+        {vm.isLoading ? <SkeletonRows rows={4} /> : null}
 
-        {!communities.loading && filtered.length === 0 ? (
+        {!vm.isLoading && filtered.length === 0 ? (
           <EmptyState
             icon={<Compass size={26} color={Colors.textDim} />}
             title="Nothing found"
@@ -167,7 +162,7 @@ export function ExploreScreen({ navigation }: any) {
         onClose={() => setCreateOpen(false)}
         onCreated={() => {
           setCreateOpen(false);
-          communities.reload();
+          void vm.refresh();
         }}
       />
     </SafeAreaView>

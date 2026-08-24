@@ -1,16 +1,17 @@
 import React, {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  notifications as notificationsApi,
+  queryKeys,
+  useNotificationsVM,
   type AppNotification,
   type ChatServerEvent,
+  type NotificationPage,
   type Uuid,
 } from '@genzh/shared';
 
@@ -31,48 +32,25 @@ const NotificationsContext = createContext<NotificationsValue | null>(null);
 /**
  * The notification inbox.
  *
- * Same two-source shape as presence: the list is fetched once so anything that
- * arrived while you were away is there, and the socket appends what happens
- * while you are looking. The server stores every notification before pushing
- * it, so what arrives live is the same row a reload would show.
+ * Two sources, as before: the list is fetched so anything that arrived while
+ * you were away is there, and the socket appends what happens while you are
+ * looking. What changed is where each lands.
+ *
+ * The fetch is `useNotificationsVM` from `@genzh/shared`, and a live event is
+ * written into that query's cache rather than into a second copy in `useState`.
+ * The old version kept its own `items`/`unread` state and hand-rolled the
+ * optimistic mark-read on top, which meant two lists that had to be corrected
+ * in step — and one of them was the only one the mutations knew about.
+ *
+ * The provider stays because the socket subscription and the badge are app-wide
+ * and should exist once, not once per screen that reads the count.
  */
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { user, getToken } = useAuth();
-  const [items, setItems] = useState<AppNotification[]>([]);
-  const [unread, setUnread] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [nonce, setNonce] = useState(0);
+  const { token, user } = useAuth();
+  const queryClient = useQueryClient();
+  const vm = useNotificationsVM(token);
 
   const signedIn = Boolean(user);
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
-
-  useEffect(() => {
-    if (!signedIn) {
-      setItems([]);
-      setUnread(0);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-
-    void (async () => {
-      try {
-        const page = await notificationsApi.list(await getToken());
-        if (cancelled) return;
-        setItems(page.notifications);
-        setUnread(page.unread);
-      } catch {
-        // An unreachable inbox should not break the shell around it.
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [signedIn, getToken, nonce]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -80,57 +58,42 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return chatSocket.on<ChatServerEvent>('notification_created', (event) => {
       if (event.type !== 'notification_created') return;
 
-      setItems((current) => {
-        // The server deduplicates, but a reconnect can replay; matching on id
-        // keeps a double delivery from doubling the list.
-        if (current.some((item) => item.id === event.notification.id)) return current;
-        return [event.notification, ...current];
-      });
-      setUnread((count) => count + 1);
-    });
-  }, [signedIn]);
-
-  const markRead = useCallback(
-    async (id: Uuid) => {
-      // Optimistic: the badge should drop the instant it is tapped, and the
-      // request is idempotent, so a failure costs nothing but a stale count
-      // until the next load.
-      let wasUnread = false;
-      setItems((current) =>
-        current.map((item) => {
-          if (item.id !== id || item.read_at) return item;
-          wasUnread = true;
-          return { ...item, read_at: new Date().toISOString() };
-        }),
+      // Straight into the query cache, so every reader — this badge, the
+      // notifications screen — sees it at once and a later refetch replaces it
+      // with the server's version rather than merging against a local copy.
+      queryClient.setQueryData<NotificationPage>(
+        [...queryKeys.notifications.list(), undefined, undefined],
+        (page) => {
+          if (!page) return page;
+          // The server deduplicates, but a reconnect can replay; matching on id
+          // keeps a double delivery from doubling the list.
+          if (page.notifications.some((item) => item.id === event.notification.id)) {
+            return page;
+          }
+          return {
+            ...page,
+            notifications: [event.notification, ...page.notifications],
+            unread: page.unread + 1,
+          };
+        },
       );
-      if (wasUnread) setUnread((count) => Math.max(0, count - 1));
-
-      try {
-        await notificationsApi.markRead(await getToken(), id);
-      } catch {
-        // Left as-is; the next reload reconciles.
-      }
-    },
-    [getToken],
-  );
-
-  const markAllRead = useCallback(async () => {
-    const readAt = new Date().toISOString();
-    setItems((current) =>
-      current.map((item) => (item.read_at ? item : { ...item, read_at: readAt })),
-    );
-    setUnread(0);
-
-    try {
-      await notificationsApi.markAllRead(await getToken());
-    } catch {
-      // Left as-is; the next reload reconciles.
-    }
-  }, [getToken]);
+    });
+  }, [signedIn, queryClient]);
 
   const value = useMemo<NotificationsValue>(
-    () => ({ items, unread, loading, markRead, markAllRead, reload }),
-    [items, unread, loading, markRead, markAllRead, reload],
+    () => ({
+      items: vm.notifications,
+      unread: vm.unreadCount,
+      loading: vm.isLoading,
+      markRead: async (id: Uuid) => {
+        await vm.markAsRead(id);
+      },
+      markAllRead: async () => {
+        await vm.markAllAsRead();
+      },
+      reload: () => void vm.refresh(),
+    }),
+    [vm],
   );
 
   return (

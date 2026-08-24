@@ -4,6 +4,7 @@ import { Check, Plus } from 'lucide-react-native';
 import {
   ApiError,
   communities as communitiesApi,
+  useCommunityDetailVM,
   ACCENT_COLORS,
   DEFAULT_ACCENT,
   type CommunityWithPermissions,
@@ -17,7 +18,6 @@ import { Input } from '../../components/Input';
 import { Switch } from '../../components/Switch';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { useAsync } from '../../lib/useAsync';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
 
 import {
@@ -36,13 +36,10 @@ export function RolesTab({
   community: CommunityWithPermissions;
   abilities: CommunityAbilities;
 }) {
-  const { getToken } = useAuth();
+  const { token, getToken } = useAuth();
   const toast = useToast();
 
-  const roles = useAsync(
-    async () => communitiesApi.roles(await getToken(), community.id),
-    [getToken, community.id],
-  );
+  const vm = useCommunityDetailVM(token, community.id);
 
   const [name, setName] = useState('');
   const [color, setColor] = useState<string>(DEFAULT_ACCENT);
@@ -63,7 +60,7 @@ export function RolesTab({
       });
       setName('');
       setGranted(new Set(DEFAULT_NEW_ROLE_PERMISSIONS));
-      roles.reload();
+      void vm.refetchCommunity();
       toast.success('Role created');
     } catch (cause) {
       toast.error('Could not create role', cause instanceof ApiError ? cause.message : undefined);
@@ -153,14 +150,14 @@ export function RolesTab({
 
       <Text style={panel.listHeading}>Server roles</Text>
 
-      {roles.error ? <Callout tone="danger" text={roles.error} /> : null}
-      {roles.loading ? <PanelSkeleton rows={3} /> : null}
+      {vm.error ? <Callout tone="danger" text="Could not load roles." /> : null}
+      {vm.isLoading ? <PanelSkeleton rows={3} /> : null}
 
       <PanelList
-        empty={!roles.loading && (roles.data?.length ?? 0) === 0}
+        empty={!vm.isLoading && vm.roles.length === 0}
         emptyText="No roles yet. The default role covers everyone until you add one."
       >
-        {roles.data?.map((role) => (
+        {vm.roles.map((role) => (
           <View key={role.id} style={panel.listItem}>
             <View style={[panel.roleDot, { backgroundColor: role.color ?? DEFAULT_ACCENT }]} />
 

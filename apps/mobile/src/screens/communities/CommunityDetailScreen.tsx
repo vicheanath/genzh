@@ -4,8 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LogOut, MoreHorizontal, Settings, Users } from 'lucide-react-native';
 import {
   ApiError,
-  communities as communitiesApi,
-  rooms as roomsApi,
+  useCommunityDetailVM,
   type Room,
 } from '@genzh/shared';
 
@@ -26,7 +25,6 @@ import {
   canOpenSettings,
 } from '../../features/community-settings/tabs';
 import { isExperienceRoom, roomTypeIcon } from '../../lib/roomTypes';
-import { useAsync } from '../../lib/useAsync';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
 
 /**
@@ -38,20 +36,15 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  */
 export function CommunityDetailScreen({ route, navigation }: any) {
   const { communityId, communityName, name } = route.params ?? {};
-  const { getToken, user } = useAuth();
+  const { token, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
 
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const community = useAsync(
-    async () => communitiesApi.get(await getToken(), communityId),
-    [getToken, communityId],
-  );
-  const rooms = useAsync(
-    async () => roomsApi.list(await getToken(), communityId),
-    [getToken, communityId],
-  );
+  // One view model covers the community, its rooms and its members — they are
+  // fetched together because the screen shows them together.
+  const vm = useCommunityDetailVM(token, communityId);
 
   function openRoom(room: Room) {
     navigation.navigate(isExperienceRoom(room.room_type) ? 'ExperienceRoom' : 'RoomChat', {
@@ -65,7 +58,7 @@ export function CommunityDetailScreen({ route, navigation }: any) {
     if (!user) return;
 
     const ok = await confirm({
-      title: `Leave ${community.data?.name ?? 'this server'}?`,
+      title: `Leave ${vm.community?.name ?? 'this server'}?`,
       description: 'You lose access to its channels until somebody invites you back.',
       confirmLabel: 'Leave server',
       tone: 'danger',
@@ -73,7 +66,7 @@ export function CommunityDetailScreen({ route, navigation }: any) {
     if (!ok) return;
 
     try {
-      await communitiesApi.leave(await getToken(), communityId, user.id);
+      await vm.leave(user.id);
       toast.success('Left the server');
       navigation.goBack();
     } catch (cause) {
@@ -81,15 +74,15 @@ export function CommunityDetailScreen({ route, navigation }: any) {
     }
   }
 
-  if (community.loading) return <LoadingPanel />;
+  if (vm.isLoading) return <LoadingPanel />;
 
-  const data = community.data;
+  const data = vm.community;
   const abilities = data ? abilitiesFor(data, user?.id) : null;
 
   // Channels arrive flat with a category on each. Grouping here matches the
   // sidebar and keeps a server with forty channels readable.
   const grouped = new Map<string, Room[]>();
-  for (const room of rooms.data ?? []) {
+  for (const room of vm.rooms) {
     const key = room.category || 'general';
     grouped.set(key, [...(grouped.get(key) ?? []), room]);
   }
@@ -129,11 +122,11 @@ export function CommunityDetailScreen({ route, navigation }: any) {
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
-            refreshing={rooms.loading}
+            refreshing={vm.isLoading}
             tintColor={Colors.accent}
             onRefresh={() => {
-              community.reload();
-              rooms.reload();
+              void vm.refetchCommunity();
+              void vm.refetchRooms();
             }}
           />
         }
@@ -152,10 +145,10 @@ export function CommunityDetailScreen({ route, navigation }: any) {
           </View>
         ) : null}
 
-        {community.error ? <Callout tone="danger" text={community.error} /> : null}
-        {rooms.error ? <Callout tone="danger" text={rooms.error} /> : null}
+        {vm.error ? <Callout tone="danger" text="Could not load this server." /> : null}
+        
 
-        {!rooms.loading && (rooms.data?.length ?? 0) === 0 ? (
+        {!vm.isLoading && vm.rooms.length === 0 ? (
           <EmptyState
             title="No channels yet"
             description={

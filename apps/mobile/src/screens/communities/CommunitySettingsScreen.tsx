@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { communities as communitiesApi } from '@genzh/shared';
+import { useCommunityDetailVM } from '@genzh/shared';
 
 import { Callout } from '../../components/Callout';
 import { ScreenHeader } from '../../components/ScreenHeader';
@@ -18,7 +18,6 @@ import {
   COMMUNITY_TABS,
   type CommunityTab,
 } from '../../features/community-settings/tabs';
-import { useAsync } from '../../lib/useAsync';
 import { Colors, Spacing } from '../../theme/tokens';
 
 /**
@@ -31,41 +30,38 @@ import { Colors, Spacing } from '../../theme/tokens';
  */
 export function CommunitySettingsScreen({ route, navigation }: any) {
   const { communityId, communityName } = route.params ?? {};
-  const { getToken, user } = useAuth();
+  const { token, user } = useAuth();
 
   const [tab, setTab] = useState<CommunityTab>('overview');
 
-  const community = useAsync(
-    async () => communitiesApi.get(await getToken(), communityId),
-    [getToken, communityId],
-  );
+  const vm = useCommunityDetailVM(token, communityId);
 
-  if (community.loading) return <LoadingPanel label="Loading settings" />;
+  if (vm.isLoading) return <LoadingPanel label="Loading settings" />;
 
-  if (community.error || !community.data) {
+  if (vm.error || !vm.community) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScreenHeader title="Server settings" onBack={() => navigation.goBack()} />
         <View style={styles.centre}>
-          <Callout tone="danger" text={community.error ?? 'This server could not be loaded.'} />
+          <Callout tone="danger" text="This server could not be loaded." />
         </View>
       </SafeAreaView>
     );
   }
 
-  const abilities = abilitiesFor(community.data, user?.id);
+  const abilities = abilitiesFor(vm.community, user?.id);
 
   if (!canOpenSettings(abilities)) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScreenHeader
           title="Server settings"
-          subtitle={community.data.name}
+          subtitle={vm.community.name}
           onBack={() => navigation.goBack()}
         />
         <View style={styles.centre}>
           <Text style={styles.denied}>
-            You do not have permission to manage {community.data.name}.
+            You do not have permission to manage {vm.community.name}.
           </Text>
         </View>
       </SafeAreaView>
@@ -76,7 +72,7 @@ export function CommunitySettingsScreen({ route, navigation }: any) {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScreenHeader
         title="Server settings"
-        subtitle={communityName ?? community.data.name}
+        subtitle={communityName ?? vm.community.name}
         onBack={() => navigation.goBack()}
         below={
           <View style={styles.strip}>
@@ -102,15 +98,15 @@ export function CommunitySettingsScreen({ route, navigation }: any) {
       <View style={styles.panel}>
         {tab === 'overview' && (
           <OverviewTab
-            community={community.data}
+            community={vm.community}
             abilities={abilities}
-            onUpdated={community.reload}
+            onUpdated={() => void vm.refetchCommunity()}
             onDeleted={() => navigation.navigate('Main')}
           />
         )}
-        {tab === 'roles' && <RolesTab community={community.data} abilities={abilities} />}
-        {tab === 'members' && <MembersTab community={community.data} abilities={abilities} />}
-        {tab === 'channels' && <ChannelsTab community={community.data} abilities={abilities} />}
+        {tab === 'roles' && <RolesTab community={vm.community} abilities={abilities} />}
+        {tab === 'members' && <MembersTab community={vm.community} abilities={abilities} />}
+        {tab === 'channels' && <ChannelsTab community={vm.community} abilities={abilities} />}
       </View>
     </SafeAreaView>
   );

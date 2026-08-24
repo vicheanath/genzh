@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Sparkles, Users } from 'lucide-react-native';
-import { rooms as roomsApi } from '@genzh/shared';
+import { useRoomQuery, rooms as roomsApi } from '@genzh/shared';
 
 import { Button } from '../../components/Button';
 import { Callout } from '../../components/Callout';
@@ -17,7 +17,6 @@ import { GameExperience } from '../../features/experiences/GameExperience';
 import { PollExperience } from '../../features/experiences/PollExperience';
 import { QuickChatExperience } from '../../features/experiences/QuickChatExperience';
 import { roomTypeLabel } from '../../lib/roomTypes';
-import { useAsync } from '../../lib/useAsync';
 import { Colors, Spacing } from '../../theme/tokens';
 
 /**
@@ -29,28 +28,25 @@ import { Colors, Spacing } from '../../theme/tokens';
  */
 export function ExperienceRoomScreen({ route, navigation }: any) {
   const { roomId, roomName } = route.params ?? {};
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const [tab, setTab] = useState<'experience' | 'chat'>('experience');
 
-  const room = useAsync(
-    async () => roomsApi.get(await getToken(), roomId),
-    [getToken, roomId],
-  );
+  const roomQuery = useRoomQuery(token, roomId);
 
-  if (room.loading) return <LoadingPanel label="Opening room" />;
+  if (roomQuery.isLoading) return <LoadingPanel label="Opening room" />;
 
-  if (room.error || !room.data) {
+  if (roomQuery.error || !roomQuery.data) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScreenHeader title={roomName ?? 'Room'} onBack={() => navigation.goBack()} />
         <View style={styles.centre}>
-          <Callout tone="danger" text={room.error ?? 'This room could not be opened.'} />
+          <Callout tone="danger" text="This room could not be opened." />
         </View>
       </SafeAreaView>
     );
   }
 
-  const current = room.data;
+  const current = roomQuery.data;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>

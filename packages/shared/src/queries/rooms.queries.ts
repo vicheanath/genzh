@@ -49,6 +49,36 @@ export function useRoomQuery(token: string | null, roomId: Uuid | null | undefin
   })
 }
 
+/**
+ * Public rooms to browse.
+ *
+ * Kept fresher than the other lists: discovery is a wall of what is happening
+ * *now*, and a cached one from ten minutes ago is a wall of what was.
+ */
+export function useDiscoveryQuery(token: string | null, category?: string, limit?: number) {
+  return useQuery({
+    queryKey: queryKeys.rooms.discovery(category),
+    queryFn: () => {
+      if (!token) throw new Error('Missing token')
+      return rooms.discovery(token, category, limit)
+    },
+    enabled: Boolean(token),
+    staleTime: 30_000,
+  })
+}
+
+/** The rooms you are already in, direct messages included. */
+export function useMyRoomsQuery(token: string | null) {
+  return useQuery({
+    queryKey: queryKeys.rooms.mine(),
+    queryFn: () => {
+      if (!token) throw new Error('Missing token')
+      return rooms.mine(token)
+    },
+    enabled: Boolean(token),
+  })
+}
+
 export function useRoomParticipantsQuery(token: string | null, roomId: Uuid | null | undefined) {
   return useQuery({
     queryKey: roomId ? queryKeys.rooms.participants(roomId) : ['rooms', 'participants', null],

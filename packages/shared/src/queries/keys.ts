@@ -27,6 +27,10 @@ export const queryKeys = {
     lists: (communityId?: Uuid) => [...queryKeys.rooms.all, 'list', { communityId }] as const,
     detail: (id: Uuid) => [...queryKeys.rooms.all, 'detail', id] as const,
     participants: (id: Uuid) => [...queryKeys.rooms.detail(id), 'participants'] as const,
+    /** Public rooms to browse, optionally narrowed to one category. */
+    discovery: (category?: string) => [...queryKeys.rooms.all, 'discovery', { category }] as const,
+    /** The rooms you are already in, direct messages included. */
+    mine: () => [...queryKeys.rooms.all, 'mine'] as const,
   },
   messages: {
     all: ['messages'] as const,

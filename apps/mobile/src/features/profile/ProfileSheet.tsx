@@ -3,11 +3,11 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MessageSquare, Shield, UserPlus } from 'lucide-react-native';
 import {
+  useUserProfileQuery,
   ApiError,
   blocks as blocksApi,
   friends as friendsApi,
   rooms as roomsApi,
-  users as usersApi,
 } from '@genzh/shared';
 
 import { Avatar } from '../../components/Avatar';
@@ -18,7 +18,6 @@ import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 import { useAppStore } from '../../lib/store';
-import { useAsync } from '../../lib/useAsync';
 import { usePresence } from '../../lib/usePresence';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
 
@@ -43,16 +42,13 @@ export function ProfileSheet() {
 }
 
 function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void }) {
-  const { getToken, user } = useAuth();
+  const { token, getToken, user } = useAuth();
   const navigation = useNavigation<any>();
   const toast = useToast();
   const confirm = useConfirm();
   const { isOnline } = usePresence();
 
-  const profile = useAsync(
-    async () => usersApi.get(await getToken(), userId),
-    [getToken, userId],
-  );
+  const profileQuery = useUserProfileQuery(token, userId);
   const [busy, setBusy] = useState(false);
 
   const isSelf = userId === user?.id;
@@ -64,7 +60,7 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
       onClose();
       navigation.navigate('RoomChat', {
         roomId: room.id,
-        roomName: profile.data?.display_name ?? room.name,
+        roomName: profileQuery.data?.display_name ?? room.name,
       });
     } catch (cause) {
       toast.error(
@@ -93,7 +89,7 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
 
   async function handleBlock() {
     const yes = await confirm({
-      title: `Block ${profile.data?.display_name ?? 'this user'}?`,
+      title: `Block ${profileQuery.data?.display_name ?? 'this user'}?`,
       description: 'They will no longer be able to message you or send friend requests.',
       confirmLabel: 'Block',
       tone: 'danger',
@@ -112,9 +108,9 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
     }
   }
 
-  if (profile.loading) return <SkeletonRows rows={2} />;
+  if (profileQuery.isLoading) return <SkeletonRows rows={2} />;
 
-  const data = profile.data;
+  const data = profileQuery.data;
   const accent = data?.accent_color ?? Colors.accent;
 
   return (

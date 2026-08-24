@@ -41,16 +41,19 @@ export function CallScreen({ navigation }: any) {
     deafened,
     isCameraOn,
     isScreenSharing,
-    isHandRaised,
+    handRaised,
     speakerphone,
-    callDuration,
+    duration,
     toggleMute,
     toggleDeafen,
     toggleCamera,
     toggleScreenShare,
     toggleHandRaise,
     toggleSpeakerphone,
-    leaveRoom,
+    switchCamera,
+    capabilities,
+    screenShareUnavailableReason,
+    leave: leaveCall,
   } = useVoice();
 
   const [reactionsOpen, setReactionsOpen] = useState(false);
@@ -59,7 +62,7 @@ export function CallScreen({ navigation }: any) {
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [preferGrid, setPreferGrid] = useState<boolean | null>(null);
 
-  const { members, spotlight, hasScreenShare, screenShare } = useCallRoster(pinnedId);
+  const { tiles, spotlight, hasScreenShare, screenShare } = useCallRoster(pinnedId);
 
   // Leaving is a side effect, so it happens in an effect. Calling `goBack()`
   // straight from the render body — which is what this did — navigates while
@@ -90,16 +93,16 @@ export function CallScreen({ navigation }: any) {
   }, []);
 
   const leave = useCallback(async () => {
-    await leaveRoom();
+    await leaveCall();
     navigation.goBack();
-  }, [leaveRoom, navigation]);
+  }, [leaveCall, navigation]);
 
   // Grid unless something is being presented, which is what a viewer wants in
   // both cases — until they say otherwise, and then their choice sticks.
   const gridView = preferGrid ?? !hasScreenShare;
 
   const showsSharedScreen =
-    hasScreenShare && screenShare?.stream && webrtcModule?.RTCView;
+    hasScreenShare && screenShare?.screenStream && webrtcModule?.RTCView;
 
   return (
     <View style={styles.root}>
@@ -109,8 +112,8 @@ export function CallScreen({ navigation }: any) {
         <CallHeader
           roomName={activeRoomName ?? 'Voice room'}
           status={status}
-          duration={callDuration}
-          headcount={members.length}
+          duration={duration}
+          headcount={tiles.length}
           onMinimize={() => navigation.goBack()}
           onOpenRoster={() => setRosterOpen(true)}
         />
@@ -138,9 +141,9 @@ export function CallScreen({ navigation }: any) {
             // scrolling: a one-to-one call where each face gets half the
             // display is the whole point of it, and a list cannot do that
             // because its cells cannot take a share of the viewport's height.
-            members.length <= 2 ? (
+            tiles.length <= 2 ? (
               <View style={styles.gridStack}>
-                {members.map((member) => (
+                {tiles.map((member) => (
                   <ParticipantTile
                     key={member.id}
                     member={member}
@@ -151,7 +154,7 @@ export function CallScreen({ navigation }: any) {
               </View>
             ) : (
               <FlatList
-                data={members}
+                data={tiles}
                 keyExtractor={(member) => member.id}
                 numColumns={2}
                 columnWrapperStyle={styles.gridRow}
@@ -181,14 +184,14 @@ export function CallScreen({ navigation }: any) {
 
                 <Text style={styles.spotlightName} numberOfLines={1}>
                   {hasScreenShare
-                    ? `${screenShare?.displayName ?? 'Someone'}${screenShare?.isSelf ? ' (you)' : ''} is presenting`
-                    : (spotlight?.displayName ?? 'Nobody')}
+                    ? `${screenShare?.name ?? 'Someone'}${screenShare?.isSelf ? ' (you)' : ''} is presenting`
+                    : (spotlight?.name ?? 'Nobody')}
                 </Text>
 
                 {showsSharedScreen ? (
                   <View style={styles.screenSurface}>
                     <webrtcModule.RTCView
-                      streamURL={screenShare!.stream.toURL()}
+                      streamURL={(screenShare!.screenStream as any).toURL()}
                       style={StyleSheet.absoluteFillObject}
                       // Contain, not cover: a shared screen cropped to fill the
                       // frame is a shared screen you cannot read.
@@ -206,7 +209,7 @@ export function CallScreen({ navigation }: any) {
                 style={styles.strip}
                 contentContainerStyle={styles.stripContent}
               >
-                {members.map((member) => (
+                {tiles.map((member) => (
                   <ParticipantTile
                     key={member.id}
                     member={member}
@@ -227,8 +230,10 @@ export function CallScreen({ navigation }: any) {
           deafened={deafened}
           isCameraOn={isCameraOn}
           isScreenSharing={isScreenSharing}
-          isHandRaised={isHandRaised}
+          isHandRaised={handRaised}
           speakerphone={speakerphone}
+          canShareScreen={capabilities.screenShare}
+          screenShareUnavailableReason={screenShareUnavailableReason}
           gridView={gridView}
           reactionsOpen={reactionsOpen}
           bottomInset={bottomInset}
@@ -236,6 +241,7 @@ export function CallScreen({ navigation }: any) {
           onToggleDeafen={toggleDeafen}
           onToggleCamera={() => void toggleCamera()}
           onToggleScreenShare={() => void toggleScreenShare()}
+          onSwitchCamera={() => void switchCamera()}
           onToggleHandRaise={toggleHandRaise}
           onToggleSpeakerphone={toggleSpeakerphone}
           onToggleView={() => setPreferGrid(!gridView)}
@@ -245,7 +251,7 @@ export function CallScreen({ navigation }: any) {
         />
       </SafeAreaView>
 
-      <CallRoster open={rosterOpen} onOpenChange={setRosterOpen} members={members} />
+      <CallRoster open={rosterOpen} onOpenChange={setRosterOpen} members={tiles} />
     </View>
   );
 }

@@ -4,6 +4,7 @@ import { Crown, UserMinus, X } from 'lucide-react-native';
 import {
   ApiError,
   communities as communitiesApi,
+  useCommunityDetailVM,
   DEFAULT_ACCENT,
   type CommunityWithPermissions,
   type Uuid,
@@ -18,7 +19,6 @@ import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 import { useAppStore } from '../../lib/store';
-import { useAsync } from '../../lib/useAsync';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
 import { Colors, Spacing } from '../../theme/tokens';
@@ -34,27 +34,20 @@ export function MembersTab({
   community: CommunityWithPermissions;
   abilities: CommunityAbilities;
 }) {
-  const { getToken } = useAuth();
+  const { token, getToken } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const { isOnline } = usePresence();
   const openProfile = useAppStore((s) => s.openProfile);
 
-  const members = useAsync(
-    async () => communitiesApi.members(await getToken(), community.id),
-    [getToken, community.id],
-  );
+  const vm = useCommunityDetailVM(token, community.id);
 
   // Only fetched when there is something to do with it. Someone who cannot
   // assign roles has no reason to pay for the list.
-  const roles = useAsync(
-    async () => (abilities.roles ? communitiesApi.roles(await getToken(), community.id) : []),
-    [getToken, community.id, abilities.roles],
-  );
 
   const [search, setSearch] = useState('');
   const [assignFor, setAssignFor] = useState<Uuid | null>(null);
-  const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? []);
+  const lookup = useProfiles(vm.members.map((member) => member.user_id));
 
   async function assignRole(userId: Uuid, roleId: Uuid) {
     try {
@@ -62,7 +55,7 @@ export function MembersTab({
       // Reloading is the point: the assignment used to succeed silently and
       // leave the row exactly as it was, which is indistinguishable from having
       // done nothing at all.
-      members.reload();
+      void vm.refetchMembers();
       toast.success('Role assigned');
     } catch (cause) {
       toast.error('Could not assign role', cause instanceof ApiError ? cause.message : undefined);
@@ -72,7 +65,7 @@ export function MembersTab({
   async function removeRole(userId: Uuid, roleId: Uuid, roleName: string, name: string) {
     try {
       await communitiesApi.removeRole(await getToken(), community.id, userId, roleId);
-      members.reload();
+      void vm.refetchMembers();
       toast.success(`${roleName} removed from ${name}`);
     } catch (cause) {
       toast.error('Could not remove role', cause instanceof ApiError ? cause.message : undefined);
@@ -90,7 +83,7 @@ export function MembersTab({
 
     try {
       await communitiesApi.leave(await getToken(), community.id, userId);
-      members.reload();
+      void vm.refetchMembers();
       toast.success('Member removed');
     } catch (cause) {
       toast.error('Could not remove member', cause instanceof ApiError ? cause.message : undefined);
@@ -100,15 +93,15 @@ export function MembersTab({
   /** Roles this member could still be given. */
   function assignable(userId: Uuid) {
     const held = new Set(
-      (members.data ?? [])
+      vm.members
         .find((member) => member.user_id === userId)
         ?.roles.map((role) => role.id) ?? [],
     );
-    return (roles.data ?? []).filter((role) => !role.is_default && !held.has(role.id));
+    return vm.roles.filter((role) => !role.is_default && !held.has(role.id));
   }
 
   const needle = search.trim().toLowerCase();
-  const filtered = (members.data ?? []).filter((member) => {
+  const filtered = vm.members.filter((member) => {
     if (!needle) return true;
     const profile = lookup(member.user_id);
     return (
@@ -118,7 +111,7 @@ export function MembersTab({
     );
   });
 
-  const total = members.data?.length ?? 0;
+  const total = vm.members.length;
 
   return (
     <ScrollView contentContainerStyle={panel.content} keyboardShouldPersistTaps="handled">
@@ -138,11 +131,11 @@ export function MembersTab({
         />
       ) : null}
 
-      {members.error ? <Callout tone="danger" text={members.error} /> : null}
-      {members.loading ? <PanelSkeleton rows={4} /> : null}
+      {vm.error ? <Callout tone="danger" text="Could not load members." /> : null}
+      {vm.isLoading ? <PanelSkeleton rows={4} /> : null}
 
       <PanelList
-        empty={!members.loading && filtered.length === 0}
+        empty={!vm.isLoading && filtered.length === 0}
         emptyText={needle ? `Nobody matches “${search.trim()}”.` : 'No members yet.'}
       >
         {filtered.map((member) => {

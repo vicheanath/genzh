@@ -14,12 +14,12 @@ import { Phone, PhoneOff, Users, Video } from 'lucide-react-native';
 import {
   ApiError,
   can,
+  useRoomQuery,
   formatClock,
   formatDayDivider,
   MENTION,
   messages as messagesApi,
   QUICK_REACTIONS,
-  rooms as roomsApi,
   type ChatServerEvent,
   type Message,
   type ReactionSummary,
@@ -42,7 +42,6 @@ import { EmojiPicker } from '../../features/chat/EmojiPicker';
 import { mergeMessages, useMessageHistory } from '../../features/chat/useMessageHistory';
 import { chatSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
-import { useAsync } from '../../lib/useAsync';
 import { useProfiles } from '../../lib/useProfiles';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
 
@@ -60,7 +59,7 @@ const VOICE_ROOM_TYPES: readonly string[] = ['voice', 'video', 'stage'];
 
 export function RoomChatScreen({ route, navigation }: any) {
   const { roomId, roomName } = route.params ?? {};
-  const { getToken, user } = useAuth();
+  const { token, getToken, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const openProfile = useAppStore((s) => s.openProfile);
@@ -69,10 +68,7 @@ export function RoomChatScreen({ route, navigation }: any) {
   const anonAlias = useAppStore((s) => s.anonymousAlias);
   const anonByDefault = useAppStore((s) => s.isAnonymousByDefault);
 
-  const room = useAsync(
-    async () => roomsApi.get(await getToken(), roomId),
-    [getToken, roomId],
-  );
+  const roomQuery = useRoomQuery(token, roomId);
 
   const history = useMessageHistory(roomId);
   const { setItems } = history;
@@ -269,20 +265,20 @@ export function RoomChatScreen({ route, navigation }: any) {
     [confirm, getToken, setItems, toast],
   );
 
-  if (room.loading) return <LoadingPanel label="Opening room" />;
+  if (roomQuery.isLoading) return <LoadingPanel label="Opening room" />;
 
-  if (room.error || !room.data) {
+  if (roomQuery.error || !roomQuery.data) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScreenHeader title={roomName ?? 'Room'} onBack={() => navigation.goBack()} />
         <View style={styles.centre}>
-          <Callout tone="danger" text={room.error ?? 'This room could not be opened.'} />
+          <Callout tone="danger" text="This room could not be opened." />
         </View>
       </SafeAreaView>
     );
   }
 
-  const current: RoomWithPermissions = room.data;
+  const current: RoomWithPermissions = roomQuery.data;
   const canPost = can(current.your_permissions, 'send_message');
   const canReact = can(current.your_permissions, 'add_reaction');
   const canModerate = can(current.your_permissions, 'manage_room');
@@ -316,7 +312,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                     title=""
                     size="sm"
                     variant="danger"
-                    onPress={() => void voice.leaveRoom()}
+                    onPress={() => void voice.leave()}
                     icon={<PhoneOff size={16} />}
                   />
                 </>
@@ -326,7 +322,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                     title=""
                     size="sm"
                     variant="ghost"
-                    onPress={() => void voice.joinRoom(current.id, current.name)}
+                    onPress={() => void voice.join(current.id, current.name)}
                     icon={<Phone size={17} color={Colors.live} />}
                   />
                   <Button
@@ -334,7 +330,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                     size="sm"
                     variant="ghost"
                     onPress={async () => {
-                      await voice.joinRoom(current.id, current.name);
+                      await voice.join(current.id, current.name);
                       await voice.toggleCamera();
                     }}
                     icon={<Video size={17} color={Colors.accent} />}

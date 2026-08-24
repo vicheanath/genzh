@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -15,9 +15,9 @@ import {
 } from 'lucide-react-native';
 import {
   ApiError,
-  blocks as blocksApi,
   formatRelative,
-  friends as friendsApi,
+  useBlockedUsersVM,
+  useFriendsVM,
   rooms as roomsApi,
   type Uuid,
 } from '@genzh/shared';
@@ -35,7 +35,6 @@ import { UserRow } from '../../components/UserRow';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 import { useAppStore, type FriendTab } from '../../lib/store';
-import { useAsync } from '../../lib/useAsync';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
 import { Colors, Radius, Spacing } from '../../theme/tokens';
@@ -48,7 +47,7 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  * than drawing a green dot on everybody.
  */
 export function FriendsScreen({ navigation }: any) {
-  const { getToken, user } = useAuth();
+  const { token, getToken, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const { isOnline } = usePresence();
@@ -63,32 +62,23 @@ export function FriendsScreen({ navigation }: any) {
   const [busy, setBusy] = useState(false);
   const [menuFor, setMenuFor] = useState<Uuid | null>(null);
 
-  const friends = useAsync(async () => friendsApi.list(await getToken()), [getToken]);
-  const requests = useAsync(async () => friendsApi.pending(await getToken()), [getToken]);
-  const sent = useAsync(async () => friendsApi.sent(await getToken()), [getToken]);
-  const blocked = useAsync(async () => blocksApi.list(await getToken()), [getToken]);
+  // Four hand-rolled fetches became two view models. The optimistic block list
+  // below goes with them: the mutations invalidate their own caches, so the
+  // list corrects itself instead of being patched by hand.
+  const friendsVM = useFriendsVM(token);
+  const blockedVM = useBlockedUsersVM(token);
 
-  // Local overlay on the fetched list, so blocking and unblocking take effect
-  // without a round trip. Null means "nothing changed here yet".
-  const [blockOverride, setBlockOverride] = useState<Uuid[] | null>(null);
-  const blockedUsers = blockOverride ?? blocked.data ?? [];
+  const blockedUsers = blockedVM.blockedUsers;
 
   const allIds = [
-    ...(friends.data ?? []),
-    ...(requests.data ?? []).map((r) => r.requester_id),
-    ...(sent.data ?? []).map((r) => r.addressee_id),
+    ...friendsVM.friendIds,
+    ...friendsVM.pendingRequests.map((r) => r.requester_id),
+    ...friendsVM.sentRequests.map((r) => r.addressee_id),
     ...blockedUsers,
   ];
   const lookup = useProfiles(allIds);
 
-  const reloadFriends = friends.reload;
-  const reloadRequests = requests.reload;
-  const reloadSent = sent.reload;
-  const refresh = useCallback(() => {
-    reloadFriends();
-    reloadRequests();
-    reloadSent();
-  }, [reloadFriends, reloadRequests, reloadSent]);
+  const refresh = friendsVM.refresh;
 
   async function openDM(friendId: Uuid) {
     try {
@@ -109,7 +99,7 @@ export function FriendsScreen({ navigation }: any) {
     setError(null);
     setBusy(true);
     try {
-      await friendsApi.request(await getToken(), id);
+      await friendsVM.sendFriendRequest(id);
       setAddId('');
       toast.success('Friend request sent');
       refresh();
@@ -123,7 +113,8 @@ export function FriendsScreen({ navigation }: any) {
 
   async function respond(requesterId: Uuid, accept: boolean) {
     try {
-      await friendsApi.respond(await getToken(), requesterId, accept);
+      if (accept) await friendsVM.acceptFriendRequest(requesterId);
+      else await friendsVM.declineFriendRequest(requesterId);
       toast.success(accept ? 'Friend request accepted' : 'Friend request declined');
       refresh();
     } catch (cause) {
@@ -145,7 +136,7 @@ export function FriendsScreen({ navigation }: any) {
     if (!ok) return;
 
     try {
-      await friendsApi.remove(await getToken(), friendId);
+      await friendsVM.removeFriend(friendId);
       toast.success('Friend removed');
       refresh();
     } catch (cause) {
@@ -155,8 +146,7 @@ export function FriendsScreen({ navigation }: any) {
 
   async function blockUser(otherId: Uuid) {
     try {
-      await blocksApi.block(await getToken(), otherId);
-      if (!blockedUsers.includes(otherId)) setBlockOverride([...blockedUsers, otherId]);
+      await blockedVM.blockUser(otherId);
       toast.success('User blocked', 'They can no longer message or interact with you.');
       refresh();
     } catch (cause) {
@@ -166,8 +156,7 @@ export function FriendsScreen({ navigation }: any) {
 
   async function unblockUser(otherId: Uuid) {
     try {
-      await blocksApi.unblock(await getToken(), otherId);
-      setBlockOverride(blockedUsers.filter((id) => id !== otherId));
+      await blockedVM.unblockUser(otherId);
       toast.success('User unblocked');
       refresh();
     } catch (cause) {
@@ -177,9 +166,9 @@ export function FriendsScreen({ navigation }: any) {
 
   // Both directions: a request you sent is as pending as one you received, and
   // the sender otherwise has no way to see theirs at all.
-  const pendingCount = (requests.data?.length ?? 0) + (sent.data?.length ?? 0);
+  const pendingCount = friendsVM.pendingRequests.length + friendsVM.sentRequests.length;
 
-  const filteredFriends = (friends.data ?? []).filter((friendId) => {
+  const filteredFriends = friendsVM.friendIds.filter((friendId) => {
     if (tab === 'online' && !isOnline(friendId)) return false;
     if (!search) return true;
 
@@ -204,7 +193,7 @@ export function FriendsScreen({ navigation }: any) {
               scrollable
               items={[
                 { value: 'online', label: 'Online' },
-                { value: 'all', label: 'All', badge: friends.data?.length },
+                { value: 'all', label: 'All', badge: friendsVM.friendIds.length || undefined },
                 { value: 'pending', label: 'Pending', badge: pendingCount || undefined },
                 { value: 'blocked', label: 'Blocked', badge: blockedUsers.length || undefined },
                 { value: 'add', label: 'Add friend' },
@@ -234,9 +223,9 @@ export function FriendsScreen({ navigation }: any) {
               {tab === 'online' ? 'Online' : 'All friends'} — {filteredFriends.length}
             </Text>
 
-            {friends.loading ? <SkeletonRows rows={3} /> : null}
+            {friendsVM.isLoading ? <SkeletonRows rows={3} /> : null}
 
-            {!friends.loading && filteredFriends.length === 0 ? (
+            {!friendsVM.isLoading && filteredFriends.length === 0 ? (
               <EmptyState
                 icon={<Users size={28} color={Colors.textDim} />}
                 title={search ? 'No matches' : 'No friends yet'}
@@ -287,18 +276,18 @@ export function FriendsScreen({ navigation }: any) {
 
         {tab === 'pending' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Incoming — {requests.data?.length ?? 0}</Text>
+            <Text style={styles.sectionTitle}>Incoming — {friendsVM.pendingRequests.length}</Text>
 
-            {requests.loading ? <SkeletonRows rows={2} /> : null}
+            {friendsVM.isLoading ? <SkeletonRows rows={2} /> : null}
 
-            {!requests.loading && pendingCount === 0 ? (
+            {!friendsVM.isLoading && pendingCount === 0 ? (
               <EmptyState
                 title="Nothing pending"
                 description="No requests waiting, none awaiting a reply."
               />
             ) : null}
 
-            {(requests.data ?? []).map((request) => {
+            {friendsVM.pendingRequests.map((request) => {
               const profile = lookup(request.requester_id);
               return (
                 <UserRow
@@ -330,10 +319,10 @@ export function FriendsScreen({ navigation }: any) {
               );
             })}
 
-            {sent.data && sent.data.length > 0 ? (
+            {friendsVM.sentRequests.length > 0 ? (
               <>
-                <Text style={styles.sectionTitle}>Sent — {sent.data.length}</Text>
-                {sent.data.map((request) => {
+                <Text style={styles.sectionTitle}>Sent — {friendsVM.sentRequests.length}</Text>
+                {friendsVM.sentRequests.map((request) => {
                   const profile = lookup(request.addressee_id);
                   return (
                     <UserRow

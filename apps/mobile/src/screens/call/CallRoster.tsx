@@ -6,7 +6,7 @@ import { Avatar } from '../../components/Avatar';
 import { Sheet } from '../../components/Sheet';
 import { Colors, Radius, Spacing, Stage } from '../../theme/tokens';
 
-import type { CallMember } from './useCallRoster';
+import type { CallTile } from './useCallRoster';
 
 /**
  * Who is in the call.
@@ -23,7 +23,7 @@ export function CallRoster({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  members: CallMember[];
+  members: CallTile[];
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange} maxHeightRatio={0.8} style={styles.sheet}>
@@ -39,15 +39,15 @@ export function CallRoster({
           <View key={member.id} style={styles.row}>
             <Avatar
               url={member.avatarUrl}
-              name={member.displayName}
-              speaking={member.isSpeaking}
+              name={member.name}
+              speaking={member.speaking}
               size={42}
               ringColor={Stage.surface}
             />
 
             <View style={styles.info}>
               <Text style={styles.name} numberOfLines={1}>
-                {member.displayName}
+                {member.name}
                 {member.isSelf ? ' (You)' : ''}
               </Text>
               <Text style={styles.role}>
@@ -56,12 +56,12 @@ export function CallRoster({
             </View>
 
             <View style={styles.badges}>
-              {member.isHandRaised ? (
+              {member.handRaised ? (
                 <Badge background="rgba(250, 173, 20, 0.18)">
                   <Hand size={14} color={Colors.warning} />
                 </Badge>
               ) : null}
-              {member.isCameraOn ? (
+              {member.cameraOn ? (
                 <Badge background={Colors.accentSubtle}>
                   <Video size={14} color={Colors.accentText} />
                 </Badge>
