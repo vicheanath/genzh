@@ -15,10 +15,13 @@ import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { Callout } from '../../components/Callout';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 import { getApiUrl, saveApiUrl } from '../../api/config';
 
 export function SignInScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { login, register, error, clearError } = useAuth();
   const toast = useToast();
   const [tab, setTab] = useState<'login' | 'register'>('login');
@@ -89,7 +92,7 @@ export function SignInScreen({ navigation }: any) {
           {/* Brand Header */}
           <View style={styles.brandContainer}>
             <View style={styles.brandIconWrapper}>
-              <Sparkles size={28} color={Colors.accent} />
+              <Sparkles size={28} color={c.accent} />
             </View>
             <Text style={styles.brandTitle}>genzh</Text>
             <Text style={styles.brandSubtitle}>REAL-TIME VOICE & COMMUNITY CHAT</Text>
@@ -135,7 +138,7 @@ export function SignInScreen({ navigation }: any) {
                     onChangeText={setIdentifier}
                     autoCapitalize="none"
                     autoCorrect={false}
-                    leftIcon={<User size={18} color={Colors.textDim} />}
+                    leftIcon={<User size={18} color={c.textDim} />}
                   />
                   <Input
                     label="Password"
@@ -143,7 +146,7 @@ export function SignInScreen({ navigation }: any) {
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
-                    leftIcon={<Lock size={18} color={Colors.textDim} />}
+                    leftIcon={<Lock size={18} color={c.textDim} />}
                   />
                 </>
               ) : (
@@ -155,7 +158,7 @@ export function SignInScreen({ navigation }: any) {
                     onChangeText={setHandle}
                     autoCapitalize="none"
                     autoCorrect={false}
-                    leftIcon={<AtSign size={18} color={Colors.textDim} />}
+                    leftIcon={<AtSign size={18} color={c.textDim} />}
                   />
                   <Input
                     label="Email"
@@ -165,14 +168,14 @@ export function SignInScreen({ navigation }: any) {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    leftIcon={<Mail size={18} color={Colors.textDim} />}
+                    leftIcon={<Mail size={18} color={c.textDim} />}
                   />
                   <Input
                     label="Display Name (Optional)"
                     placeholder="What should friends call you?"
                     value={displayName}
                     onChangeText={setDisplayName}
-                    leftIcon={<User size={18} color={Colors.textDim} />}
+                    leftIcon={<User size={18} color={c.textDim} />}
                   />
                   <Input
                     label="Password"
@@ -180,7 +183,7 @@ export function SignInScreen({ navigation }: any) {
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
-                    leftIcon={<Lock size={18} color={Colors.textDim} />}
+                    leftIcon={<Lock size={18} color={c.textDim} />}
                   />
                 </>
               )}
@@ -201,7 +204,7 @@ export function SignInScreen({ navigation }: any) {
                 onPress={() => setShowServerConfig((v) => !v)}
                 style={styles.serverToggle}
               >
-                <Server size={14} color={Colors.textDim} />
+                <Server size={14} color={c.textDim} />
                 <Text style={styles.serverToggleText}>
                   {showServerConfig ? 'Hide Server Configuration' : 'Configure Server Endpoint'}
                 </Text>
@@ -234,10 +237,11 @@ export function SignInScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   keyboardView: {
     flex: 1,
@@ -256,36 +260,36 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: Radius.xxl,
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.sm,
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
   },
   brandTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 28,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
   brandSubtitle: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.2,
     marginTop: 4,
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xxl,
     padding: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
@@ -294,12 +298,12 @@ const styles = StyleSheet.create({
   },
   segmentedControl: {
     flexDirection: 'row',
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     borderRadius: Radius.pill,
     padding: 4,
     marginBottom: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.borderSubtle,
+    borderColor: c.borderSubtle,
   },
   segmentBtn: {
     flex: 1,
@@ -309,17 +313,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentBtnActive: {
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   segmentText: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     fontWeight: '700',
   },
   segmentTextActive: {
-    color: Colors.text,
+    color: c.text,
   },
   errorWrapper: {
     marginBottom: Spacing.md,
@@ -334,7 +338,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Colors.borderSubtle,
+    borderTopColor: c.borderSubtle,
     alignItems: 'center',
   },
   serverToggle: {
@@ -344,17 +348,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   serverToggleText: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 12,
     fontWeight: '600',
   },
   serverConfigBox: {
     width: '100%',
     marginTop: Spacing.md,
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     padding: Spacing.md,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
 });

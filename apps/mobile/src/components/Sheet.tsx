@@ -19,7 +19,8 @@ import {
   SPRING_PANEL,
   TIMING_FAST,
 } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface SheetProps {
   open: boolean;
@@ -60,6 +61,7 @@ export function Sheet({
   children,
   style,
 }: SheetProps) {
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
 
   // How far the panel is pushed off-screen, in pixels: 0 is fully open, and the
@@ -164,6 +166,7 @@ function Grabber({
   offset: SharedValue<number>;
   closedAt: number;
 }) {
+  const styles = useThemedStyles(makeStyles);
   const style = useAnimatedStyle(() => ({
     width: interpolate(offset.value, [0, closedAt * 0.3], [38, 54], 'clamp'),
     opacity: withTiming(offset.value > 2 ? 1 : 0.7, TIMING_FAST),
@@ -172,7 +175,8 @@ function Grabber({
   return <Animated.View style={[styles.grabber, style]} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -181,11 +185,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.62)',
   },
   bottom: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderTopLeftRadius: Radius.xxl,
     borderTopRightRadius: Radius.xxl,
     borderTopWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingTop: Spacing.sm,
   },
   start: {
@@ -195,15 +199,15 @@ const styles = StyleSheet.create({
     left: 0,
     width: '85%',
     maxWidth: 340,
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     borderRightWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   grabber: {
     alignSelf: 'center',
     height: 4,
     borderRadius: Radius.full,
-    backgroundColor: Colors.borderStrong,
+    backgroundColor: c.borderStrong,
     marginBottom: Spacing.sm,
   },
 });

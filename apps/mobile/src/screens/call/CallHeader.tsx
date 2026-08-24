@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ChevronDown, Users } from 'lucide-react-native';
 
 import type { CallStatus } from '@genzh/shared';
-import { Colors, Radius, Spacing, Stage } from '../../theme/tokens';
+import { Radius, Spacing, Stage, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /** `mm:ss`, or `h:mm:ss` once a call has run past the hour. */
 export function formatDuration(seconds: number): string {
@@ -41,6 +42,8 @@ export function CallHeader({
   onMinimize: () => void;
   onOpenRoster: () => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const connected = status === 'connected';
 
   return (
@@ -66,10 +69,10 @@ export function CallHeader({
               {
                 backgroundColor:
                   status === 'failed'
-                    ? Colors.danger
+                    ? c.danger
                     : connected
-                      ? Colors.live
-                      : Colors.warning,
+                      ? c.live
+                      : c.warning,
               },
             ]}
           />
@@ -92,14 +95,15 @@ export function CallHeader({
         style={styles.headcountPill}
         hitSlop={8}
       >
-        <Users size={13} color={Colors.accentText} />
+        <Users size={13} color={c.accentText} />
         <Text style={styles.headcountText}>{headcount}</Text>
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -151,10 +155,10 @@ const styles = StyleSheet.create({
     height: 40,
     paddingHorizontal: 12,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
   },
   headcountText: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 13,
     fontWeight: '800',
   },

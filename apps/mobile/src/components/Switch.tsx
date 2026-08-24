@@ -9,7 +9,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_CONTROL } from '../theme/motion';
-import { Colors, Radius } from '../theme/tokens';
+import { Radius } from '../theme/tokens';
+import { useColors } from '../theme/ThemeContext';
 
 export interface SwitchProps {
   checked: boolean;
@@ -40,6 +41,7 @@ export function Switch({
   style,
   accessibilityLabel,
 }: SwitchProps) {
+  const c = useColors();
   const progress = useSharedValue(checked ? 1 : 0);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export function Switch({
     backgroundColor: interpolateColor(
       progress.value,
       [0, 1],
-      [Colors.surfaceActive, Colors.accent],
+      [c.surfaceActive, c.accent],
     ),
   }));
 
@@ -58,7 +60,7 @@ export function Switch({
     backgroundColor: interpolateColor(
       progress.value,
       [0, 1],
-      [Colors.textMuted, Colors.accentContrast],
+      [c.textMuted, c.accentContrast],
     ),
     transform: [
       { translateX: progress.value * TRAVEL },

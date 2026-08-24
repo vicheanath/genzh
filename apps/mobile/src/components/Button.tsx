@@ -16,7 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_CONTROL } from '../theme/motion';
-import { Colors, Elevation, Radius } from '../theme/tokens';
+import { Radius, type Palette, type ElevationSet } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'subtle' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -66,6 +67,7 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  const VARIANTS = useThemedStyles(makeVARIANTS);
   const press = useSharedValue(0);
   const inert = disabled || loading;
 
@@ -172,55 +174,56 @@ const TRANSPARENT = 'transparent';
    transition does. */
 const CLEAR_WHITE = 'rgba(255, 255, 255, 0)';
 
-const VARIANTS: Record<ButtonVariant, Tone> = {
+const makeVARIANTS = (c: Palette, e: ElevationSet): Record<ButtonVariant, Tone> =>
+  ({
   /* Ink on lime — rule 1, and the single most recognisable thing on screen.
      `accentContrast` is a near-black. If this ever looks wrong, the fix is not
      to lighten the text. */
   primary: {
-    background: Colors.accent,
-    backgroundPressed: Colors.accentActive,
-    border: Colors.accent,
-    borderPressed: Colors.accentActive,
-    foreground: Colors.accentContrast,
-    foregroundPressed: Colors.accentContrast,
-    elevation: Elevation.sm,
+    background: c.accent,
+    backgroundPressed: c.accentActive,
+    border: c.accent,
+    borderPressed: c.accentActive,
+    foreground: c.accentContrast,
+    foregroundPressed: c.accentContrast,
+    elevation: e.sm,
   },
   secondary: {
-    background: Colors.surface,
-    backgroundPressed: Colors.surfaceHover,
-    border: Colors.borderStrong,
-    borderPressed: Colors.textSubtle,
-    foreground: Colors.text,
-    foregroundPressed: Colors.text,
-    elevation: Elevation.sm,
+    background: c.surface,
+    backgroundPressed: c.surfaceHover,
+    border: c.borderStrong,
+    borderPressed: c.textSubtle,
+    foreground: c.text,
+    foregroundPressed: c.text,
+    elevation: e.sm,
   },
   ghost: {
     background: CLEAR_WHITE,
-    backgroundPressed: Colors.hover,
+    backgroundPressed: c.hover,
     border: TRANSPARENT,
     borderPressed: TRANSPARENT,
-    foreground: Colors.textMuted,
-    foregroundPressed: Colors.text,
+    foreground: c.textMuted,
+    foregroundPressed: c.text,
   },
   subtle: {
-    background: Colors.accentSubtle,
-    backgroundPressed: Colors.accentSubtleHover,
+    background: c.accentSubtle,
+    backgroundPressed: c.accentSubtleHover,
     border: TRANSPARENT,
     borderPressed: TRANSPARENT,
-    foreground: Colors.accentText,
-    foregroundPressed: Colors.accentText,
+    foreground: c.accentText,
+    foregroundPressed: c.accentText,
   },
   /* Solid, as on the web: a destructive action is not a quiet one. */
   danger: {
-    background: Colors.danger,
-    backgroundPressed: Colors.dangerActive,
-    border: Colors.danger,
-    borderPressed: Colors.dangerActive,
+    background: c.danger,
+    backgroundPressed: c.dangerActive,
+    border: c.danger,
+    borderPressed: c.dangerActive,
     foreground: '#fff',
     foregroundPressed: '#fff',
-    elevation: Elevation.sm,
+    elevation: e.sm,
   },
-};
+});
 
 /** Heights are the web's, converted at 16px/rem: 2 / 2.375 / 2.75rem. */
 const SIZES: Record<ButtonSize, { height: number; paddingHorizontal: number; fontSize: number }> = {

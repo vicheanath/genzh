@@ -21,11 +21,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppStore } from '../../lib/store';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
-import { Colors, Spacing } from '../../theme/tokens';
+import { Spacing } from '../../theme/tokens';
+import { useColors } from '../../theme/ThemeContext';
 
 import { PanelList, PanelSkeleton } from './PanelList';
 import type { CommunityAbilities } from './tabs';
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 export function MembersTab({
   community,
@@ -34,6 +35,8 @@ export function MembersTab({
   community: CommunityWithPermissions;
   abilities: CommunityAbilities;
 }) {
+  const panel = usePanel();
+  const c = useColors();
   const { token, getToken } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
@@ -152,7 +155,7 @@ export function MembersTab({
                   accent={profile?.accent_color}
                   size={36}
                   presence={isOnline(member.user_id) ? 'online' : 'offline'}
-                  ringColor={Colors.surface}
+                  ringColor={c.surface}
                 />
               </Pressable>
 
@@ -161,7 +164,7 @@ export function MembersTab({
                   <Text style={panel.listLabel} numberOfLines={1}>
                     {name}
                   </Text>
-                  {isOwner ? <Crown size={13} color={Colors.warning} /> : null}
+                  {isOwner ? <Crown size={13} color={c.warning} /> : null}
                 </View>
                 <Text style={panel.listHint} numberOfLines={1}>
                   @{profile?.handle ?? member.user_id.slice(0, 8)}
@@ -213,7 +216,7 @@ export function MembersTab({
                     size="sm"
                     variant="ghost"
                     onPress={() => void remove(member.user_id, name)}
-                    icon={<UserMinus size={16} color={Colors.textMuted} />}
+                    icon={<UserMinus size={16} color={c.textMuted} />}
                   />
                 ) : null}
               </View>

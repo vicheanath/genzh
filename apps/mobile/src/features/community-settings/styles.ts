@@ -1,48 +1,50 @@
 import { StyleSheet } from 'react-native';
 
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 /** The shared look of a community-settings panel. */
-export const panel = StyleSheet.create({
+export const makePanel = (c: Palette) =>
+  StyleSheet.create({
   content: {
     padding: Spacing.lg,
     paddingBottom: Spacing.xxl * 2,
     gap: Spacing.md,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
   description: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
     marginTop: -Spacing.sm,
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.lg,
     gap: Spacing.md,
   },
   cardTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '800',
   },
   fieldLabel: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   listHeading: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -53,10 +55,10 @@ export const panel = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.md,
   },
   listText: {
@@ -69,12 +71,12 @@ export const panel = StyleSheet.create({
     gap: Spacing.sm,
   },
   listLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
   },
   listHint: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
   },
   listActions: {
@@ -83,7 +85,7 @@ export const panel = StyleSheet.create({
     gap: Spacing.sm,
   },
   empty: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: Spacing.xl,
@@ -95,17 +97,17 @@ export const panel = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   identityName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '800',
   },
   identityMeta: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     marginTop: 2,
   },
   code: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontFamily: 'monospace',
     fontSize: 12,
     padding: 0,
@@ -113,19 +115,19 @@ export const panel = StyleSheet.create({
   danger: {
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.danger,
-    backgroundColor: Colors.dangerSubtle,
+    borderColor: c.danger,
+    backgroundColor: c.dangerSubtle,
     padding: Spacing.lg,
     gap: Spacing.md,
     marginTop: Spacing.xl,
   },
   dangerTitle: {
-    color: Colors.danger,
+    color: c.danger,
     fontSize: 14,
     fontWeight: '800',
   },
   dangerText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -159,18 +161,18 @@ export const panel = StyleSheet.create({
     gap: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.borderSubtle,
+    borderBottomColor: c.borderSubtle,
   },
   permissionText: {
     flex: 1,
   },
   permissionLabel: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '700',
   },
   permissionHint: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 1,
@@ -179,8 +181,11 @@ export const panel = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
 });
+
+/** The shared community-settings panel sheet for the active theme. */
+export const usePanel = () => useThemedStyles(makePanel);

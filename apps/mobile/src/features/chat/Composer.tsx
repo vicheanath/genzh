@@ -19,7 +19,8 @@ import {
   type RoomWithPermissions,
 } from '@genzh/shared';
 
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { EmojiPicker } from './EmojiPicker';
 import { MentionSuggestions } from './MentionSuggestions';
@@ -66,6 +67,8 @@ export function Composer({
   disabled,
   disabledReason,
 }: ComposerProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const [draft, setDraft] = useState('');
   // Tracked separately from the value: which mention is being completed is
   // decided by where the caret is, and moving the caret changes the answer
@@ -160,7 +163,7 @@ export function Composer({
         <View style={styles.editingBar}>
           <Text style={styles.editingText}>Editing message</Text>
           <Pressable onPress={onCancelEdit} hitSlop={8} accessibilityLabel="Cancel edit">
-            <X size={15} color={Colors.textMuted} />
+            <X size={15} color={c.textMuted} />
           </Pressable>
         </View>
       ) : null}
@@ -182,10 +185,10 @@ export function Composer({
             event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
           ) => setCaret(event.nativeEvent.selection.end)}
           placeholder={`Message #${room.name}`}
-          placeholderTextColor={Colors.textDim}
+          placeholderTextColor={c.textDim}
           multiline
           maxLength={MAX_LENGTH}
-          selectionColor={Colors.accent}
+          selectionColor={c.accent}
         />
 
         <View style={styles.bar}>
@@ -196,7 +199,7 @@ export function Composer({
               hitSlop={8}
               style={styles.tool}
             >
-              <Smile size={18} color={Colors.textMuted} />
+              <Smile size={18} color={c.textMuted} />
             </Pressable>
 
             <Pressable
@@ -205,7 +208,7 @@ export function Composer({
               hitSlop={8}
               style={styles.tool}
             >
-              <AtSign size={18} color={Colors.textMuted} />
+              <AtSign size={18} color={c.textMuted} />
             </Pressable>
 
             {onTogglePersona ? (
@@ -215,7 +218,7 @@ export function Composer({
                   onPress={() => onTogglePersona(true)}
                   style={[styles.chip, isAnonymous && styles.chipActive]}
                 >
-                  <Lock size={11} color={isAnonymous ? Colors.accentContrast : Colors.textMuted} />
+                  <Lock size={11} color={isAnonymous ? c.accentContrast : c.textMuted} />
                   <Text style={[styles.chipText, isAnonymous && styles.chipTextActive]} numberOfLines={1}>
                     {anonAlias ?? 'Anonymous'}
                   </Text>
@@ -225,7 +228,7 @@ export function Composer({
                   onPress={() => onTogglePersona(false)}
                   style={[styles.chip, !isAnonymous && styles.chipActive]}
                 >
-                  <User size={11} color={!isAnonymous ? Colors.accentContrast : Colors.textMuted} />
+                  <User size={11} color={!isAnonymous ? c.accentContrast : c.textMuted} />
                   <Text style={[styles.chipText, !isAnonymous && styles.chipTextActive]} numberOfLines={1}>
                     {publicName}
                   </Text>
@@ -248,7 +251,7 @@ export function Composer({
               onPress={submit}
               style={[styles.send, (empty || problem !== null) && styles.sendDisabled]}
             >
-              <Send size={17} color={Colors.accentContrast} />
+              <Send size={17} color={c.accentContrast} />
             </Pressable>
           </View>
         </View>
@@ -266,11 +269,12 @@ export function Composer({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   field: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     borderRadius: Radius.xl,
     margin: Spacing.md,
     marginTop: Spacing.sm,
@@ -278,13 +282,13 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
   },
   fieldAnonymous: {
-    borderColor: Colors.accent,
+    borderColor: c.accent,
   },
   fieldProblem: {
-    borderColor: Colors.danger,
+    borderColor: c.danger,
   },
   input: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     lineHeight: 20,
     maxHeight: 130,
@@ -319,22 +323,22 @@ const styles = StyleSheet.create({
     gap: 4,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
   },
   chipActive: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   chipText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     fontWeight: '700',
   },
   chipTextActive: {
-    color: Colors.accentContrast,
+    color: c.accentContrast,
   },
   submit: {
     flexDirection: 'row',
@@ -342,19 +346,19 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   counter: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
   counterFull: {
-    color: Colors.danger,
+    color: c.danger,
   },
   send: {
     width: 36,
     height: 36,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -362,7 +366,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   problem: {
-    color: Colors.danger,
+    color: c.danger,
     fontSize: 12,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.sm,
@@ -375,7 +379,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
   },
   editingText: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -384,7 +388,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   disabledText: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     textAlign: 'center',
   },

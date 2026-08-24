@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import { SkeletonRows } from '../../components/Skeleton';
 
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /**
  * The list every panel ends in — roles, members, channels.
@@ -21,6 +21,7 @@ export function PanelList({
   empty: boolean;
   emptyText: string;
 }) {
+  const panel = usePanel();
   if (empty) return <Text style={panel.empty}>{emptyText}</Text>;
   return <View style={{ gap: 8 }}>{children}</View>;
 }

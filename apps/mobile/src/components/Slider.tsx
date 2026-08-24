@@ -9,7 +9,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_CONTROL } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface SliderProps {
   value: number;
@@ -52,6 +53,7 @@ export function Slider({
   disabled,
   style,
 }: SliderProps) {
+  const styles = useThemedStyles(makeStyles);
   const width = useSharedValue(0);
   const ratio = useSharedValue(fractionOf(value, min, max));
   const grabbed = useSharedValue(0);
@@ -152,7 +154,8 @@ function fractionOf(value: number, min: number, max: number): number {
   return Math.min(1, Math.max(0, (value - min) / (max - min)));
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     gap: Spacing.sm,
   },
@@ -162,12 +165,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   label: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
   value: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 13,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
@@ -179,21 +182,21 @@ const styles = StyleSheet.create({
   track: {
     height: 6,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceActive,
+    backgroundColor: c.surfaceActive,
     overflow: 'hidden',
   },
   indicator: {
     height: '100%',
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   thumb: {
     position: 'absolute',
     width: THUMB,
     height: THUMB,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     borderWidth: 3,
-    borderColor: Colors.bg,
+    borderColor: c.bg,
   },
   disabled: {
     opacity: 0.5,

@@ -7,7 +7,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_PANEL } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface ProgressProps {
   /** 0–100. */
@@ -39,6 +40,8 @@ export function Progress({
   color,
   style,
 }: ProgressProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const fill = Math.min(100, Math.max(0, value));
   const progress = useSharedValue(fill);
 
@@ -69,7 +72,7 @@ export function Progress({
         <Animated.View
           style={[
             styles.indicator,
-            { backgroundColor: color ?? (tone === 'live' ? Colors.live : Colors.accent) },
+            { backgroundColor: color ?? (tone === 'live' ? c.live : c.accent) },
             barStyle,
           ]}
         />
@@ -78,7 +81,8 @@ export function Progress({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     gap: Spacing.xs,
   },
@@ -93,12 +97,12 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
   value: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
@@ -106,7 +110,7 @@ const styles = StyleSheet.create({
   track: {
     height: 10,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceActive,
+    backgroundColor: c.surfaceActive,
     overflow: 'hidden',
   },
   trackSm: {

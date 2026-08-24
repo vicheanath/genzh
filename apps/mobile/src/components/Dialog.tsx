@@ -3,7 +3,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 
 import { Button } from './Button';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface DialogProps {
   open: boolean;
@@ -44,6 +45,7 @@ export function Dialog({
   cancelLabel = 'Cancel',
   hideCancel,
 }: DialogProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Modal
       visible={open}
@@ -102,7 +104,8 @@ export function Dialog({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.66)',
@@ -113,20 +116,20 @@ const styles = StyleSheet.create({
   popup: {
     width: '100%',
     maxWidth: 460,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xxl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.xl,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   description: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: Spacing.xs,

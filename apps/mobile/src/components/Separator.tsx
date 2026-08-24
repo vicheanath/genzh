@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
-import { Colors, Spacing } from '../theme/tokens';
+import { Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface SeparatorProps {
   orientation?: 'horizontal' | 'vertical';
@@ -19,8 +20,10 @@ export function Separator({
   tone = 'default',
   style,
 }: SeparatorProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const color =
-    tone === 'accent' ? Colors.accent : tone === 'danger' ? Colors.danger : Colors.border;
+    tone === 'accent' ? c.accent : tone === 'danger' ? c.danger : c.border;
 
   if (orientation === 'vertical') {
     return <View style={[styles.vertical, { backgroundColor: color }, style]} />;
@@ -39,7 +42,8 @@ export function Separator({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   horizontal: {
     height: StyleSheet.hairlineWidth * 2,
   },
@@ -56,7 +60,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.4,

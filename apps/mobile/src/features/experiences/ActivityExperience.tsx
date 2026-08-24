@@ -18,9 +18,10 @@ import { Slider } from '../../components/Slider';
 import { Tabs } from '../../components/Tabs';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette as ThemePalette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
-import { exp, postToChat } from './shared';
+import { useExp, postToChat } from './shared';
 
 type Tab = 'whiteboard' | 'soundboard';
 
@@ -62,6 +63,9 @@ const BOARD_HEIGHT = 320;
  * cheap enough at the scale a phone screen can hold.
  */
 export function ActivityExperience({ room }: { room: RoomWithPermissions }) {
+  const styles = useThemedStyles(makeStyles);
+  const exp = useExp();
+  const c = useColors();
   const { getToken } = useAuth();
   const toast = useToast();
 
@@ -95,7 +99,7 @@ export function ActivityExperience({ room }: { room: RoomWithPermissions }) {
             // Erasing paints the board's own colour: with one flat background
             // that is indistinguishable from removing ink, and it keeps every
             // stroke a plain path.
-            color: erasingRef.current ? Colors.sunken : colorRef.current,
+            color: erasingRef.current ? c.sunken : colorRef.current,
             width: erasingRef.current ? brushRef.current * 3 : brushRef.current,
           });
         },
@@ -136,12 +140,12 @@ export function ActivityExperience({ room }: { room: RoomWithPermissions }) {
           {
             value: 'whiteboard',
             label: 'Whiteboard',
-            icon: <Palette size={14} color={tab === 'whiteboard' ? Colors.accentContrast : Colors.textDim} />,
+            icon: <Palette size={14} color={tab === 'whiteboard' ? c.accentContrast : c.textDim} />,
           },
           {
             value: 'soundboard',
             label: 'Soundboard',
-            icon: <Music size={14} color={tab === 'soundboard' ? Colors.accentContrast : Colors.textDim} />,
+            icon: <Music size={14} color={tab === 'soundboard' ? c.accentContrast : c.textDim} />,
           },
         ]}
       />
@@ -202,7 +206,7 @@ export function ActivityExperience({ room }: { room: RoomWithPermissions }) {
               style={exp.grow}
               onPress={() => setErasing((on) => !on)}
               icon={
-                <Eraser size={15} color={erasing ? Colors.accentContrast : Colors.text} />
+                <Eraser size={15} color={erasing ? c.accentContrast : c.text} />
               }
             />
             <Button
@@ -216,7 +220,7 @@ export function ActivityExperience({ room }: { room: RoomWithPermissions }) {
               variant="ghost"
               onPress={() => setStrokes([])}
               disabled={strokes.length === 0}
-              icon={<Trash2 size={15} color={Colors.textMuted} />}
+              icon={<Trash2 size={15} color={c.textMuted} />}
             />
           </View>
         </>
@@ -236,7 +240,7 @@ export function ActivityExperience({ room }: { room: RoomWithPermissions }) {
               >
                 <Text style={styles.padEmoji}>{sound.emoji}</Text>
                 <Text style={styles.padName}>{sound.name}</Text>
-                <Send size={12} color={Colors.textDim} />
+                <Send size={12} color={c.textDim} />
               </Pressable>
             ))}
           </View>
@@ -246,13 +250,14 @@ export function ActivityExperience({ room }: { room: RoomWithPermissions }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: ThemePalette) =>
+  StyleSheet.create({
   board: {
     height: BOARD_HEIGHT,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.sunken,
+    borderColor: c.border,
+    backgroundColor: c.sunken,
     overflow: 'hidden',
   },
   swatch: {
@@ -263,7 +268,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   swatchActive: {
-    borderColor: Colors.text,
+    borderColor: c.text,
   },
   pads: {
     flexDirection: 'row',
@@ -276,19 +281,19 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    borderColor: c.border,
+    backgroundColor: c.surface,
     paddingVertical: Spacing.lg,
   },
   padPressed: {
-    backgroundColor: Colors.accentSubtle,
-    borderColor: Colors.accent,
+    backgroundColor: c.accentSubtle,
+    borderColor: c.accent,
   },
   padEmoji: {
     fontSize: 28,
   },
   padName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 12,
     fontWeight: '700',
   },

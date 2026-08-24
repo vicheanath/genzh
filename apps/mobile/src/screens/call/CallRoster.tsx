@@ -4,7 +4,8 @@ import { Hand, Mic, MicOff, Video } from 'lucide-react-native';
 
 import { Avatar } from '../../components/Avatar';
 import { Sheet } from '../../components/Sheet';
-import { Colors, Radius, Spacing, Stage } from '../../theme/tokens';
+import { Radius, Spacing, Stage } from '../../theme/tokens';
+import { useColors } from '../../theme/ThemeContext';
 
 import type { CallTile } from './useCallRoster';
 
@@ -25,6 +26,7 @@ export function CallRoster({
   onOpenChange: (open: boolean) => void;
   members: CallTile[];
 }) {
+  const c = useColors();
   return (
     <Sheet open={open} onOpenChange={onOpenChange} maxHeightRatio={0.8} style={styles.sheet}>
       <View style={styles.header}>
@@ -58,21 +60,21 @@ export function CallRoster({
             <View style={styles.badges}>
               {member.handRaised ? (
                 <Badge background="rgba(250, 173, 20, 0.18)">
-                  <Hand size={14} color={Colors.warning} />
+                  <Hand size={14} color={c.warning} />
                 </Badge>
               ) : null}
               {member.cameraOn ? (
-                <Badge background={Colors.accentSubtle}>
-                  <Video size={14} color={Colors.accentText} />
+                <Badge background={c.accentSubtle}>
+                  <Video size={14} color={c.accentText} />
                 </Badge>
               ) : null}
               {member.muted ? (
-                <Badge background={Colors.dangerSubtle}>
-                  <MicOff size={14} color={Colors.danger} />
+                <Badge background={c.dangerSubtle}>
+                  <MicOff size={14} color={c.danger} />
                 </Badge>
               ) : (
-                <Badge background={Colors.accentSubtle}>
-                  <Mic size={14} color={Colors.accentText} />
+                <Badge background={c.accentSubtle}>
+                  <Mic size={14} color={c.accentText} />
                 </Badge>
               )}
             </View>

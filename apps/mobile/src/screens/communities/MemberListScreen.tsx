@@ -11,7 +11,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppStore } from '../../lib/store';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 /**
  * Who is in a community, or who is in a room.
@@ -21,6 +22,7 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  * and so is the sort.
  */
 export function MemberListScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
   const { communityId, roomId, title } = route.params ?? {};
   const { token, user } = useAuth();
   const { isOnline } = usePresence();
@@ -108,17 +110,18 @@ export function MemberListScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   content: {
     padding: Spacing.lg,
     paddingBottom: Spacing.xxl * 2,
   },
   heading: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -126,19 +129,19 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   message: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: Spacing.xxl,
   },
   youTag: {
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
   },
   youText: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',

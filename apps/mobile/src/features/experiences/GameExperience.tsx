@@ -21,9 +21,10 @@ import { Progress } from '../../components/Progress';
 import { Tabs } from '../../components/Tabs';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
-import { exp, postToChat } from './shared';
+import { useExp, postToChat } from './shared';
 
 type GameMode = 'trivia' | 'would_you_rather' | 'truth_or_dare' | 'word_chain';
 
@@ -116,6 +117,9 @@ const DEFAULT_TOD_DECK: TruthOrDareItem[] = [
  * `AsyncStorage`, which is the mobile stand-in for the web's `localStorage`.
  */
 export function GameExperience({ room }: { room: RoomWithPermissions }) {
+  const styles = useThemedStyles(makeStyles);
+  const exp = useExp();
+  const c = useColors();
   const { user, getToken } = useAuth();
   const toast = useToast();
 
@@ -388,7 +392,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
     <ScrollView contentContainerStyle={exp.content} keyboardShouldPersistTaps="handled">
       <View style={exp.cardHeader}>
         <View style={exp.tag}>
-          <Gamepad2 size={13} color={Colors.accent} />
+          <Gamepad2 size={13} color={c.accent} />
           <Text style={exp.tagText}>Party mini-games</Text>
         </View>
         {isHost ? <Badge text="Host controls" tone="accent" /> : null}
@@ -411,11 +415,11 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
           <View style={exp.cardHeader}>
             <Badge text={trivia.category} />
             <View style={exp.row}>
-              <Trophy size={13} color={Colors.accent} />
+              <Trophy size={13} color={c.accent} />
               <Text style={styles.score}>{score}</Text>
               {streak > 1 ? (
                 <>
-                  <Flame size={13} color={Colors.warning} />
+                  <Flame size={13} color={c.warning} />
                   <Text style={styles.streak}>{streak}x</Text>
                 </>
               ) : null}
@@ -433,20 +437,20 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
                   title="Play again"
                   style={exp.grow}
                   onPress={resetTrivia}
-                  icon={<RotateCcw size={14} color={Colors.accentContrast} />}
+                  icon={<RotateCcw size={14} color={c.accentContrast} />}
                 />
                 <Button
                   title="Share"
                   variant="secondary"
                   onPress={() => void shareTrivia()}
-                  icon={<Send size={13} color={Colors.text} />}
+                  icon={<Send size={13} color={c.text} />}
                 />
               </View>
             </>
           ) : (
             <>
               <View style={exp.row}>
-                <Timer size={13} color={timeLeft <= 5 ? Colors.danger : Colors.textMuted} />
+                <Timer size={13} color={timeLeft <= 5 ? c.danger : c.textMuted} />
                 <Text style={[styles.clock, timeLeft <= 5 && styles.clockLow]}>
                   {timeLeft}s
                 </Text>
@@ -454,7 +458,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
                   <Progress
                     value={(timeLeft / TRIVIA_SECONDS) * 100}
                     size="sm"
-                    color={timeLeft <= 5 ? Colors.danger : Colors.accent}
+                    color={timeLeft <= 5 ? c.danger : c.accent}
                   />
                 </View>
               </View>
@@ -531,13 +535,13 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
                 setWyrIndex((index) => (index + 1) % wyrDeck.length);
                 setWyrVoted(null);
               }}
-              icon={<Shuffle size={14} color={Colors.text} />}
+              icon={<Shuffle size={14} color={c.text} />}
             />
             <Button
               title="Share"
               variant="ghost"
               onPress={() => void shareWyr()}
-              icon={<Send size={13} color={Colors.textMuted} />}
+              icon={<Send size={13} color={c.textMuted} />}
             />
           </View>
         </View>
@@ -556,13 +560,13 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
               title="Draw another"
               style={exp.grow}
               onPress={() => setTodIndex(Math.floor(Math.random() * todDeck.length))}
-              icon={<Shuffle size={14} color={Colors.accentContrast} />}
+              icon={<Shuffle size={14} color={c.accentContrast} />}
             />
             <Button
               title="Share"
               variant="secondary"
               onPress={() => void shareTod()}
-              icon={<Send size={13} color={Colors.text} />}
+              icon={<Send size={13} color={c.text} />}
             />
           </View>
         </View>
@@ -624,7 +628,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
                   <Text
                     style={[
                       exp.chipText,
-                      newAnswer === index && { color: Colors.accentContrast },
+                      newAnswer === index && { color: c.accentContrast },
                     ]}
                   >
                     ✓
@@ -641,7 +645,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
             <Button
               title="Add to trivia deck"
               onPress={() => void saveTrivia()}
-              icon={<Plus size={14} color={Colors.accentContrast} />}
+              icon={<Plus size={14} color={c.accentContrast} />}
             />
           </View>
 
@@ -652,7 +656,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
             <Button
               title="Add dilemma"
               onPress={() => void saveWyr()}
-              icon={<Plus size={14} color={Colors.accentContrast} />}
+              icon={<Plus size={14} color={c.accentContrast} />}
             />
           </View>
 
@@ -675,7 +679,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
             <Button
               title="Add prompt"
               onPress={() => void saveTod()}
-              icon={<Plus size={14} color={Colors.accentContrast} />}
+              icon={<Plus size={14} color={c.accentContrast} />}
             />
           </View>
         </Collapsible>
@@ -684,45 +688,46 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   score: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 13,
     fontWeight: '800',
   },
   streak: {
-    color: Colors.warning,
+    color: c.warning,
     fontSize: 13,
     fontWeight: '800',
   },
   clock: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
     minWidth: 30,
   },
   clockLow: {
-    color: Colors.danger,
+    color: c.danger,
   },
   answer: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     padding: Spacing.md,
     gap: Spacing.sm,
   },
   answerCorrect: {
-    borderColor: Colors.success,
-    backgroundColor: Colors.successSubtle,
+    borderColor: c.success,
+    backgroundColor: c.successSubtle,
   },
   answerWrong: {
-    borderColor: Colors.danger,
-    backgroundColor: Colors.dangerSubtle,
+    borderColor: c.danger,
+    backgroundColor: c.dangerSubtle,
   },
   answerText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -731,28 +736,28 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: Spacing.sm,
   },
   answerPickActive: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   progressLabel: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
     fontWeight: '700',
     textAlign: 'center',
   },
   letter: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontWeight: '800',
   },
   builderTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '800',
   },

@@ -7,11 +7,13 @@ import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
+import { EmptyState } from '../../components/EmptyState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
-import { exp, postToChat } from './shared';
+import { useExp, postToChat } from './shared';
 
 interface DebatePoint {
   id: string;
@@ -21,27 +23,14 @@ interface DebatePoint {
   votes: number;
 }
 
-const DEFAULT_POINTS: DebatePoint[] = [
-  {
-    id: 'p1',
-    side: 'pro',
-    authorName: 'Alex',
-    text: 'A WebRTC SFU gives every participant one upload, so a ten-person room does not melt a phone.',
-    votes: 6,
-  },
-  {
-    id: 'p2',
-    side: 'con',
-    authorName: 'Jordan',
-    text: 'For a two-person call a peer-to-peer mesh is cheaper and has one hop less of latency.',
-    votes: 4,
-  },
-];
 
 const TURN_SECONDS = 60;
 
 /** A two-sided debate: a vote meter, a speaker clock, and a claims board. */
 export function DebateExperience({ room }: { room: RoomWithPermissions }) {
+  const styles = useThemedStyles(makeStyles);
+  const exp = useExp();
+  const c = useColors();
   const { user, getToken } = useAuth();
   const toast = useToast();
 
@@ -53,7 +42,7 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
   const [timerActive, setTimerActive] = useState(false);
   const [activeSide, setActiveSide] = useState<'pro' | 'con'>('pro');
 
-  const [points, setPoints] = useState<DebatePoint[]>(DEFAULT_POINTS);
+  const [points, setPoints] = useState<DebatePoint[]>([]);
   const [newPoint, setNewPoint] = useState('');
   const [pointSide, setPointSide] = useState<'pro' | 'con'>('pro');
 
@@ -129,11 +118,11 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
       <View style={exp.card}>
         <View style={exp.cardHeader}>
           <View style={exp.tag}>
-            <Flame size={13} color={Colors.accent} />
+            <Flame size={13} color={c.accent} />
             <Text style={exp.tagText}>Live two-sided debate</Text>
           </View>
           <View style={exp.row}>
-            <Users size={12} color={Colors.textDim} />
+            <Users size={12} color={c.textDim} />
             <Text style={styles.meta}>{total} votes</Text>
           </View>
         </View>
@@ -182,14 +171,14 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
           size="sm"
           variant="ghost"
           onPress={() => void shareStandings()}
-          icon={<Send size={13} color={Colors.textMuted} />}
+          icon={<Send size={13} color={c.textMuted} />}
         />
       </View>
 
       <View style={exp.card}>
         <View style={exp.cardHeader}>
           <View style={exp.row}>
-            <Timer size={15} color={Colors.textMuted} />
+            <Timer size={15} color={c.textMuted} />
             <Text style={styles.cardLabel}>Speaker turn clock</Text>
           </View>
           <Badge
@@ -210,7 +199,7 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
             style={exp.grow}
             onPress={() => setTimerActive((active) => !active)}
             icon={
-              <Play size={13} color={timerActive ? Colors.text : Colors.accentContrast} />
+              <Play size={13} color={timerActive ? c.text : c.accentContrast} />
             }
           />
           <Button
@@ -221,7 +210,7 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
               setTimerActive(false);
               setTimerSeconds(TURN_SECONDS);
             }}
-            icon={<RotateCcw size={13} color={Colors.textMuted} />}
+            icon={<RotateCcw size={13} color={c.textMuted} />}
           />
           <Button
             title="Switch"
@@ -231,7 +220,7 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
               setActiveSide((side) => (side === 'pro' ? 'con' : 'pro'));
               setTimerSeconds(TURN_SECONDS);
             }}
-            icon={<Zap size={13} color={Colors.textMuted} />}
+            icon={<Zap size={13} color={c.textMuted} />}
           />
         </View>
       </View>
@@ -268,6 +257,14 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
         <Button title="Post claim" onPress={addPoint} disabled={!newPoint.trim()} />
       </View>
 
+      {points.length === 0 ? (
+        <EmptyState
+          icon={<Zap size={28} color={c.textSubtle} />}
+          title="No claims yet"
+          description="Post the first claim for either side to open the debate."
+        />
+      ) : null}
+
       {points.map((point) => (
         <View
           key={point.id}
@@ -299,7 +296,7 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
             }
             style={styles.upvote}
           >
-            <Flame size={13} color={Colors.accent} />
+            <Flame size={13} color={c.accent} />
             <Text style={styles.upvoteText}>{point.votes} agree</Text>
           </Pressable>
         </View>
@@ -308,14 +305,15 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   meta: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 12,
     fontWeight: '700',
   },
   cardLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -324,12 +322,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   proLabel: {
-    color: Colors.live,
+    color: c.live,
     fontSize: 12,
     fontWeight: '800',
   },
   conLabel: {
-    color: Colors.danger,
+    color: c.danger,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -338,50 +336,50 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: Radius.full,
     overflow: 'hidden',
-    backgroundColor: Colors.surfaceActive,
+    backgroundColor: c.surfaceActive,
   },
   proFill: {
-    backgroundColor: Colors.live,
+    backgroundColor: c.live,
   },
   conFill: {
-    backgroundColor: Colors.danger,
+    backgroundColor: c.danger,
   },
   proChipActive: {
-    borderColor: Colors.live,
-    backgroundColor: Colors.liveSubtle,
+    borderColor: c.live,
+    backgroundColor: c.liveSubtle,
   },
   proChipText: {
-    color: Colors.live,
+    color: c.live,
   },
   conChipActive: {
-    borderColor: Colors.danger,
-    backgroundColor: Colors.dangerSubtle,
+    borderColor: c.danger,
+    backgroundColor: c.dangerSubtle,
   },
   conChipText: {
-    color: Colors.danger,
+    color: c.danger,
   },
   point: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
     borderLeftWidth: 3,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.lg,
     gap: Spacing.sm,
   },
   proPoint: {
-    borderLeftColor: Colors.live,
+    borderLeftColor: c.live,
   },
   conPoint: {
-    borderLeftColor: Colors.danger,
+    borderLeftColor: c.danger,
   },
   author: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '700',
   },
   pointText: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -391,12 +389,12 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     alignSelf: 'flex-start',
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
     paddingHorizontal: Spacing.md,
     paddingVertical: 4,
   },
   upvoteText: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 11,
     fontWeight: '800',
   },

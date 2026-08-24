@@ -12,10 +12,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useProfiles } from '../../lib/useProfiles';
 
 import { useSubmission } from './useSubmission';
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /** Blocked users cannot send you friend requests or reach you directly. */
 export function BlockedTab() {
+  const panel = usePanel();
   const { token } = useAuth();
   const toast = useToast();
   const submit = useSubmission();

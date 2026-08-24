@@ -7,7 +7,8 @@ import { MonitorUp, Radio } from 'lucide-react-native';
 import { useVoice } from '../../context/VoiceContext';
 import { webrtcModule } from '../../lib/webrtc/MobileVoiceClient';
 import { useBottomInset } from '../../theme/layout';
-import { Colors, Radius, Spacing, Stage } from '../../theme/tokens';
+import { Radius, Spacing, Stage, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { CallDock } from './CallDock';
 import { CallHeader } from './CallHeader';
@@ -32,6 +33,8 @@ const REACTION_MS = 2400;
  * the aurora behind the tiles. A call is a place you entered.
  */
 export function CallScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const bottomInset = useBottomInset();
   const {
     activeRoomName,
@@ -173,9 +176,9 @@ export function CallScreen({ navigation }: any) {
               <View style={styles.spotlightFrame}>
                 <View style={styles.spotlightTag}>
                   {hasScreenShare ? (
-                    <MonitorUp size={12} color={Colors.accentContrast} />
+                    <MonitorUp size={12} color={c.accentContrast} />
                   ) : (
-                    <Radio size={12} color={Colors.accentContrast} />
+                    <Radio size={12} color={c.accentContrast} />
                   )}
                   <Text style={styles.spotlightTagText}>
                     {hasScreenShare ? 'SCREEN' : 'SPOTLIGHT'}
@@ -256,7 +259,8 @@ export function CallScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Stage.bg,
@@ -270,12 +274,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.dangerSubtle,
+    backgroundColor: c.dangerSubtle,
     borderWidth: 1,
-    borderColor: Colors.danger,
+    borderColor: c.danger,
   },
   errorText: {
-    color: Colors.danger,
+    color: c.danger,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -342,10 +346,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   spotlightTagText: {
-    color: Colors.accentContrast,
+    color: c.accentContrast,
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.6,

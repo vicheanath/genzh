@@ -8,11 +8,13 @@ import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { Progress } from '../../components/Progress';
 import { Sheet } from '../../components/Sheet';
+import { EmptyState } from '../../components/EmptyState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
-import { exp, postToChat } from './shared';
+import { useExp, postToChat } from './shared';
 
 interface PollOption {
   id: string;
@@ -30,31 +32,6 @@ interface Poll {
   isClosed?: boolean;
 }
 
-const INITIAL_POLLS: Poll[] = [
-  {
-    id: 'poll-1',
-    question: 'What is the greatest programming language for high performance?',
-    creatorName: 'Rustacean42',
-    totalVotes: 32,
-    options: [
-      { id: 'opt-1', text: '🦀 Rust (Zero-cost abstractions)', votes: 19 },
-      { id: 'opt-2', text: '⚡ C++ (Classic speed & fine control)', votes: 7 },
-      { id: 'opt-3', text: '🏎️ Zig (Clean simplicity)', votes: 4 },
-      { id: 'opt-4', text: '🐹 Go (Fast build & goroutines)', votes: 2 },
-    ],
-  },
-  {
-    id: 'poll-2',
-    question: 'Best time to code without interruptions?',
-    creatorName: 'NightOwl',
-    totalVotes: 18,
-    options: [
-      { id: 'opt-2-1', text: '🌙 1:00 AM – 4:00 AM', votes: 12 },
-      { id: 'opt-2-2', text: '☀️ 6:00 AM – 9:00 AM', votes: 4 },
-      { id: 'opt-2-3', text: '☕ 2:00 PM – 5:00 PM', votes: 2 },
-    ],
-  },
-];
 
 /**
  * Live polls.
@@ -64,10 +41,13 @@ const INITIAL_POLLS: Poll[] = [
  * the transcript where everyone can see it.
  */
 export function PollExperience({ room }: { room: RoomWithPermissions }) {
+  const styles = useThemedStyles(makeStyles);
+  const exp = useExp();
+  const c = useColors();
   const { getToken } = useAuth();
   const toast = useToast();
 
-  const [polls, setPolls] = useState<Poll[]>(INITIAL_POLLS);
+  const [polls, setPolls] = useState<Poll[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [question, setQuestion] = useState('');
@@ -145,7 +125,7 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
     <ScrollView contentContainerStyle={exp.content}>
       <View style={exp.cardHeader}>
         <View style={exp.tag}>
-          <Vote size={13} color={Colors.accent} />
+          <Vote size={13} color={c.accent} />
           <Text style={exp.tagText}>Live poll</Text>
         </View>
         <Button
@@ -153,7 +133,7 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
           size="sm"
           variant="secondary"
           onPress={() => setCreateOpen(true)}
-          icon={<Plus size={14} color={Colors.text} />}
+          icon={<Plus size={14} color={c.text} />}
         />
       </View>
 
@@ -182,7 +162,7 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
           <Text style={exp.title}>{poll.question}</Text>
 
           <View style={exp.row}>
-            <Users size={13} color={Colors.textDim} />
+            <Users size={13} color={c.textDim} />
             <Text style={exp.subtitle}>
               {poll.totalVotes} vote{poll.totalVotes === 1 ? '' : 's'} · by {poll.creatorName}
             </Text>
@@ -202,7 +182,7 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
               >
                 <View style={styles.optionHead}>
                   <Text style={styles.optionText}>{option.text}</Text>
-                  {chosen ? <CheckCircle2 size={15} color={Colors.accent} /> : null}
+                  {chosen ? <CheckCircle2 size={15} color={c.accent} /> : null}
                 </View>
                 <Progress value={pct} showValue size="sm" />
               </Pressable>
@@ -227,11 +207,19 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
               size="sm"
               variant="secondary"
               onPress={() => void shareResults()}
-              icon={<Send size={13} color={Colors.text} />}
+              icon={<Send size={13} color={c.text} />}
             />
           </View>
         </View>
-      ) : null}
+      ) : (
+        <EmptyState
+          icon={<Vote size={28} color={c.textSubtle} />}
+          title="No polls yet"
+          description="Ask the room something. Results are shared straight into the chat."
+          actionLabel="Create a poll"
+          onAction={() => setCreateOpen(true)}
+        />
+      )}
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
         <ScrollView contentContainerStyle={styles.sheet} keyboardShouldPersistTaps="handled">
@@ -267,7 +255,7 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
                   }
                   style={styles.removeOption}
                 >
-                  <X size={15} color={Colors.textMuted} />
+                  <X size={15} color={c.textMuted} />
                 </Pressable>
               ) : null}
             </View>
@@ -277,7 +265,7 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
             title="Add option"
             variant="ghost"
             onPress={() => setOptions((current) => [...current, ''])}
-            icon={<Plus size={14} color={Colors.textMuted} />}
+            icon={<Plus size={14} color={c.textMuted} />}
           />
 
           <Button
@@ -293,18 +281,19 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   option: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     padding: Spacing.md,
     gap: Spacing.sm,
   },
   optionChosen: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accentSubtle,
+    borderColor: c.accent,
+    backgroundColor: c.accentSubtle,
   },
   optionHead: {
     flexDirection: 'row',
@@ -314,7 +303,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -338,7 +327,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: Spacing.sm,

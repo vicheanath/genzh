@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 
 import { Avatar } from './Avatar';
 import type { Presence } from './PresenceDot';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface UserRowProps {
   name: string;
@@ -48,6 +49,7 @@ export function UserRow({
   actions,
   style,
 }: UserRowProps) {
+  const styles = useThemedStyles(makeStyles);
   const identity = (
     <>
       <Avatar
@@ -99,7 +101,8 @@ export function UserRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -115,18 +118,18 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
   },
   pressed: {
-    backgroundColor: Colors.hover,
+    backgroundColor: c.hover,
   },
   text: {
     flex: 1,
   },
   name: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
   },
   secondary: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     marginTop: 1,
   },

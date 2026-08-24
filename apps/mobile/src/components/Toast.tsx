@@ -22,7 +22,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X } from 'lucide-react-native';
 
 import { SPRING_GESTURE, SPRING_PANEL } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 interface ToastItem {
   id: number;
@@ -101,6 +102,7 @@ function ToastViewport({
   items: ToastItem[];
   onDismiss: (id: number) => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
 
   if (items.length === 0) return null;
@@ -120,6 +122,8 @@ function ToastViewport({
 }
 
 function ToastRow({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const shift = useSharedValue(0);
   const isError = item.type === 'error';
 
@@ -168,9 +172,9 @@ function ToastRow({ item, onDismiss }: { item: ToastItem; onDismiss: () => void 
       >
         <View style={[styles.icon, isError && styles.iconError]}>
           {isError ? (
-            <X size={13} color={Colors.danger} strokeWidth={3} />
+            <X size={13} color={c.danger} strokeWidth={3} />
           ) : (
-            <Check size={13} color={Colors.accent} strokeWidth={3} />
+            <Check size={13} color={c.accent} strokeWidth={3} />
           )}
         </View>
 
@@ -203,7 +207,8 @@ export function useToast(): ToastApi {
   return api;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   viewport: {
     position: 'absolute',
     left: Spacing.md,
@@ -215,10 +220,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     shadowColor: '#000',
@@ -228,35 +233,35 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   toastError: {
-    borderColor: Colors.danger,
+    borderColor: c.danger,
   },
   icon: {
     width: 24,
     height: 24,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconError: {
-    backgroundColor: Colors.dangerSubtle,
+    backgroundColor: c.dangerSubtle,
   },
   text: {
     flex: 1,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 13,
     fontWeight: '700',
   },
   description: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16,
   },
   hint: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',

@@ -2,7 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
 import { Minus, Plus } from 'lucide-react-native';
 
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface NumberFieldProps {
   value: number | null;
@@ -41,6 +42,8 @@ export function NumberField({
   disabled,
   style,
 }: NumberFieldProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const clamp = (next: number) => Math.min(max, Math.max(min, next));
 
   const nudge = (delta: number) => {
@@ -59,7 +62,7 @@ export function NumberField({
           style={styles.step}
           hitSlop={6}
         >
-          <Minus size={16} color={Colors.textMuted} strokeWidth={2.5} />
+          <Minus size={16} color={c.textMuted} strokeWidth={2.5} />
         </Pressable>
 
         <View style={styles.field}>
@@ -67,7 +70,7 @@ export function NumberField({
             style={styles.input}
             value={value === null ? '' : String(value)}
             placeholder={emptyLabel}
-            placeholderTextColor={Colors.textDim}
+            placeholderTextColor={c.textDim}
             keyboardType="number-pad"
             editable={!disabled}
             onChangeText={(text) => {
@@ -89,7 +92,7 @@ export function NumberField({
           style={styles.step}
           hitSlop={6}
         >
-          <Plus size={16} color={Colors.textMuted} strokeWidth={2.5} />
+          <Plus size={16} color={c.textMuted} strokeWidth={2.5} />
         </Pressable>
       </View>
 
@@ -98,12 +101,13 @@ export function NumberField({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     gap: Spacing.sm,
   },
   label: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -111,9 +115,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     borderRadius: Radius.full,
     padding: 4,
   },
@@ -121,7 +125,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -133,7 +137,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   input: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '700',
     textAlign: 'center',
@@ -141,12 +145,12 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   suffix: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     fontWeight: '600',
   },
   hint: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 12,
     lineHeight: 16,
   },

@@ -37,7 +37,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppStore, type FriendTab } from '../../lib/store';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * Friends: online, all, pending both ways, blocked, and adding by user ID.
@@ -47,6 +48,8 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  * than drawing a green dot on everybody.
  */
 export function FriendsScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { token, getToken, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
@@ -206,13 +209,13 @@ export function FriendsScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {tab !== 'add' && (
           <View style={styles.searchWrap}>
-            <Search size={16} color={Colors.textDim} />
+            <Search size={16} color={c.textDim} />
             <TextInput
               style={styles.searchInput}
               value={search}
               onChangeText={setSearch}
               placeholder="Search friends…"
-              placeholderTextColor={Colors.textDim}
+              placeholderTextColor={c.textDim}
             />
           </View>
         )}
@@ -227,7 +230,7 @@ export function FriendsScreen({ navigation }: any) {
 
             {!friendsVM.isLoading && filteredFriends.length === 0 ? (
               <EmptyState
-                icon={<Users size={28} color={Colors.textDim} />}
+                icon={<Users size={28} color={c.textDim} />}
                 title={search ? 'No matches' : 'No friends yet'}
                 description={
                   search
@@ -257,14 +260,14 @@ export function FriendsScreen({ navigation }: any) {
                         variant="ghost"
                         size="sm"
                         onPress={() => void openDM(friendId)}
-                        icon={<MessageSquare size={17} color={Colors.textMuted} />}
+                        icon={<MessageSquare size={17} color={c.textMuted} />}
                       />
                       <Button
                         title=""
                         variant="ghost"
                         size="sm"
                         onPress={() => setMenuFor(friendId)}
-                        icon={<MoreHorizontal size={17} color={Colors.textMuted} />}
+                        icon={<MoreHorizontal size={17} color={c.textMuted} />}
                       />
                     </>
                   }
@@ -304,14 +307,14 @@ export function FriendsScreen({ navigation }: any) {
                         title=""
                         size="sm"
                         onPress={() => void respond(request.requester_id, true)}
-                        icon={<Check size={16} color={Colors.accentContrast} />}
+                        icon={<Check size={16} color={c.accentContrast} />}
                       />
                       <Button
                         title=""
                         size="sm"
                         variant="ghost"
                         onPress={() => void respond(request.requester_id, false)}
-                        icon={<X size={16} color={Colors.textMuted} />}
+                        icon={<X size={16} color={c.textMuted} />}
                       />
                     </>
                   }
@@ -356,7 +359,7 @@ export function FriendsScreen({ navigation }: any) {
 
             {blockedUsers.length === 0 ? (
               <EmptyState
-                icon={<Ban size={28} color={Colors.textDim} />}
+                icon={<Ban size={28} color={c.textDim} />}
                 title="Nobody blocked"
                 description="People you block cannot message you or send friend requests."
               />
@@ -406,7 +409,7 @@ export function FriendsScreen({ navigation }: any) {
               onPress={() => void sendRequest()}
               loading={busy}
               disabled={!addId.trim()}
-              icon={<UserPlus size={16} color={Colors.accentContrast} />}
+              icon={<UserPlus size={16} color={c.accentContrast} />}
             />
 
             {user ? (
@@ -433,13 +436,13 @@ export function FriendsScreen({ navigation }: any) {
           {
             key: 'message',
             label: 'Send message',
-            icon: <MessageSquare size={17} color={Colors.textMuted} />,
+            icon: <MessageSquare size={17} color={c.textMuted} />,
             onPress: () => menuFor && void openDM(menuFor),
           },
           {
             key: 'remove',
             label: 'Remove friend',
-            icon: <Trash2 size={17} color={Colors.textMuted} />,
+            icon: <Trash2 size={17} color={c.textMuted} />,
             onPress: () => menuFor && void removeFriend(menuFor),
           },
           {
@@ -447,7 +450,7 @@ export function FriendsScreen({ navigation }: any) {
             label: 'Block user',
             tone: 'danger',
             separated: true,
-            icon: <Shield size={17} color={Colors.danger} />,
+            icon: <Shield size={17} color={c.danger} />,
             onPress: () => menuFor && void blockUser(menuFor),
           },
         ]}
@@ -456,10 +459,11 @@ export function FriendsScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   strip: {
     paddingBottom: Spacing.xs,
@@ -473,23 +477,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingHorizontal: Spacing.lg,
     height: 44,
   },
   searchInput: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
   },
   section: {
     gap: Spacing.xs,
   },
   sectionTitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -498,12 +502,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   addTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '800',
   },
   addDescription: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: Spacing.md,
@@ -512,24 +516,24 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     gap: 2,
   },
   myIdLabel: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     fontWeight: '700',
   },
   myIdValue: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontFamily: 'monospace',
     fontSize: 12,
     padding: 0,
   },
   myIdHint: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
   },
 });

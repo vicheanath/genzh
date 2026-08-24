@@ -12,7 +12,8 @@ import { Switch } from '../../components/Switch';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { ROOM_CATEGORIES, ROOM_TYPES } from '../../lib/roomTypes';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 export interface CreateRoomSheetProps {
   open: boolean;
@@ -31,6 +32,8 @@ export function CreateRoomSheet({
   onCreated,
   onOpenRoom,
 }: CreateRoomSheetProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { getToken } = useAuth();
   const toast = useToast();
 
@@ -84,7 +87,7 @@ export function CreateRoomSheet({
     <Sheet open={open} onOpenChange={(next) => !next && handleClose()}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.tag}>
-          <Sparkles size={13} color={Colors.accent} />
+          <Sparkles size={13} color={c.accent} />
           <Text style={styles.tagText}>Spontaneous social space</Text>
         </View>
 
@@ -121,7 +124,7 @@ export function CreateRoomSheet({
                 onPress={() => setSelectedType(type)}
                 style={[styles.typeCard, active && styles.typeCardActive]}
               >
-                <Icon size={18} color={active ? Colors.accent : Colors.textMuted} />
+                <Icon size={18} color={active ? c.accent : c.textMuted} />
                 <Text style={[styles.typeLabel, active && styles.typeLabelActive]}>{label}</Text>
               </Pressable>
             );
@@ -152,7 +155,7 @@ export function CreateRoomSheet({
         <View style={styles.toggleRow}>
           <View style={styles.toggleInfo}>
             <View style={styles.toggleTitleRow}>
-              <Lock size={14} color={Colors.textMuted} />
+              <Lock size={14} color={c.textMuted} />
               <Text style={styles.toggleTitle}>Anonymous identity</Text>
             </View>
             <Text style={styles.toggleDesc}>
@@ -177,7 +180,8 @@ export function CreateRoomSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   content: {
     padding: Spacing.xl,
     paddingTop: Spacing.sm,
@@ -188,30 +192,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     alignSelf: 'flex-start',
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: 4,
   },
   tagText: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 11,
     fontWeight: '800',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 21,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
   description: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: Spacing.sm,
   },
   label: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -231,20 +235,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
   },
   typeCardActive: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accentSubtle,
+    borderColor: c.accent,
+    backgroundColor: c.accentSubtle,
   },
   typeLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '700',
   },
   typeLabelActive: {
-    color: Colors.text,
+    color: c.text,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -253,9 +257,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   toggleInfo: {
     flex: 1,
@@ -266,12 +270,12 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   toggleTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
   },
   toggleDesc: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,

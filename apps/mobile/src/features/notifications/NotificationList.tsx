@@ -13,7 +13,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { Spinner } from '../../components/Spinner';
 import { useNotifications } from '../../lib/useNotifications';
 import { useProfiles } from '../../lib/useProfiles';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 const ICONS: Record<NotificationKind, typeof Bell> = {
   mention: AtSign,
@@ -52,6 +53,8 @@ export interface NotificationListProps {
  * rows are the same wherever they are shown, and only the container differs.
  */
 export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationListProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { items, loading, markRead } = useNotifications();
 
   const actorIds = items.flatMap((item) => (item.actor_id ? [item.actor_id] : []));
@@ -81,7 +84,7 @@ export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationList
       contentContainerStyle={items.length === 0 ? styles.emptyContent : styles.content}
       ListEmptyComponent={
         <EmptyState
-          icon={<Bell size={28} color={Colors.textDim} />}
+          icon={<Bell size={28} color={c.textDim} />}
           title="Nothing yet"
           description="Mentions, direct messages and friend requests land here."
         />
@@ -114,11 +117,11 @@ export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationList
                 url={profile.avatar_url}
                 accent={profile.accent_color}
                 size={38}
-                ringColor={Colors.surface}
+                ringColor={c.surface}
               />
             ) : (
               <View style={styles.iconFallback}>
-                <Icon size={17} color={Colors.accent} />
+                <Icon size={17} color={c.accent} />
               </View>
             )}
 
@@ -141,7 +144,8 @@ export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationList
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   centre: {
     flex: 1,
     alignItems: 'center',
@@ -162,22 +166,22 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     padding: Spacing.lg,
     borderRadius: Radius.xl,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   itemUnread: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.surfaceRaised,
+    borderColor: c.accent,
+    backgroundColor: c.surfaceRaised,
   },
   itemPressed: {
-    backgroundColor: Colors.surfaceHover,
+    backgroundColor: c.surfaceHover,
   },
   iconFallback: {
     width: 38,
     height: 38,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -186,17 +190,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   line: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
   },
   preview: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
   when: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
     marginTop: 2,
   },
@@ -204,7 +208,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
     marginTop: 6,
   },
 });

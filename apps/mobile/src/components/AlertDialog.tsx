@@ -3,7 +3,8 @@ import { Modal, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 
 import { Button } from './Button';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface AlertDialogProps {
   open: boolean;
@@ -37,6 +38,7 @@ export function AlertDialog({
   tone = 'default',
   onConfirm,
 }: AlertDialogProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Modal
       visible={open}
@@ -84,7 +86,8 @@ export function AlertDialog({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.72)',
@@ -95,19 +98,19 @@ const styles = StyleSheet.create({
   popup: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xxl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.xl,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 17,
     fontWeight: '800',
   },
   description: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: Spacing.sm,

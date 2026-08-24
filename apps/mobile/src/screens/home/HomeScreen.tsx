@@ -25,7 +25,8 @@ import { useAuth } from '../../context/AuthContext';
 import { isExperienceRoom, roomTypeIcon, roomTypeLabel } from '../../lib/roomTypes';
 import { usePresence } from '../../lib/usePresence';
 import { useProfiles } from '../../lib/useProfiles';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { CreateRoomSheet } from './CreateRoomSheet';
 
@@ -51,6 +52,8 @@ const CATEGORIES = [
  * messages the mobile app previously had no way to reach at all.
  */
 export function HomeScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { token, getToken } = useAuth();
   const toast = useToast();
   const { isOnline } = usePresence();
@@ -118,7 +121,7 @@ export function HomeScreen({ navigation }: any) {
             size="sm"
             variant="secondary"
             onPress={() => setCreateOpen(true)}
-            icon={<Plus size={17} color={Colors.text} />}
+            icon={<Plus size={17} color={c.text} />}
           />
         }
       />
@@ -128,7 +131,7 @@ export function HomeScreen({ navigation }: any) {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            tintColor={Colors.accent}
+            tintColor={c.accent}
             onRefresh={() => {
               refreshAll();
             }}
@@ -137,7 +140,7 @@ export function HomeScreen({ navigation }: any) {
       >
         <View style={styles.hero}>
           <View style={styles.heroTag}>
-            <Sparkles size={13} color={Colors.accent} />
+            <Sparkles size={13} color={c.accent} />
             <Text style={styles.heroTagText}>Anonymous social playground</Text>
           </View>
           <Text style={styles.heroTitle}>Find a moment worth joining.</Text>
@@ -157,7 +160,7 @@ export function HomeScreen({ navigation }: any) {
               title="Start a moment"
               variant="secondary"
               onPress={() => setCreateOpen(true)}
-              icon={<Plus size={15} color={Colors.text} />}
+              icon={<Plus size={15} color={c.text} />}
             />
           </View>
         </View>
@@ -184,7 +187,7 @@ export function HomeScreen({ navigation }: any) {
 
         {!roomsVM.isLoadingDiscovery && roomsVM.discovery.length === 0 ? (
           <EmptyState
-            icon={<Sparkles size={26} color={Colors.textDim} />}
+            icon={<Sparkles size={26} color={c.textDim} />}
             title="No active moments"
             description="Nothing live in this category right now."
             actionLabel="Start the first room"
@@ -211,11 +214,11 @@ export function HomeScreen({ navigation }: any) {
             >
               <View style={styles.roomHead}>
                 <View style={styles.roomTypeTag}>
-                  <Icon size={13} color={Colors.accent} />
+                  <Icon size={13} color={c.accent} />
                   <Text style={styles.roomTypeText}>{roomTypeLabel(room.room_type)}</Text>
                 </View>
                 <View style={styles.participants}>
-                  <Users size={12} color={Colors.textDim} />
+                  <Users size={12} color={c.textDim} />
                   <Text style={styles.participantsText}>{room.current_participants || 1}</Text>
                 </View>
               </View>
@@ -230,7 +233,7 @@ export function HomeScreen({ navigation }: any) {
               <View style={styles.roomFooter}>
                 {room.is_anonymous ? (
                   <View style={styles.anonPill}>
-                    <Lock size={11} color={Colors.textMuted} />
+                    <Lock size={11} color={c.textMuted} />
                     <Text style={styles.anonText}>Anonymous</Text>
                   </View>
                 ) : (
@@ -253,7 +256,7 @@ export function HomeScreen({ navigation }: any) {
 
         {!roomsVM.isLoadingMine && directRooms.length === 0 ? (
           <EmptyState
-            icon={<MessageSquare size={26} color={Colors.textDim} />}
+            icon={<MessageSquare size={26} color={c.textDim} />}
             title="No conversations yet"
             description="Open a profile and send a direct message to start one."
           />
@@ -290,7 +293,7 @@ export function HomeScreen({ navigation }: any) {
             size="sm"
             variant="ghost"
             onPress={() => navigation.navigate('Explore')}
-            icon={<Compass size={14} color={Colors.textMuted} />}
+            icon={<Compass size={14} color={c.textMuted} />}
           />
         </View>
 
@@ -298,7 +301,7 @@ export function HomeScreen({ navigation }: any) {
 
         {!communitiesVM.isLoading && communitiesVM.communities.length === 0 ? (
           <EmptyState
-            icon={<Compass size={26} color={Colors.textDim} />}
+            icon={<Compass size={26} color={c.textDim} />}
             title="No communities yet"
             description="Browse what is public and join one."
             actionLabel="Browse communities"
@@ -346,10 +349,11 @@ export function HomeScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   content: {
     padding: Spacing.lg,
@@ -357,10 +361,10 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   hero: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xxl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.xl,
     gap: Spacing.sm,
   },
@@ -369,24 +373,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     alignSelf: 'flex-start',
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: 4,
   },
   heroTagText: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 11,
     fontWeight: '800',
   },
   heroTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 23,
     fontWeight: '800',
     letterSpacing: -0.6,
   },
   heroLede: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -407,20 +411,20 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   sectionTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '800',
   },
   roomCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.lg,
     gap: Spacing.xs,
   },
   pressed: {
-    backgroundColor: Colors.surfaceHover,
+    backgroundColor: c.surfaceHover,
   },
   roomHead: {
     flexDirection: 'row',
@@ -433,7 +437,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   roomTypeText: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -445,18 +449,18 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   participantsText: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
     fontWeight: '700',
   },
   roomName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '800',
     marginTop: 2,
   },
   roomTopic: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -470,18 +474,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: 4,
   },
   anonText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     fontWeight: '700',
   },
   enter: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -489,22 +493,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.md,
   },
   communityText: {
     flex: 1,
   },
   communityName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '700',
   },
   communityDescription: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     marginTop: 1,
   },

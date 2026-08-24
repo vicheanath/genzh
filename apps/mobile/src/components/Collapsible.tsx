@@ -10,7 +10,8 @@ import Animated, {
 import { ChevronDown } from 'lucide-react-native';
 
 import { SPRING_PANEL, TIMING_BASE } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface CollapsibleProps {
   title: string;
@@ -47,6 +48,8 @@ export function Collapsible({
   children,
   style,
 }: CollapsibleProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlledOpen ?? uncontrolledOpen;
 
@@ -84,7 +87,7 @@ export function Collapsible({
           style={styles.trigger}
         >
           <Animated.View style={chevronStyle}>
-            <ChevronDown size={section ? 12 : 16} color={Colors.textSubtle} />
+            <ChevronDown size={section ? 12 : 16} color={c.textSubtle} />
           </Animated.View>
           <Text style={[styles.title, section && styles.sectionTitle]} numberOfLines={1}>
             {title}
@@ -109,7 +112,8 @@ export function Collapsible({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -128,12 +132,12 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
   },
   sectionTitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,

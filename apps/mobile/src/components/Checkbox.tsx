@@ -10,7 +10,8 @@ import Animated, {
 import { Check, Minus } from 'lucide-react-native';
 
 import { SPRING_CONTROL, TIMING_FAST } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface CheckboxProps {
   checked: boolean | 'indeterminate';
@@ -36,6 +37,8 @@ export function Checkbox({
   disabled,
   style,
 }: CheckboxProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const on = checked === true;
   const mixed = checked === 'indeterminate';
   const marked = on || mixed;
@@ -52,12 +55,12 @@ export function Checkbox({
     backgroundColor: interpolateColor(
       fill.value,
       [0, 1],
-      [Colors.surfaceMuted, Colors.accent],
+      [c.surfaceMuted, c.accent],
     ),
     borderColor: interpolateColor(
       fill.value,
       [0, 1],
-      [Colors.borderStrong, Colors.accent],
+      [c.borderStrong, c.accent],
     ),
   }));
 
@@ -78,9 +81,9 @@ export function Checkbox({
       <Animated.View style={[styles.box, boxStyle]}>
         <Animated.View style={markStyle}>
           {mixed ? (
-            <Minus size={13} color={Colors.accentContrast} strokeWidth={3} />
+            <Minus size={13} color={c.accentContrast} strokeWidth={3} />
           ) : (
-            <Check size={13} color={Colors.accentContrast} strokeWidth={3} />
+            <Check size={13} color={c.accentContrast} strokeWidth={3} />
           )}
         </Animated.View>
       </Animated.View>
@@ -95,7 +98,8 @@ export function Checkbox({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -114,12 +118,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   description: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16,

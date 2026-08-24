@@ -11,7 +11,8 @@ import { Check, ChevronDown } from 'lucide-react-native';
 import { SPRING_CONTROL } from '../theme/motion';
 
 import { Sheet } from './Sheet';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface SelectOption<T extends string> {
   value: T;
@@ -46,6 +47,8 @@ export function Select<T extends string>({
   label,
   style,
 }: SelectProps<T>) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
 
@@ -73,7 +76,7 @@ export function Select<T extends string>({
           {current?.label ?? placeholder}
         </Text>
         <Animated.View style={chevronStyle}>
-          <ChevronDown size={16} color={Colors.textSubtle} />
+          <ChevronDown size={16} color={c.textSubtle} />
         </Animated.View>
       </Pressable>
 
@@ -98,7 +101,7 @@ export function Select<T extends string>({
                 <Text style={[styles.itemText, selected && styles.itemTextSelected]}>
                   {option.label}
                 </Text>
-                {selected && <Check size={16} color={Colors.accent} strokeWidth={3} />}
+                {selected && <Check size={16} color={c.accent} strokeWidth={3} />}
               </AnimatedPressable>
             );
           })}
@@ -110,30 +113,31 @@ export function Select<T extends string>({
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.sm,
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     borderRadius: Radius.full,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
   },
   triggerText: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   placeholder: {
-    color: Colors.textDim,
+    color: c.textDim,
   },
   sheetTitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -154,15 +158,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   itemSelected: {
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
   },
   itemText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 15,
     fontWeight: '600',
   },
   itemTextSelected: {
-    color: Colors.text,
+    color: c.text,
   },
   disabled: {
     opacity: 0.5,

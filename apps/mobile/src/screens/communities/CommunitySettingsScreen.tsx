@@ -18,7 +18,8 @@ import {
   COMMUNITY_TABS,
   type CommunityTab,
 } from '../../features/community-settings/tabs';
-import { Colors, Spacing } from '../../theme/tokens';
+import { Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * Server settings.
@@ -29,6 +30,8 @@ import { Colors, Spacing } from '../../theme/tokens';
  * is allowed to change what.
  */
 export function CommunitySettingsScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { communityId, communityName } = route.params ?? {};
   const { token, user } = useAuth();
 
@@ -86,7 +89,7 @@ export function CommunitySettingsScreen({ route, navigation }: any) {
                 icon: (
                   <item.icon
                     size={14}
-                    color={tab === item.id ? Colors.text : Colors.textDim}
+                    color={tab === item.id ? c.text : c.textDim}
                   />
                 ),
               }))}
@@ -112,10 +115,11 @@ export function CommunitySettingsScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   strip: {
     paddingBottom: Spacing.xs,
@@ -130,7 +134,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
   },
   denied: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 14,
     textAlign: 'center',
   },

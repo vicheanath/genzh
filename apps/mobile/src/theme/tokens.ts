@@ -6,12 +6,29 @@ import { DEFAULT_ACCENT, ACCENT_SWATCHES } from '@genzh/shared';
  *
  * Identity Rules:
  * 1. INK ON LIGHT: Primary buttons are Acid Lime (#bae310) with near-black ink text (#0f1202).
- * 2. WARM GROUND: Warm espresso & paper undertones (#181815, #1f1f1b, #262621), never cold slate.
+ * 2. WARM GROUND: Warm espresso & paper undertones, never cold slate.
  * 3. LIGHT IS DEPTH: Subtle border highlights and elevated slab surfaces.
  * 4. PILLS ON SLABS: Controls are full pills (radius 9999); cards are soft slabs (radius 18-24).
+ *
+ * ── Two palettes ────────────────────────────────────────────────────────────
+ *
+ * The web keeps light in `:root` and overrides it in a `prefers-color-scheme`
+ * block; React Native has no cascade, so the same two sets are plain objects
+ * with an identical key set, and `ThemeContext` picks one.
+ *
+ * The light values are the web's `:root` tokens converted from oklch to sRGB
+ * hex — RN's colour parser has no oklch. The conversion is exact where the
+ * colour is in gamut: the web's `oklch(0.855 0.205 122)` accent round-trips to
+ * `#bae310`, which is the hex this file already used.
+ *
+ * Because the key sets match, `Palette` is derived from the dark object rather
+ * than declared twice — a token added to one and forgotten in the other is a
+ * type error rather than a colour that silently falls back.
  */
 
-export const Colors = {
+export type ThemeName = 'light' | 'dark';
+
+export const DarkColors = {
   // Surfaces
   sunken: '#121210',
   bg: '#181815',
@@ -20,6 +37,7 @@ export const Colors = {
   surfaceHover: '#2e2e27',
   surfaceActive: '#36362d',
   surfaceMuted: '#22221d',
+  overlay: 'rgba(10, 10, 8, 0.62)',
 
   // Interactive washes
   hover: 'rgba(255, 255, 255, 0.07)',
@@ -72,6 +90,86 @@ export const Colors = {
   swatches: ACCENT_SWATCHES,
 };
 
+/**
+ * The shape every palette must fill.
+ *
+ * Derived from the dark object so the two can never drift apart: adding a
+ * token to `DarkColors` makes `LightColors` fail to typecheck until it has one
+ * too. `swatches` is the profile accent list rather than a UI colour, so it is
+ * shared rather than themed.
+ */
+export type Palette = typeof DarkColors;
+
+export const LightColors: Palette = {
+  // Surfaces — warm bone and paper, per rule 2. Not white-on-grey.
+  sunken: '#f1eee6',
+  bg: '#faf7f1',
+  surface: '#fffdfa',
+  surfaceRaised: '#ffffff',
+  surfaceHover: '#f7f2e9',
+  surfaceActive: '#f1ebdf',
+  surfaceMuted: '#f4f1e9',
+  overlay: 'rgba(37, 30, 21, 0.42)',
+
+  // Interactive washes — tinted toward the accent rather than grey, so a
+  // pressed row feels connected to the identity instead of just darker.
+  hover: 'rgba(149, 179, 56, 0.12)',
+  active: 'rgba(142, 173, 32, 0.20)',
+
+  // Typography — warm ink. Never a pure black, never a cool grey.
+  text: '#231d15',
+  textMuted: '#625b52',
+  textSubtle: '#8c877e',
+  textDim: '#a29e95',
+  textInverted: '#fcfaf6',
+
+  // Borders
+  border: '#e3ded6',
+  borderStrong: '#c7c2b6',
+  borderSubtle: '#eeebe4',
+  borderHover: '#d5d0c6',
+
+  /*
+   * Rule 1 is why `accent` does not change between the themes.
+   *
+   * The lime is the identity, and it carries near-black ink in both. What does
+   * change is `accentText`: lime on a bone background fails contrast as a text
+   * colour, so light mode drops to a deep olive for accent-coloured *text*
+   * while the accent *fill* stays bright.
+   */
+  accent: DEFAULT_ACCENT,
+  accentHover: '#add400',
+  accentActive: '#a0c500',
+  accentSubtle: 'rgba(186, 227, 16, 0.22)',
+  accentSubtleHover: 'rgba(186, 227, 16, 0.34)',
+  accentText: '#486a00',
+  accentContrast: '#131806',
+
+  live: '#00c0de',
+  liveSubtle: 'rgba(0, 192, 222, 0.16)',
+  mint: '#00c0de',
+
+  danger: '#e22c3f',
+  dangerHover: '#f1424e',
+  dangerActive: '#cc1d34',
+  dangerSubtle: 'rgba(226, 44, 63, 0.14)',
+  success: '#27af57',
+  successSubtle: 'rgba(39, 175, 87, 0.16)',
+  warning: '#ef9a26',
+
+  online: '#85d437',
+  idle: '#f2ab35',
+  dnd: '#ec3747',
+  offline: '#a29e95',
+
+  swatches: ACCENT_SWATCHES,
+};
+
+export const Palettes: Record<ThemeName, Palette> = {
+  light: LightColors,
+  dark: DarkColors,
+};
+
 export const Radius = {
   xs: 4,
   sm: 6,
@@ -98,10 +196,14 @@ export const Spacing = {
  * The web pairs `--shadow-*` with `--edge-highlight`, an inset top line that
  * makes a surface look lit from above. RN has no inset shadow, so the highlight
  * is spent as a light `borderTopColor` where a component has a border to give,
- * and these presets carry the rest. Values are matched to the dark palette in
- * tokens.css, where a shadow is a genuine black rather than a warm tint.
+ * and these presets carry the rest.
+ *
+ * The two sets are not the same shadow at different opacities. On a dark ground
+ * a shadow is genuine black and can be heavy; on a bone ground the same shadow
+ * reads as dirt, so light mode uses a warm brown at a fraction of the opacity —
+ * which is exactly the split `tokens.css` makes between its two shadow blocks.
  */
-export const Elevation = {
+export const DarkElevation = {
   sm: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -133,28 +235,83 @@ export const Elevation = {
   },
   /** `--glow-accent`: "active" reads as a glow rather than a heavier fill. */
   accentGlow: {
-    shadowColor: Colors.accent,
+    shadowColor: DEFAULT_ACCENT,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.34,
     shadowRadius: 12,
     elevation: 8,
   },
   dangerGlow: {
-    shadowColor: Colors.danger,
+    shadowColor: '#ff4d4f',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.32,
     shadowRadius: 12,
     elevation: 8,
   },
-} as const;
+};
+
+export type ElevationSet = typeof DarkElevation;
+
+const LIGHT_SHADOW = '#342d23';
+
+export const LightElevation: ElevationSet = {
+  sm: {
+    shadowColor: LIGHT_SHADOW,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: LIGHT_SHADOW,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  lg: {
+    shadowColor: LIGHT_SHADOW,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 26,
+    elevation: 12,
+  },
+  bar: {
+    shadowColor: LIGHT_SHADOW,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 16,
+  },
+  accentGlow: {
+    shadowColor: DEFAULT_ACCENT,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.42,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dangerGlow: {
+    shadowColor: '#e22c3f',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+};
+
+export const Elevations: Record<ThemeName, ElevationSet> = {
+  light: LightElevation,
+  dark: DarkElevation,
+};
 
 /**
  * The stage — the call viewport.
  *
- * The one screen that does not use the page palette. A call is a place you
- * entered, so it keeps its own darker ground, exactly as `--stage-*` does in
- * tokens.css. Warm espresso rather than the cold slate a video app reaches for
- * by default, per rule 2: the same neutrals as the page, dropped in lightness.
+ * The one screen that does not use the page palette, and the one that does not
+ * change with the theme. A call is a place you entered: it keeps its own dark
+ * ground in light mode too, which is what `--stage-*` does in tokens.css (the
+ * stage tokens sit in `:root` and are *not* overridden in the dark block).
+ * Video looks wrong on bone, and every other call app agrees.
  *
  * If the call screen needs a colour that is not here, add it here rather than
  * inlining a hex — that is how the last version ended up with four different

@@ -21,7 +21,8 @@ import { Mic, MicOff, PhoneOff, Radio, Users } from 'lucide-react-native';
 import { useVoice } from '../context/VoiceContext';
 import { useTabBarHeight } from '../theme/layout';
 import { SPRING_CONTROL, SPRING_PANEL } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 import { CallControlButton } from './CallControlButton';
 
@@ -49,6 +50,8 @@ const DRAG_THRESHOLD = 6;
  * reaches the button underneath it, and a moving one always takes the bubble.
  */
 export function VoiceOverlay() {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const {
     status,
     error,
@@ -188,12 +191,12 @@ export function VoiceOverlay() {
 
   const statusColor =
     status === 'failed'
-      ? Colors.danger
+      ? c.danger
       : status === 'connected' && capabilities.audio
         ? isCameraOn
-          ? Colors.accent
-          : Colors.live
-        : Colors.idle;
+          ? c.accent
+          : c.live
+        : c.idle;
 
   return (
     <GestureDetector gesture={pan}>
@@ -216,7 +219,7 @@ export function VoiceOverlay() {
               </Text>
               {members.length > 0 ? (
                 <>
-                  <Users size={11} color={Colors.textDim} />
+                  <Users size={11} color={c.textDim} />
                   <Text style={styles.count}>{members.length + 1}</Text>
                 </>
               ) : null}
@@ -261,7 +264,8 @@ export function VoiceOverlay() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   bubble: {
     position: 'absolute',
     // Anchored to the origin and moved by transform — `left`/`top` would have
@@ -272,9 +276,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.xl,
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: c.borderStrong,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
@@ -299,25 +303,25 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   statusText: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
   count: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 10,
     fontWeight: '800',
   },
   roomName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
     marginTop: 1,
   },
   error: {
     maxWidth: 240,
-    color: Colors.danger,
+    color: c.danger,
     fontSize: 11,
   },
 });

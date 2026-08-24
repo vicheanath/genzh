@@ -11,7 +11,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Colors, Radius } from '../../theme/tokens';
+import { Radius, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 /** Each bar's resting height, in points. They differ so the row is not a comb. */
 const BARS = [9, 16, 12, 7] as const;
@@ -27,6 +28,7 @@ const BARS = [9, 16, 12, 7] as const;
  * stage is not the place to introduce a sixth meaning for a colour.
  */
 export function SpeakingWave() {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       {BARS.map((height, index) => (
@@ -37,6 +39,7 @@ export function SpeakingWave() {
 }
 
 function Bar({ height, index }: { height: number; index: number }) {
+  const styles = useThemedStyles(makeStyles);
   const scale = useSharedValue(0.45);
 
   useEffect(() => {
@@ -63,7 +66,8 @@ function Bar({ height, index }: { height: number; index: number }) {
   return <Animated.View style={[styles.bar, { height }, style]} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -71,11 +75,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
   },
   bar: {
     width: 3,
     borderRadius: 2,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
 });

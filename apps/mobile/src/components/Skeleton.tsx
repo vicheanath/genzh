@@ -10,7 +10,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface SkeletonProps {
   width?: DimensionValue;
@@ -32,6 +33,7 @@ export interface SkeletonProps {
  * surface people already trust uses one.
  */
 export function Skeleton({ width = '100%', height = 16, circle, style }: SkeletonProps) {
+  const styles = useThemedStyles(makeStyles);
   const [measured, setMeasured] = useState(0);
   const sweep = useSharedValue(0);
 
@@ -73,6 +75,7 @@ export function Skeleton({ width = '100%', height = 16, circle, style }: Skeleto
 
 /** A stand-in for a list of rows — a channel list, a member list. */
 export function SkeletonText({ lines = 3, style }: { lines?: number; style?: ViewStyle }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.stack, style]}>
       {Array.from({ length: lines }, (_, index) => (
@@ -89,6 +92,7 @@ export function SkeletonText({ lines = 3, style }: { lines?: number; style?: Vie
 
 /** A stand-in for a list of people or rooms: an avatar and two lines. */
 export function SkeletonRows({ rows = 4 }: { rows?: number }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.rows}>
       {Array.from({ length: rows }, (_, index) => (
@@ -110,15 +114,16 @@ export function SkeletonRows({ rows = 4 }: { rows?: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   skeleton: {
-    backgroundColor: Colors.surfaceActive,
+    backgroundColor: c.surfaceActive,
     overflow: 'hidden',
   },
   sheen: {
     ...StyleSheet.absoluteFillObject,
     left: 0,
-    backgroundColor: Colors.surfaceHover,
+    backgroundColor: c.surfaceHover,
     opacity: 0.9,
   },
   stack: {

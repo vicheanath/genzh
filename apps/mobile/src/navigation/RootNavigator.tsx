@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
+  DarkTheme,
   useNavigationContainerRef,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -28,7 +29,7 @@ import { InfoScreen } from '../screens/info/InfoScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { VoiceOverlay } from '../components/VoiceOverlay';
-import { Colors } from '../theme/tokens';
+import { useColors, useTheme } from '../theme/ThemeContext';
 
 import { TabBar } from './TabBar';
 
@@ -90,6 +91,8 @@ function MainTabs() {
 }
 
 export function RootNavigator() {
+  const c = useColors();
+  const { scheme } = useTheme();
   const { status } = useAuth();
 
   /*
@@ -112,14 +115,19 @@ export function RootNavigator() {
 
   if (status === 'loading') return <LoadingPanel />;
 
+  // The base has to switch too, not just the colours: react-navigation reads
+  // `dark` for the things it draws itself — the modal scrim and the default
+  // card background behind a screen transition.
+  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+
   const navTheme = {
-    ...DefaultTheme,
+    ...base,
     colors: {
-      ...DefaultTheme.colors,
-      background: Colors.bg,
-      card: Colors.surface,
-      text: Colors.text,
-      border: Colors.border,
+      ...base.colors,
+      background: c.bg,
+      card: c.surface,
+      text: c.text,
+      border: c.border,
     },
   };
 
@@ -130,7 +138,7 @@ export function RootNavigator() {
       onReady={readRoute}
       onStateChange={readRoute}
     >
-      <View style={{ flex: 1, backgroundColor: Colors.bg }}>
+      <View style={{ flex: 1, backgroundColor: c.bg }}>
         <Stack.Navigator
           screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
         >

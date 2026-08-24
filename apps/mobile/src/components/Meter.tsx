@@ -8,7 +8,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { TIMING_FAST } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface MeterProps {
   /** 0–1. */
@@ -38,6 +39,8 @@ const SEGMENTS = 16;
  * worse than one that snaps.
  */
 export function Meter({ value, label, variant = 'bar', tone = 'accent', style }: MeterProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const level = Math.min(1, Math.max(0, value));
   const animated = useSharedValue(level);
 
@@ -46,7 +49,7 @@ export function Meter({ value, label, variant = 'bar', tone = 'accent', style }:
   }, [level, animated]);
 
   const color =
-    tone === 'muted' ? Colors.borderStrong : tone === 'live' ? Colors.live : Colors.accent;
+    tone === 'muted' ? c.borderStrong : tone === 'live' ? c.live : c.accent;
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${animated.value * 100}%`,
@@ -91,26 +94,29 @@ function Segment({
   level: SharedValue<number>;
   color: string;
 }) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const style = useAnimatedStyle(() => ({
-    backgroundColor: index / SEGMENTS < level.value ? color : Colors.surfaceActive,
+    backgroundColor: index / SEGMENTS < level.value ? color : c.surfaceActive,
   }));
 
   return <Animated.View style={[styles.segment, style]} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     gap: Spacing.sm,
   },
   label: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
   track: {
     height: 8,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceActive,
+    backgroundColor: c.surfaceActive,
     overflow: 'hidden',
   },
   indicator: {

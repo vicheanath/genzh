@@ -1,6 +1,7 @@
 import { StyleSheet } from 'react-native';
 
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 /**
  * The shared look of a settings panel.
@@ -8,41 +9,42 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  * The web app's tabs all pull from one `settings.module.css`; this is the same
  * idea, so a heading in Profile and a heading in Blocked cannot drift apart.
  */
-export const panel = StyleSheet.create({
+export const makePanel = (c: Palette) =>
+  StyleSheet.create({
   content: {
     padding: Spacing.lg,
     paddingBottom: Spacing.xxl * 2,
     gap: Spacing.lg,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
   description: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
     marginTop: -Spacing.md,
   },
   section: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.lg,
     gap: Spacing.md,
   },
   sectionTitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   fieldLabel: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.4,
@@ -59,31 +61,31 @@ export const panel = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.lg,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.lg,
   },
   toggleInfo: {
     flex: 1,
   },
   toggleTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
   },
   toggleSubtitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,
   },
   previewCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xxl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     overflow: 'hidden',
   },
   previewBanner: {
@@ -99,20 +101,20 @@ export const panel = StyleSheet.create({
     marginTop: -32,
     borderRadius: Radius.full,
     borderWidth: 4,
-    borderColor: Colors.surface,
+    borderColor: c.surface,
     marginBottom: Spacing.sm,
   },
   previewName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 17,
     fontWeight: '800',
   },
   previewHandle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
   },
   previewBio: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
@@ -133,30 +135,33 @@ export const panel = StyleSheet.create({
     borderColor: 'transparent',
   },
   swatchActive: {
-    borderColor: Colors.text,
+    borderColor: c.text,
   },
   keyValue: {
     gap: 2,
   },
   key: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     fontWeight: '700',
   },
   value: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   code: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 12,
     fontFamily: 'monospace',
   },
   emptyNote: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: Spacing.xl,
   },
 });
+
+/** The shared settings-panel sheet for the active theme. */
+export const usePanel = () => useThemedStyles(makePanel);

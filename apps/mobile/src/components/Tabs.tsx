@@ -16,7 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_PANEL } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface TabItem<T extends string> {
   value: T;
@@ -66,6 +67,7 @@ export function Tabs<T extends string>({
   scrollable,
   style,
 }: TabsProps<T>) {
+  const styles = useThemedStyles(makeStyles);
   const vertical = variant === 'rail';
   const [rects, setRects] = useState<Record<string, Rect>>({});
 
@@ -190,14 +192,15 @@ export function Tabs<T extends string>({
   return list;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
   },
   pillRow: {
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     borderRadius: Radius.full,
     padding: 4,
     gap: 4,
@@ -215,19 +218,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 2,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   pillIndicator: {
     top: 4,
     bottom: 4,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   railIndicator: {
     left: 0,
     width: 3,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   tab: {
     flexDirection: 'row',
@@ -251,22 +254,22 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   label: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     fontWeight: '700',
   },
   labelActive: {
-    color: Colors.text,
+    color: c.text,
   },
   pillLabelActive: {
-    color: Colors.accentContrast,
+    color: c.accentContrast,
   },
   badge: {
     minWidth: 18,
     height: 18,
     paddingHorizontal: 5,
     borderRadius: Radius.full,
-    backgroundColor: Colors.danger,
+    backgroundColor: c.danger,
     alignItems: 'center',
     justifyContent: 'center',
   },

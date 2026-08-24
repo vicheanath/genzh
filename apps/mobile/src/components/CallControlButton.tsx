@@ -8,7 +8,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_CONTROL } from '../theme/motion';
-import { Colors, Radius, Stage } from '../theme/tokens';
+import { Radius, Stage, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 /**
  * What a control is currently saying.
@@ -58,6 +59,8 @@ export function CallControlButton({
   size = 46,
   children,
 }: CallControlButtonProps) {
+  const TONES = useThemedStyles(makeTONES);
+  const styles = useThemedStyles(makeStyles);
   const press = useSharedValue(0);
   const { background, backgroundPressed, foreground } = TONES[surface][tone];
 
@@ -103,27 +106,29 @@ interface ToneStyle {
 
 /* The three tones that do not depend on the ground: a lime fill, an amber fill
    and a solid red all carry their own contrast wherever they land. */
-const SHARED: Pick<Record<ControlTone, ToneStyle>, 'on' | 'warning' | 'disconnect'> = {
+const makeSHARED = (c: Palette): Pick<Record<ControlTone, ToneStyle>, 'on' | 'warning' | 'disconnect'> =>
+  ({
   on: {
-    background: Colors.accent,
-    backgroundPressed: Colors.accentActive,
-    foreground: Colors.accentContrast,
+    background: c.accent,
+    backgroundPressed: c.accentActive,
+    foreground: c.accentContrast,
   },
   warning: {
-    background: Colors.warning,
+    background: c.warning,
     backgroundPressed: '#e09a0f',
-    foreground: Colors.textInverted,
+    foreground: c.textInverted,
   },
   disconnect: {
-    background: Colors.danger,
-    backgroundPressed: Colors.dangerActive,
+    background: c.danger,
+    backgroundPressed: c.dangerActive,
     foreground: '#fff',
   },
-};
+});
 
-const TONES: Record<ControlSurface, Record<ControlTone, ToneStyle>> = {
+const makeTONES = (c: Palette): Record<ControlSurface, Record<ControlTone, ToneStyle>> =>
+  ({
   stage: {
-    ...SHARED,
+    ...makeSHARED(c),
     off: {
       background: Stage.control,
       backgroundPressed: Stage.controlPressed,
@@ -132,41 +137,42 @@ const TONES: Record<ControlSurface, Record<ControlTone, ToneStyle>> = {
       foreground: Stage.text,
     },
     danger: {
-      background: Colors.dangerSubtle,
+      background: c.dangerSubtle,
       backgroundPressed: 'rgba(255, 77, 79, 0.3)',
-      foreground: Colors.danger,
+      foreground: c.danger,
     },
   },
   page: {
-    ...SHARED,
+    ...makeSHARED(c),
     off: {
-      background: Colors.surface,
-      backgroundPressed: Colors.surfaceHover,
-      foreground: Colors.text,
+      background: c.surface,
+      backgroundPressed: c.surfaceHover,
+      foreground: c.text,
     },
     danger: {
-      background: Colors.dangerSubtle,
+      background: c.dangerSubtle,
       backgroundPressed: 'rgba(255, 77, 79, 0.3)',
-      foreground: Colors.danger,
+      foreground: c.danger,
     },
   },
-};
+});
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   button: {
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
   accentGlow: {
-    shadowColor: Colors.accent,
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 6,
   },
   disconnectGlow: {
-    shadowColor: Colors.danger,
+    shadowColor: c.danger,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 10,

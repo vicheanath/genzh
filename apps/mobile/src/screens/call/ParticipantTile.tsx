@@ -10,7 +10,8 @@ import { Hand, MicOff, Video } from 'lucide-react-native';
 import { Avatar } from '../../components/Avatar';
 import { webrtcModule } from '../../lib/webrtc/MobileVoiceClient';
 import { SPRING_CONTROL } from '../../theme/motion';
-import { Colors, Radius, Spacing, Stage } from '../../theme/tokens';
+import { Radius, Spacing, Stage, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { SpeakingWave } from './SpeakingWave';
 import type { CallTile } from './useCallRoster';
@@ -42,6 +43,8 @@ export function ParticipantTile({
   pinned?: boolean;
   onPress?: () => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const press = useSharedValue(0);
 
   const pressStyle = useAnimatedStyle(() => ({
@@ -106,7 +109,7 @@ export function ParticipantTile({
 
       {member.handRaised ? (
         <View style={[styles.handTag, strip && styles.handTagStrip]}>
-          <Hand size={strip ? 9 : 11} color={Colors.textInverted} />
+          <Hand size={strip ? 9 : 11} color={c.textInverted} />
           {!strip ? <Text style={styles.handText}>Hand raised</Text> : null}
         </View>
       ) : null}
@@ -141,7 +144,7 @@ export function ParticipantTile({
             ) : null}
             {member.cameraOn ? (
               <View style={styles.cameraPill}>
-                <Video size={11} color={Colors.accentText} />
+                <Video size={11} color={c.accentText} />
               </View>
             ) : null}
           </View>
@@ -153,7 +156,8 @@ export function ParticipantTile({
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   tile: {
     position: 'relative',
     overflow: 'hidden',
@@ -182,9 +186,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   tileSpeaking: {
-    borderColor: Colors.accent,
-    borderTopColor: Colors.accent,
-    shadowColor: Colors.accent,
+    borderColor: c.accent,
+    borderTopColor: c.accent,
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.45,
     shadowRadius: 12,
@@ -233,12 +237,12 @@ const styles = StyleSheet.create({
   mutedPill: {
     padding: 4,
     borderRadius: Radius.full,
-    backgroundColor: Colors.danger,
+    backgroundColor: c.danger,
   },
   cameraPill: {
     padding: 4,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
   },
   handTag: {
     position: 'absolute',
@@ -250,7 +254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.warning,
+    backgroundColor: c.warning,
   },
   handTagStrip: {
     top: 2,
@@ -259,7 +263,7 @@ const styles = StyleSheet.create({
     padding: 3,
   },
   handText: {
-    color: Colors.textInverted,
+    color: c.textInverted,
     fontSize: 10,
     fontWeight: '800',
   },
@@ -277,6 +281,6 @@ const styles = StyleSheet.create({
     right: 4,
     padding: 2,
     borderRadius: Radius.full,
-    backgroundColor: Colors.danger,
+    backgroundColor: c.danger,
   },
 });

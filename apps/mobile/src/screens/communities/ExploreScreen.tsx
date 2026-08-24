@@ -13,12 +13,15 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { SkeletonRows } from '../../components/Skeleton';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { CreateCommunityModal } from './CreateCommunityModal';
 
 /** Browse public communities, search them, and join. */
 export function ExploreScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { token } = useAuth();
   const toast = useToast();
 
@@ -70,7 +73,7 @@ export function ExploreScreen({ navigation }: any) {
             size="sm"
             variant="secondary"
             onPress={() => setCreateOpen(true)}
-            icon={<Plus size={15} color={Colors.text} />}
+            icon={<Plus size={15} color={c.text} />}
           />
         }
       />
@@ -81,13 +84,13 @@ export function ExploreScreen({ navigation }: any) {
         </Text>
 
         <View style={styles.searchWrap}>
-          <Search size={16} color={Colors.textDim} />
+          <Search size={16} color={c.textDim} />
           <TextInput
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
             placeholder="Search by name or topic…"
-            placeholderTextColor={Colors.textDim}
+            placeholderTextColor={c.textDim}
           />
         </View>
 
@@ -102,7 +105,7 @@ export function ExploreScreen({ navigation }: any) {
 
         {!vm.isLoading && filtered.length === 0 ? (
           <EmptyState
-            icon={<Compass size={26} color={Colors.textDim} />}
+            icon={<Compass size={26} color={c.textDim} />}
             title="Nothing found"
             description={
               query ? `No community matched “${query.trim()}”.` : 'No communities yet.'
@@ -169,10 +172,11 @@ export function ExploreScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   content: {
     padding: Spacing.lg,
@@ -180,7 +184,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   lede: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -188,16 +192,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingHorizontal: Spacing.lg,
     height: 44,
   },
   searchInput: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
   },
   sectionHeader: {
@@ -207,15 +211,15 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   sectionTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '800',
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xxl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     overflow: 'hidden',
   },
   banner: {
@@ -231,15 +235,15 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderRadius: Radius.full,
     borderWidth: 3,
-    borderColor: Colors.surface,
+    borderColor: c.surface,
   },
   name: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '800',
   },
   description: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,
@@ -251,7 +255,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   tag: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
     fontWeight: '700',
   },

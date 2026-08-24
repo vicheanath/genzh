@@ -8,10 +8,11 @@ import { Input } from '../../components/Input';
 import { Switch } from '../../components/Switch';
 import { useToast } from '../../components/Toast';
 import { useAppStore } from '../../lib/store';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 import { DEFAULT_ACCENT, PRESET_COLORS } from './tabs';
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 const RANDOM_ALIASES = [
   'Shadow Fox',
@@ -34,6 +35,8 @@ const MASK_SYMBOLS = ['🎭', '🕶️', '🦊', '👻', '🤖', '🦉', '🐺',
 
 /** Your masked alias, icon, and default posting state. */
 export function AnonymousTab({ user }: { user: CurrentUser }) {
+  const styles = useThemedStyles(makeStyles);
+  const panel = usePanel();
   const toast = useToast();
 
   const anonymousAlias = useAppStore((s) => s.anonymousAlias);
@@ -173,7 +176,8 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   mask: {
     width: 72,
     height: 72,
@@ -194,14 +198,14 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   symbolChipActive: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accentSubtle,
+    borderColor: c.accent,
+    backgroundColor: c.accentSubtle,
   },
   symbolText: {
     fontSize: 22,

@@ -19,11 +19,11 @@ import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 import { roomTypeIcon } from '../../lib/roomTypes';
-import { Colors } from '../../theme/tokens';
+import { useColors } from '../../theme/ThemeContext';
 
 import { PanelList, PanelSkeleton } from './PanelList';
 import type { CommunityAbilities } from './tabs';
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /**
  * What settings can create.
@@ -45,6 +45,8 @@ export function ChannelsTab({
   community: CommunityWithPermissions;
   abilities: CommunityAbilities;
 }) {
+  const panel = usePanel();
+  const c = useColors();
   const { token, getToken } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
@@ -141,7 +143,7 @@ export function ChannelsTab({
             onPress={() => void create()}
             loading={creating}
             disabled={!name.trim()}
-            icon={<Plus size={15} color={Colors.accentContrast} />}
+            icon={<Plus size={15} color={c.accentContrast} />}
           />
         </View>
       ) : null}
@@ -164,7 +166,7 @@ export function ChannelsTab({
           return (
             <View key={room.id} style={panel.listItem}>
               <View style={panel.roomIcon}>
-                <Icon size={16} color={Colors.textMuted} />
+                <Icon size={16} color={c.textMuted} />
               </View>
 
               <View style={panel.listText}>
@@ -187,7 +189,7 @@ export function ChannelsTab({
                   size="sm"
                   variant="ghost"
                   onPress={() => void remove(room.id, room.name)}
-                  icon={<Trash2 size={16} color={Colors.textMuted} />}
+                  icon={<Trash2 size={16} color={c.textMuted} />}
                 />
               ) : null}
             </View>

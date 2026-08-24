@@ -14,10 +14,13 @@ import { useCommunitiesVM, type Community } from '@genzh/shared';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
-import { Colors, Radius } from '../../theme/tokens';
+import { Radius, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 import { CreateCommunityModal } from './CreateCommunityModal';
 
 export function CommunitiesScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { token } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -47,7 +50,7 @@ export function CommunitiesScreen({ navigation }: any) {
           {item.description || 'Welcome to our community!'}
         </Text>
       </View>
-      <ChevronRight size={18} color={Colors.textDim} />
+      <ChevronRight size={18} color={c.textDim} />
     </TouchableOpacity>
   );
 
@@ -61,21 +64,21 @@ export function CommunitiesScreen({ navigation }: any) {
             onPress={() => navigation.navigate('Explore')}
             activeOpacity={0.8}
           >
-            <Compass size={20} color={Colors.text} />
+            <Compass size={20} color={c.text} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconBtn, styles.createBtn]}
             onPress={() => setShowCreateModal(true)}
             activeOpacity={0.8}
           >
-            <Plus size={20} color={Colors.accentContrast} />
+            <Plus size={20} color={c.accentContrast} />
           </TouchableOpacity>
         </View>
       </View>
 
       {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={c.accent} />
         </View>
       ) : (
         <FlatList
@@ -87,19 +90,19 @@ export function CommunitiesScreen({ navigation }: any) {
             <RefreshControl
               refreshing={loading}
               onRefresh={onRefresh}
-              tintColor={Colors.accent}
+              tintColor={c.accent}
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Users size={48} color={Colors.textDim} style={{ marginBottom: 12 }} />
+              <Users size={48} color={c.textDim} style={{ marginBottom: 12 }} />
               <Text style={styles.emptyTitle}>No servers yet</Text>
               <Text style={styles.emptySubtitle}>
                 Create your first community or explore public servers to get started.
               </Text>
               <Button
                 title="Explore Communities"
-                icon={<Compass size={18} color={Colors.accentContrast} />}
+                icon={<Compass size={18} color={c.accentContrast} />}
                 onPress={() => navigation.navigate('Explore')}
               />
             </View>
@@ -119,10 +122,11 @@ export function CommunitiesScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   header: {
     flexDirection: 'row',
@@ -131,12 +135,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: c.border,
   },
   title: {
     fontSize: 26,
     fontWeight: '800',
-    color: Colors.text,
+    color: c.text,
     letterSpacing: -0.5,
   },
   headerActions: {
@@ -148,15 +152,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   createBtn: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   listContent: {
     padding: 16,
@@ -165,12 +169,12 @@ const styles = StyleSheet.create({
   communityCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl, // Rule 4: Slab containers
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   communityInfo: {
     flex: 1,
@@ -180,12 +184,12 @@ const styles = StyleSheet.create({
   communityName: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     marginBottom: 3,
   },
   communityDesc: {
     fontSize: 13,
-    color: Colors.textMuted,
+    color: c.textMuted,
   },
   centerContainer: {
     flex: 1,
@@ -202,12 +206,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     marginBottom: 6,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: Colors.textMuted,
+    color: c.textMuted,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 20,

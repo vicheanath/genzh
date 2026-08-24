@@ -14,7 +14,8 @@ import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { useToast } from '../../components/Toast';
-import { Colors, Radius } from '../../theme/tokens';
+import { Radius, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 interface Props {
   visible: boolean;
@@ -23,6 +24,8 @@ interface Props {
 }
 
 export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { getToken } = useAuth();
   const toast = useToast();
   const [name, setName] = useState('');
@@ -68,7 +71,7 @@ export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>Create Community</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color={Colors.textMuted} />
+              <X size={20} color={c.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -109,19 +112,20 @@ export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderTopLeftRadius: Radius.xxl,
     borderTopRightRadius: Radius.xxl,
     padding: 24,
     borderTopWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -132,7 +136,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: Colors.text,
+    color: c.text,
   },
   closeBtn: {
     padding: 4,

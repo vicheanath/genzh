@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TextInputProps, ViewStyle } from 'react-native';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -20,6 +21,8 @@ export function Input({
   style,
   ...props
 }: InputProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const [isFocused, setIsFocused] = useState(false);
 
   return (
@@ -41,8 +44,8 @@ export function Input({
             rightIcon ? styles.inputWithRightIcon : null,
             style,
           ]}
-          placeholderTextColor={Colors.textDim}
-          selectionColor={Colors.accent}
+          placeholderTextColor={c.textDim}
+          selectionColor={c.accent}
           multiline={multiline}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
@@ -55,7 +58,8 @@ export function Input({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   container: {
     marginBottom: 14,
     width: '100%',
@@ -63,7 +67,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: '800',
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -71,9 +75,9 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     overflow: 'hidden',
   },
   wrapperSingle: {
@@ -88,15 +92,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   wrapperFocused: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.surface,
+    borderColor: c.accent,
+    backgroundColor: c.surface,
   },
   wrapperError: {
-    borderColor: Colors.danger,
+    borderColor: c.danger,
   },
   input: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     paddingVertical: 0,
   },
@@ -116,7 +120,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: Colors.danger,
+    color: c.danger,
     marginTop: 4,
     marginLeft: 4,
     fontWeight: '600',

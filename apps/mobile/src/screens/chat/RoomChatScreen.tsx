@@ -43,7 +43,8 @@ import { mergeMessages, useMessageHistory } from '../../features/chat/useMessage
 import { chatSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
 import { useProfiles } from '../../lib/useProfiles';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * Shortest gap between two "typing" frames for one room.
@@ -58,6 +59,8 @@ const TYPING_INTERVAL_MS = 1000;
 const VOICE_ROOM_TYPES: readonly string[] = ['voice', 'video', 'stage'];
 
 export function RoomChatScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { roomId, roomName } = route.params ?? {};
   const { token, getToken, user } = useAuth();
   const toast = useToast();
@@ -306,7 +309,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                     size="sm"
                     variant="primary"
                     onPress={() => navigation.navigate('Call')}
-                    icon={<Phone size={14} color={Colors.accentContrast} />}
+                    icon={<Phone size={14} color={c.accentContrast} />}
                   />
                   <Button
                     title=""
@@ -323,7 +326,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                     size="sm"
                     variant="ghost"
                     onPress={() => void voice.join(current.id, current.name)}
-                    icon={<Phone size={17} color={Colors.live} />}
+                    icon={<Phone size={17} color={c.live} />}
                   />
                   <Button
                     title=""
@@ -333,7 +336,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                       await voice.join(current.id, current.name);
                       await voice.toggleCamera();
                     }}
-                    icon={<Video size={17} color={Colors.accent} />}
+                    icon={<Video size={17} color={c.accent} />}
                   />
                 </>
               )
@@ -350,7 +353,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                   title: current.name,
                 })
               }
-              icon={<Users size={18} color={Colors.textMuted} />}
+              icon={<Users size={18} color={c.textMuted} />}
             />
           </>
         }
@@ -535,6 +538,7 @@ function MessageRow({
   onLongPress,
   onAddReaction,
 }: MessageRowProps) {
+  const styles = useThemedStyles(makeStyles);
   const isAnonymous = Boolean(message.anonymous_author);
   const name = message.anonymous_author
     ? message.anonymous_author.alias_name
@@ -634,6 +638,7 @@ function MessageRow({
  * parses with, so what is highlighted is exactly what notified somebody.
  */
 function MessageText({ text, myHandle }: { text: string; myHandle?: string }) {
+  const styles = useThemedStyles(makeStyles);
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
 
@@ -700,10 +705,11 @@ function applyLocally(
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   flex: {
     flex: 1,
@@ -736,36 +742,36 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   author: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '800',
   },
   youTag: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
   },
   time: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
   },
   content: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 15,
     lineHeight: 21,
   },
   edited: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
   },
   mention: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontWeight: '700',
   },
   mentionSelf: {
-    color: Colors.accentContrast,
-    backgroundColor: Colors.accent,
+    color: c.accentContrast,
+    backgroundColor: c.accent,
   },
   reactions: {
     flexDirection: 'row',
@@ -779,25 +785,25 @@ const styles = StyleSheet.create({
     gap: 4,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
   },
   reactionMine: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accentSubtle,
+    borderColor: c.accent,
+    backgroundColor: c.accentSubtle,
   },
   reactionEmoji: {
     fontSize: 13,
   },
   reactionCount: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 11,
     fontWeight: '700',
   },
   reactionCountMine: {
-    color: Colors.accentText,
+    color: c.accentText,
   },
   quickReaction: {
     borderRadius: Radius.full,
@@ -809,7 +815,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   addReaction: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     fontWeight: '800',
   },
@@ -823,16 +829,16 @@ const styles = StyleSheet.create({
   dividerRule: {
     flex: 1,
     height: StyleSheet.hairlineWidth * 2,
-    backgroundColor: Colors.border,
+    backgroundColor: c.border,
   },
   dividerLabel: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.4,
   },
   typing: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     fontStyle: 'italic',
     paddingHorizontal: Spacing.xl,
@@ -843,13 +849,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   start: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 12,
     textAlign: 'center',
     paddingVertical: Spacing.xl,
   },
   empty: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: Spacing.xxl,

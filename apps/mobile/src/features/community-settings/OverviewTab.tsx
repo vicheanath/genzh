@@ -16,7 +16,7 @@ import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 
 import type { CommunityAbilities } from './tabs';
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /**
  * Who the server is: name, icon, description, and the two irreversible things.
@@ -36,6 +36,7 @@ export function OverviewTab({
   onUpdated?: () => void;
   onDeleted?: () => void;
 }) {
+  const panel = usePanel();
   const { getToken } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();

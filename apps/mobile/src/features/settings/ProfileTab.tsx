@@ -10,14 +10,16 @@ import { Input } from '../../components/Input';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { primeProfile } from '../../lib/useProfiles';
-import { Colors } from '../../theme/tokens';
+import { useColors } from '../../theme/ThemeContext';
 
 import { DEFAULT_ACCENT, PRESET_COLORS } from './tabs';
 import { useSubmission } from './useSubmission';
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /** How you appear across communities and direct messages. */
 export function ProfileTab({ user }: { user: CurrentUser }) {
+  const panel = usePanel();
+  const c = useColors();
   const { getToken, applyProfile } = useAuth();
   const toast = useToast();
   const save = useSubmission();
@@ -84,7 +86,7 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
               // Your own preview: online by construction, since you are here
               // looking at it.
               presence="online"
-              ringColor={Colors.surface}
+              ringColor={c.surface}
             />
           </View>
           <Text style={panel.previewName}>{displayName || user.profile.display_name}</Text>

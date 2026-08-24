@@ -9,7 +9,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_CONTROL, TIMING_FAST } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing } from '../theme/tokens';
+import { useColors } from '../theme/ThemeContext';
 
 export interface ToggleItem<T extends string> {
   value: T;
@@ -74,6 +75,7 @@ function Toggle<T extends string>({
   on: boolean;
   onPress: () => void;
 }) {
+  const c = useColors();
   const selected = useSharedValue(on ? 1 : 0);
   const press = useSharedValue(0);
 
@@ -85,18 +87,18 @@ function Toggle<T extends string>({
     backgroundColor: interpolateColor(
       selected.value,
       [0, 1],
-      [Colors.surfaceMuted, Colors.accentSubtle],
+      [c.surfaceMuted, c.accentSubtle],
     ),
     borderColor: interpolateColor(
       selected.value,
       [0, 1],
-      [Colors.border, Colors.accent],
+      [c.border, c.accent],
     ),
     transform: [{ scale: 1 - press.value * 0.05 }],
   }));
 
   const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(selected.value, [0, 1], [Colors.textMuted, Colors.accentText]),
+    color: interpolateColor(selected.value, [0, 1], [c.textMuted, c.accentText]),
   }));
 
   return (

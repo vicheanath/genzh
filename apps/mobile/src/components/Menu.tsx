@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Sheet } from './Sheet';
 import { Separator } from './Separator';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface MenuItem {
   key: string;
@@ -36,6 +37,7 @@ export interface MenuProps {
  * that opens a dialog of its own does not fight this one for the screen.
  */
 export function Menu({ open, onOpenChange, title, items }: MenuProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       {title ? (
@@ -73,9 +75,10 @@ export function Menu({ open, onOpenChange, title, items }: MenuProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   title: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -95,7 +98,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   itemPressed: {
-    backgroundColor: Colors.hover,
+    backgroundColor: c.hover,
   },
   icon: {
     width: 22,
@@ -103,12 +106,12 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
   },
   labelDanger: {
-    color: Colors.danger,
+    color: c.danger,
   },
   rule: {
     marginVertical: Spacing.sm,

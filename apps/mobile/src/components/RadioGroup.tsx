@@ -9,7 +9,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SPRING_CONTROL, TIMING_FAST } from '../theme/motion';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface RadioOption<T extends string> {
   value: T;
@@ -32,6 +33,7 @@ export function RadioGroup<T extends string>({
   options,
   style,
 }: RadioGroupProps<T>) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View accessibilityRole="radiogroup" style={[styles.group, style]}>
       {options.map((option) => (
@@ -62,6 +64,8 @@ function Radio<T extends string>({
   selected: boolean;
   onPress: () => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const on = useSharedValue(selected ? 1 : 0);
   const pop = useSharedValue(selected ? 1 : 0);
 
@@ -71,16 +75,16 @@ function Radio<T extends string>({
   }, [selected, on, pop]);
 
   const cardStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(on.value, [0, 1], [Colors.border, Colors.accent]),
+    borderColor: interpolateColor(on.value, [0, 1], [c.border, c.accent]),
     backgroundColor: interpolateColor(
       on.value,
       [0, 1],
-      [Colors.surfaceMuted, Colors.accentSubtle],
+      [c.surfaceMuted, c.accentSubtle],
     ),
   }));
 
   const ringStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(on.value, [0, 1], [Colors.borderStrong, Colors.accent]),
+    borderColor: interpolateColor(on.value, [0, 1], [c.borderStrong, c.accent]),
   }));
 
   const dotStyle = useAnimatedStyle(() => ({
@@ -112,7 +116,8 @@ function Radio<T extends string>({
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   group: {
     gap: Spacing.sm,
   },
@@ -137,18 +142,18 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accent,
+    backgroundColor: c.accent,
   },
   text: {
     flex: 1,
   },
   label: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
   },
   description: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16,

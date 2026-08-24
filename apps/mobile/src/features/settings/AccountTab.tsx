@@ -2,12 +2,15 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { CurrentUser } from '@genzh/shared';
 
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /** Your credentials and the identifier other people use to find you. */
 export function AccountTab({ user }: { user: CurrentUser }) {
+  const styles = useThemedStyles(makeStyles);
+  const panel = usePanel();
   return (
     <ScrollView contentContainerStyle={panel.content}>
       <Text style={panel.title}>My account</Text>
@@ -63,25 +66,26 @@ export function AccountTab({ user }: { user: CurrentUser }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   selectable: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontFamily: 'monospace',
     fontSize: 12,
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
   },
   hint: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 11,
     marginTop: 2,
   },
   body: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
   },

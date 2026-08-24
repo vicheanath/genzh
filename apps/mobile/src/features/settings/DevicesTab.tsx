@@ -5,7 +5,7 @@ import { Slider } from '../../components/Slider';
 import { Switch } from '../../components/Switch';
 import { useAppStore } from '../../lib/store';
 
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /**
  * Voice & video preferences.
@@ -17,6 +17,7 @@ import { panel } from './styles';
  * an output device.
  */
 export function DevicesTab() {
+  const panel = usePanel();
   const outputVolume = useAppStore((s) => s.outputVolume);
   const speakerphone = useAppStore((s) => s.speakerphone);
   const isMuted = useAppStore((s) => s.isMuted);

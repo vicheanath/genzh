@@ -2,7 +2,8 @@ import React from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { AlertCircle, CheckCircle2, Info, TriangleAlert } from 'lucide-react-native';
 
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface CalloutProps {
   /** Matches the web component's vocabulary, so ports read the same. */
@@ -15,15 +16,17 @@ export interface CalloutProps {
   style?: ViewStyle;
 }
 
-const TONES = {
-  info: { color: Colors.accentText, background: Colors.accentSubtle, Icon: Info },
-  danger: { color: Colors.danger, background: Colors.dangerSubtle, Icon: AlertCircle },
-  success: { color: Colors.success, background: Colors.successSubtle, Icon: CheckCircle2 },
-  warning: { color: Colors.warning, background: 'rgba(250, 173, 20, 0.16)', Icon: TriangleAlert },
-} as const;
+const makeTONES = (c: Palette) =>
+  ({
+  info: { color: c.accentText, background: c.accentSubtle, Icon: Info },
+  danger: { color: c.danger, background: c.dangerSubtle, Icon: AlertCircle },
+  success: { color: c.success, background: c.successSubtle, Icon: CheckCircle2 },
+  warning: { color: c.warning, background: 'rgba(250, 173, 20, 0.16)', Icon: TriangleAlert },
+} as const);
 
 /** A boxed message: an error from a form, a note above a list. */
 export function Callout({ tone, type, text, children, style }: CalloutProps) {
+  const TONES = useThemedStyles(makeTONES);
   const { color, background, Icon } = TONES[tone ?? type ?? 'info'];
 
   return (

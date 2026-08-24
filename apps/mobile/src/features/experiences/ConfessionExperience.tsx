@@ -6,11 +6,13 @@ import type { RoomWithPermissions } from '@genzh/shared';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
+import { EmptyState } from '../../components/EmptyState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
-import { exp, postToChat } from './shared';
+import { useExp, postToChat } from './shared';
 
 type Theme = 'midnight' | 'sunset' | 'cyber' | 'rose' | 'emerald';
 
@@ -50,42 +52,15 @@ const TAGS = [
 
 const REACTIONS = ['🔥', '💀', '😱', '☕', '❤️', '🤐'];
 
-const INITIAL_CONFESSIONS: Confession[] = [
-  {
-    id: 'conf-1',
-    alias: 'MysticFox#4912',
-    text: 'I pretend to be in deep focus when my manager calls, but I am literally just watching mechanical keyboard build ASMR.',
-    tag: '💀 Regret',
-    theme: 'midnight',
-    createdAt: '12m ago',
-    reactions: { '💀': 14, '😂': 8, '☕': 3 },
-  },
-  {
-    id: 'conf-2',
-    alias: 'NeonGhost#8102',
-    text: 'I dropped a production database in my first week at a previous startup and fixed it in six minutes before anyone noticed.',
-    tag: '🔥 Spicy',
-    theme: 'cyber',
-    createdAt: '45m ago',
-    reactions: { '😱': 18, '🔥': 12, '🤐': 9 },
-  },
-  {
-    id: 'conf-3',
-    alias: 'VelvetOtter#2239',
-    text: 'I still listen to the Minecraft alpha soundtrack when studying because nothing else comes close to that peace.',
-    tag: '🌌 3 AM thought',
-    theme: 'rose',
-    createdAt: '2h ago',
-    reactions: { '❤️': 22, '✨': 15 },
-  },
-];
-
 /** An anonymous confession wall, with a spotlight reveal. */
 export function ConfessionExperience({ room }: { room: RoomWithPermissions }) {
+  const styles = useThemedStyles(makeStyles);
+  const exp = useExp();
+  const c = useColors();
   const { getToken } = useAuth();
   const toast = useToast();
 
-  const [confessions, setConfessions] = useState<Confession[]>(INITIAL_CONFESSIONS);
+  const [confessions, setConfessions] = useState<Confession[]>([]);
   const [composeOpen, setComposeOpen] = useState(false);
   const [text, setText] = useState('');
   const [tag, setTag] = useState(TAGS[0] ?? '🤫 Secret');
@@ -147,7 +122,7 @@ export function ConfessionExperience({ room }: { room: RoomWithPermissions }) {
     <ScrollView contentContainerStyle={exp.content} keyboardShouldPersistTaps="handled">
       <View style={exp.cardHeader}>
         <View style={exp.tag}>
-          <Lock size={13} color={Colors.accent} />
+          <Lock size={13} color={c.accent} />
           <Text style={exp.tagText}>Confession wall</Text>
         </View>
         <Button
@@ -158,7 +133,7 @@ export function ConfessionExperience({ room }: { room: RoomWithPermissions }) {
             if (confessions.length === 0) return;
             setSpotlight(confessions[Math.floor(Math.random() * confessions.length)] ?? null);
           }}
-          icon={<Shuffle size={15} color={Colors.text} />}
+          icon={<Shuffle size={15} color={c.text} />}
         />
       </View>
 
@@ -167,7 +142,7 @@ export function ConfessionExperience({ room }: { room: RoomWithPermissions }) {
       {composeOpen ? (
         <View style={exp.card}>
           <View style={exp.row}>
-            <Sparkles size={15} color={Colors.accent} />
+            <Sparkles size={15} color={c.accent} />
             <Text style={styles.composeTitle}>Drop an anonymous truth card</Text>
           </View>
 
@@ -231,9 +206,17 @@ export function ConfessionExperience({ room }: { room: RoomWithPermissions }) {
         <Button
           title="Drop a confession"
           onPress={() => setComposeOpen(true)}
-          icon={<Plus size={15} color={Colors.accentContrast} />}
+          icon={<Plus size={15} color={c.accentContrast} />}
         />
       )}
+
+      {confessions.length === 0 ? (
+        <EmptyState
+          icon={<Lock size={28} color={c.textSubtle} />}
+          title="No confessions yet"
+          description="Nothing has been dropped in this room. Post the first one — it stays anonymous."
+        />
+      ) : null}
 
       {confessions.map((confession) => {
         const palette = THEMES.find((entry) => entry.key === confession.theme) ?? THEMES[0]!;
@@ -315,15 +298,16 @@ export function ConfessionExperience({ room }: { room: RoomWithPermissions }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   composeTitle: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '800',
   },
   themeActive: {
     borderWidth: 2,
-    borderColor: Colors.accent,
+    borderColor: c.accent,
   },
   themeText: {
     color: '#ffffff',

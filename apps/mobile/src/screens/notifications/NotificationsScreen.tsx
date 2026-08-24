@@ -7,7 +7,8 @@ import { Button } from '../../components/Button';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { NotificationList } from '../../features/notifications/NotificationList';
 import { useNotifications } from '../../lib/useNotifications';
-import { Colors } from '../../theme/tokens';
+import { type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * Notifications as a destination.
@@ -17,6 +18,8 @@ import { Colors } from '../../theme/tokens';
  * room to scroll that implies.
  */
 export function NotificationsScreen({ navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { unread, markAllRead } = useNotifications();
 
   return (
@@ -31,7 +34,7 @@ export function NotificationsScreen({ navigation }: any) {
               size="sm"
               variant="ghost"
               onPress={() => void markAllRead()}
-              icon={<CheckCheck size={15} color={Colors.textMuted} />}
+              icon={<CheckCheck size={15} color={c.textMuted} />}
             />
           ) : null
         }
@@ -47,10 +50,11 @@ export function NotificationsScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   body: {
     flex: 1,

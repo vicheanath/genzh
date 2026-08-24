@@ -6,9 +6,10 @@ import type { RoomWithPermissions } from '@genzh/shared';
 import { Button } from '../../components/Button';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
-import { exp, postToChat } from './shared';
+import { useExp, postToChat } from './shared';
 
 const SESSION_SECONDS = 300;
 
@@ -27,6 +28,9 @@ const BURST_EMOJI = ['⚡', '🔥', '❤️', '🚀', '💀', '🎉'];
 
 /** Speed chat: a countdown, a rotating icebreaker, and reaction bursts. */
 export function QuickChatExperience({ room }: { room: RoomWithPermissions }) {
+  const styles = useThemedStyles(makeStyles);
+  const exp = useExp();
+  const c = useColors();
   const { getToken } = useAuth();
   const toast = useToast();
 
@@ -73,12 +77,12 @@ export function QuickChatExperience({ room }: { room: RoomWithPermissions }) {
     <ScrollView contentContainerStyle={exp.content}>
       <View style={exp.cardHeader}>
         <View style={exp.tag}>
-          <Zap size={13} color={Colors.accent} />
+          <Zap size={13} color={c.accent} />
           <Text style={exp.tagText}>Ephemeral speed chat</Text>
         </View>
 
         <View style={exp.row}>
-          <Timer size={13} color={secondsLeft < 60 ? Colors.danger : Colors.textMuted} />
+          <Timer size={13} color={secondsLeft < 60 ? c.danger : c.textMuted} />
           <Text style={[styles.clock, secondsLeft < 60 && styles.clockLow]}>
             {minutes}:{String(seconds).padStart(2, '0')}
           </Text>
@@ -87,7 +91,7 @@ export function QuickChatExperience({ room }: { room: RoomWithPermissions }) {
             size="sm"
             variant="ghost"
             onPress={() => setSecondsLeft(SESSION_SECONDS)}
-            icon={<RotateCcw size={14} color={Colors.textMuted} />}
+            icon={<RotateCcw size={14} color={c.textMuted} />}
           />
         </View>
       </View>
@@ -95,7 +99,7 @@ export function QuickChatExperience({ room }: { room: RoomWithPermissions }) {
       <View style={exp.card}>
         <View style={exp.cardHeader}>
           <View style={exp.row}>
-            <Sparkles size={14} color={Colors.accent} />
+            <Sparkles size={14} color={c.accent} />
             <Text style={styles.label}>Icebreaker prompt</Text>
           </View>
           <Button
@@ -103,7 +107,7 @@ export function QuickChatExperience({ room }: { room: RoomWithPermissions }) {
             size="sm"
             variant="secondary"
             onPress={() => setPromptIndex((index) => (index + 1) % ICEBREAKERS.length)}
-            icon={<Shuffle size={13} color={Colors.text} />}
+            icon={<Shuffle size={13} color={c.text} />}
           />
         </View>
 
@@ -114,7 +118,7 @@ export function QuickChatExperience({ room }: { room: RoomWithPermissions }) {
           size="sm"
           variant="ghost"
           onPress={() => void sharePrompt()}
-          icon={<Send size={13} color={Colors.textMuted} />}
+          icon={<Send size={13} color={c.textMuted} />}
         />
       </View>
 
@@ -140,6 +144,7 @@ export function QuickChatExperience({ room }: { room: RoomWithPermissions }) {
 }
 
 function FloatingEmoji({ emoji, left }: { emoji: string; left: number }) {
+  const styles = useThemedStyles(makeStyles);
   const rise = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -169,25 +174,26 @@ function FloatingEmoji({ emoji, left }: { emoji: string; left: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   clock: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
   clockLow: {
-    color: Colors.danger,
+    color: c.danger,
   },
   label: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
   prompt: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     lineHeight: 26,
     fontWeight: '700',
@@ -197,8 +203,8 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },

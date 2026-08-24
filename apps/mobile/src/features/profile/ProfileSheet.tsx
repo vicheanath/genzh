@@ -19,7 +19,8 @@ import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 import { useAppStore } from '../../lib/store';
 import { usePresence } from '../../lib/usePresence';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * Somebody's profile, as a bottom sheet.
@@ -42,6 +43,8 @@ export function ProfileSheet() {
 }
 
 function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { token, getToken, user } = useAuth();
   const navigation = useNavigation<any>();
   const toast = useToast();
@@ -111,7 +114,7 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
   if (profileQuery.isLoading) return <SkeletonRows rows={2} />;
 
   const data = profileQuery.data;
-  const accent = data?.accent_color ?? Colors.accent;
+  const accent = data?.accent_color ?? c.accent;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -125,7 +128,7 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
             accent={data?.accent_color}
             size={72}
             presence={isOnline(userId) ? 'online' : 'offline'}
-            ringColor={Colors.surface}
+            ringColor={c.surface}
           />
         </View>
         <Text style={styles.name}>{data?.display_name ?? 'User profile'}</Text>
@@ -149,7 +152,7 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
             title="Send direct message"
             onPress={() => void handleOpenDM()}
             loading={busy}
-            icon={<MessageSquare size={16} color={Colors.accentContrast} />}
+            icon={<MessageSquare size={16} color={c.accentContrast} />}
           />
 
           <View style={styles.actionRow}>
@@ -159,7 +162,7 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
               style={styles.grow}
               disabled={busy}
               onPress={() => void handleSendFriendRequest()}
-              icon={<UserPlus size={15} color={Colors.text} />}
+              icon={<UserPlus size={15} color={c.text} />}
             />
             <Button
               title="Block"
@@ -175,7 +178,8 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   content: {
     paddingBottom: Spacing.lg,
   },
@@ -191,21 +195,21 @@ const styles = StyleSheet.create({
   avatarWrap: {
     borderRadius: Radius.full,
     borderWidth: 4,
-    borderColor: Colors.surface,
+    borderColor: c.surface,
     marginBottom: Spacing.sm,
   },
   name: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 19,
     fontWeight: '800',
   },
   handle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     marginTop: 1,
   },
   bio: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
@@ -216,18 +220,18 @@ const styles = StyleSheet.create({
     margin: Spacing.lg,
     padding: Spacing.md,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.sunken,
+    backgroundColor: c.sunken,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     gap: 2,
   },
   idLabel: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '700',
   },
   idValue: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontFamily: 'monospace',
     fontSize: 12,
     padding: 0,
@@ -244,7 +248,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selfNote: {
-    color: Colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     textAlign: 'center',
     paddingHorizontal: Spacing.xl,

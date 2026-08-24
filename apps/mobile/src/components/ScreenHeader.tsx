@@ -2,7 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface ScreenHeaderProps {
   title: string;
@@ -30,6 +31,8 @@ export function ScreenHeader({
   below,
   style,
 }: ScreenHeaderProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   return (
     <View style={[styles.root, style]}>
       <View style={styles.row}>
@@ -41,7 +44,7 @@ export function ScreenHeader({
             hitSlop={10}
             style={styles.back}
           >
-            <ChevronLeft size={22} color={Colors.text} />
+            <ChevronLeft size={22} color={c.text} />
           </Pressable>
         ) : null}
 
@@ -64,11 +67,12 @@ export function ScreenHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    backgroundColor: Colors.bg,
+    borderBottomColor: c.border,
+    backgroundColor: c.bg,
   },
   row: {
     flexDirection: 'row',
@@ -81,7 +85,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -89,13 +93,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   subtitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     marginTop: 1,
   },

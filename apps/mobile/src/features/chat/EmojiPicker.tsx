@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { EMOJI } from '@genzh/shared';
 
 import { Sheet } from '../../components/Sheet';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 export interface EmojiPickerProps {
   open: boolean;
@@ -20,6 +21,7 @@ export interface EmojiPickerProps {
  * drifting the moment one of them gains a face.
  */
 export function EmojiPicker({ open, onOpenChange, onPick, title }: EmojiPickerProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       {title ? <Text style={styles.title}>{title}</Text> : null}
@@ -43,9 +45,10 @@ export function EmojiPicker({ open, onOpenChange, onPick, title }: EmojiPickerPr
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   title: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -67,7 +70,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   cellPressed: {
-    backgroundColor: Colors.hover,
+    backgroundColor: c.hover,
   },
   emoji: {
     fontSize: 26,

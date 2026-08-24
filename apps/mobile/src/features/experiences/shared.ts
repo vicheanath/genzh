@@ -1,7 +1,8 @@
 import { StyleSheet } from 'react-native';
 import { messages as messagesApi, type RoomWithPermissions } from '@genzh/shared';
 
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 /**
  * Publish an experience's state into the room's transcript.
@@ -20,17 +21,18 @@ export async function postToChat(
 }
 
 /** The shared look of an experience card. */
-export const exp = StyleSheet.create({
+export const makeExp = (c: Palette) =>
+  StyleSheet.create({
   content: {
     padding: Spacing.lg,
     paddingBottom: Spacing.xxl * 2,
     gap: Spacing.md,
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xxl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.lg,
     gap: Spacing.md,
   },
@@ -45,29 +47,29 @@ export const exp = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     alignSelf: 'flex-start',
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: 4,
   },
   tagText: {
-    color: Colors.accentText,
+    color: c.accentText,
     fontSize: 11,
     fontWeight: '800',
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   subtitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
   },
   sectionTitle: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
@@ -90,28 +92,31 @@ export const exp = StyleSheet.create({
   chip: {
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
   },
   chipActive: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accentSubtle,
+    borderColor: c.accent,
+    backgroundColor: c.accentSubtle,
   },
   chipText: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 12,
     fontWeight: '700',
   },
   chipTextActive: {
-    color: Colors.accentText,
+    color: c.accentText,
   },
   timer: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 34,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
     textAlign: 'center',
   },
 });
+
+/** The shared experience-card sheet for the active theme. */
+export const useExp = () => useThemedStyles(makeExp);

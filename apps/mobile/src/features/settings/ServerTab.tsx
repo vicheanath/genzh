@@ -8,7 +8,7 @@ import { useToast } from '../../components/Toast';
 import { DEFAULT_API_URL, getApiUrl, saveApiUrl } from '../../api/config';
 import { syncSocketBaseUrl } from '../../lib/socket';
 
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 /**
  * Which machine on the network is running the API.
@@ -19,6 +19,7 @@ import { panel } from './styles';
  * different port.
  */
 export function ServerTab() {
+  const panel = usePanel();
   const toast = useToast();
   const [apiUrl, setApiUrl] = useState(getApiUrl());
   const [saving, setSaving] = useState(false);

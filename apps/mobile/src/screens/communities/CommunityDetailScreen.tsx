@@ -25,7 +25,8 @@ import {
   canOpenSettings,
 } from '../../features/community-settings/tabs';
 import { isExperienceRoom, roomTypeIcon } from '../../lib/roomTypes';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * One community: its channels, grouped the way the sidebar groups them.
@@ -35,6 +36,8 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  * people who can actually change something), and leaving.
  */
 export function CommunityDetailScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { communityId, communityName, name } = route.params ?? {};
   const { token, user } = useAuth();
   const toast = useToast();
@@ -105,14 +108,14 @@ export function CommunityDetailScreen({ route, navigation }: any) {
                   title: data?.name,
                 })
               }
-              icon={<Users size={18} color={Colors.textMuted} />}
+              icon={<Users size={18} color={c.textMuted} />}
             />
             <Button
               title=""
               size="sm"
               variant="ghost"
               onPress={() => setMenuOpen(true)}
-              icon={<MoreHorizontal size={18} color={Colors.textMuted} />}
+              icon={<MoreHorizontal size={18} color={c.textMuted} />}
             />
           </>
         }
@@ -123,7 +126,7 @@ export function CommunityDetailScreen({ route, navigation }: any) {
         refreshControl={
           <RefreshControl
             refreshing={vm.isLoading}
-            tintColor={Colors.accent}
+            tintColor={c.accent}
             onRefresh={() => {
               void vm.refetchCommunity();
               void vm.refetchRooms();
@@ -180,7 +183,7 @@ export function CommunityDetailScreen({ route, navigation }: any) {
                   onPress={() => openRoom(room)}
                   style={({ pressed }) => [styles.channel, pressed && styles.channelPressed]}
                 >
-                  <Icon size={16} color={Colors.textMuted} />
+                  <Icon size={16} color={c.textMuted} />
                   <View style={styles.channelText}>
                     <Text style={styles.channelName} numberOfLines={1}>
                       {room.name}
@@ -209,7 +212,7 @@ export function CommunityDetailScreen({ route, navigation }: any) {
           {
             key: 'members',
             label: 'View members',
-            icon: <Users size={17} color={Colors.textMuted} />,
+            icon: <Users size={17} color={c.textMuted} />,
             onPress: () =>
               navigation.navigate('MemberList', { communityId, title: data?.name }),
           },
@@ -218,7 +221,7 @@ export function CommunityDetailScreen({ route, navigation }: any) {
                 {
                   key: 'settings',
                   label: 'Server settings',
-                  icon: <Settings size={17} color={Colors.textMuted} />,
+                  icon: <Settings size={17} color={c.textMuted} />,
                   onPress: () =>
                     navigation.navigate('CommunitySettings', {
                       communityId,
@@ -232,7 +235,7 @@ export function CommunityDetailScreen({ route, navigation }: any) {
             label: 'Leave server',
             tone: 'danger' as const,
             separated: true,
-            icon: <LogOut size={17} color={Colors.danger} />,
+            icon: <LogOut size={17} color={c.danger} />,
             onPress: () => void leave(),
           },
         ]}
@@ -241,10 +244,11 @@ export function CommunityDetailScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   content: {
     padding: Spacing.lg,
@@ -255,22 +259,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.lg,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     padding: Spacing.lg,
   },
   identityText: {
     flex: 1,
   },
   identityName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 17,
     fontWeight: '800',
   },
   identityMeta: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,
@@ -284,18 +288,18 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
   },
   channelPressed: {
-    backgroundColor: Colors.hover,
+    backgroundColor: c.hover,
   },
   channelText: {
     flex: 1,
   },
   channelName: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '600',
   },
   channelTopic: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
     marginTop: 1,
   },

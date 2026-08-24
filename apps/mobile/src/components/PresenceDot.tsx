@@ -1,16 +1,18 @@
 import React from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { Colors, Radius } from '../theme/tokens';
+import { Radius, type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export type Presence = 'online' | 'idle' | 'busy' | 'offline';
 
-const COLORS: Record<Presence, string> = {
-  online: Colors.online,
-  idle: Colors.idle,
-  busy: Colors.dnd,
-  offline: Colors.offline,
-};
+const makeCOLORS = (c: Palette): Record<Presence, string> =>
+  ({
+  online: c.online,
+  idle: c.idle,
+  busy: c.dnd,
+  offline: c.offline,
+});
 
 const LABELS: Record<Presence, string> = {
   online: 'Online',
@@ -28,7 +30,7 @@ export function PresenceDot({
   presence,
   size = 10,
   /** The colour the dot is punched out of — the surface behind the avatar. */
-  ringColor = Colors.bg,
+  ringColor: ringColorProp,
   style,
 }: {
   presence: Presence;
@@ -36,6 +38,9 @@ export function PresenceDot({
   ringColor?: string;
   style?: ViewStyle;
 }) {
+  const COLORS = useThemedStyles(makeCOLORS);
+  const c = useColors();
+  const ringColor = ringColorProp ?? c.bg;
   return (
     <View
       accessibilityLabel={LABELS[presence]}

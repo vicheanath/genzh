@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
-import { Colors, Radius } from '../theme/tokens';
+import { Radius } from '../theme/tokens';
+import { useColors } from '../theme/ThemeContext';
 
 export type BadgeTone = 'neutral' | 'accent' | 'success' | 'danger' | 'mint';
 
@@ -13,18 +14,19 @@ interface BadgeProps {
 }
 
 export function Badge({ text, tone = 'neutral', dot = false, style, textStyle }: BadgeProps) {
+  const c = useColors();
   const getColors = () => {
     switch (tone) {
       case 'accent':
-        return { bg: Colors.accentSubtle, text: Colors.accentText, border: 'rgba(186, 227, 16, 0.3)' };
+        return { bg: c.accentSubtle, text: c.accentText, border: 'rgba(186, 227, 16, 0.3)' };
       case 'success':
-        return { bg: Colors.successSubtle, text: Colors.success, border: 'rgba(82, 196, 26, 0.3)' };
+        return { bg: c.successSubtle, text: c.success, border: 'rgba(82, 196, 26, 0.3)' };
       case 'danger':
-        return { bg: Colors.dangerSubtle, text: Colors.danger, border: 'rgba(255, 77, 79, 0.3)' };
+        return { bg: c.dangerSubtle, text: c.danger, border: 'rgba(255, 77, 79, 0.3)' };
       case 'mint':
-        return { bg: Colors.liveSubtle, text: Colors.live, border: 'rgba(0, 210, 229, 0.3)' };
+        return { bg: c.liveSubtle, text: c.live, border: 'rgba(0, 210, 229, 0.3)' };
       default:
-        return { bg: Colors.surfaceRaised, text: Colors.textMuted, border: Colors.border };
+        return { bg: c.surfaceRaised, text: c.textMuted, border: c.border };
     }
   };
 

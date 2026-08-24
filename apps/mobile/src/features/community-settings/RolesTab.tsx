@@ -18,7 +18,8 @@ import { Input } from '../../components/Input';
 import { Switch } from '../../components/Switch';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import {
   ALL_PERMISSIONS,
@@ -27,7 +28,7 @@ import {
 } from './permissions';
 import { PanelList, PanelSkeleton } from './PanelList';
 import type { CommunityAbilities } from './tabs';
-import { panel } from './styles';
+import { usePanel } from './styles';
 
 export function RolesTab({
   community,
@@ -36,6 +37,9 @@ export function RolesTab({
   community: CommunityWithPermissions;
   abilities: CommunityAbilities;
 }) {
+  const styles = useThemedStyles(makeStyles);
+  const panel = usePanel();
+  const c = useColors();
   const { token, getToken } = useAuth();
   const toast = useToast();
 
@@ -143,7 +147,7 @@ export function RolesTab({
             onPress={() => void create()}
             loading={creating}
             disabled={!name.trim()}
-            icon={<Plus size={15} color={Colors.accentContrast} />}
+            icon={<Plus size={15} color={c.accentContrast} />}
           />
         </View>
       ) : null}
@@ -175,7 +179,8 @@ export function RolesTab({
   );
 }
 
-const styles = {
+const makeStyles = (c: Palette) =>
+  ({
   swatchRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
@@ -191,6 +196,6 @@ const styles = {
     borderColor: 'transparent',
   },
   swatchActive: {
-    borderColor: Colors.text,
+    borderColor: c.text,
   },
-};
+});

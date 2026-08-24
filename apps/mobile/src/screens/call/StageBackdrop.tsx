@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
-import { Colors } from '../../theme/tokens';
+import { useColors } from '../../theme/ThemeContext';
 
 /**
  * The aurora behind the call.
@@ -17,17 +17,18 @@ import { Colors } from '../../theme/tokens';
  * a single-accent wash cannot.
  */
 export function StageBackdrop() {
+  const c = useColors();
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id="auroraAccent" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={Colors.accent} stopOpacity={0.13} />
-            <Stop offset="1" stopColor={Colors.accent} stopOpacity={0} />
+            <Stop offset="0" stopColor={c.accent} stopOpacity={0.13} />
+            <Stop offset="1" stopColor={c.accent} stopOpacity={0} />
           </RadialGradient>
           <RadialGradient id="auroraLive" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={Colors.live} stopOpacity={0.14} />
-            <Stop offset="1" stopColor={Colors.live} stopOpacity={0} />
+            <Stop offset="0" stopColor={c.live} stopOpacity={0.14} />
+            <Stop offset="1" stopColor={c.live} stopOpacity={0} />
           </RadialGradient>
         </Defs>
 

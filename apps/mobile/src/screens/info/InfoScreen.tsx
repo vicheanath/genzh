@@ -17,7 +17,8 @@ import {
   type InfoPage,
   type InfoPageType,
 } from '../../features/info/content';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * Help and legal.
@@ -26,6 +27,7 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  * into their account still needs the contact address and the report form.
  */
 export function InfoScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
   const initial: InfoPageType = route?.params?.page ?? 'about';
   const [page, setPage] = useState<InfoPageType>(initial);
 
@@ -83,6 +85,8 @@ export function InfoScreen({ route, navigation }: any) {
 }
 
 function ContactForm() {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const toast = useToast();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -141,13 +145,14 @@ function ContactForm() {
         title="Send message"
         onPress={submit}
         disabled={!message.trim()}
-        icon={<Send size={15} color={Colors.accentContrast} />}
+        icon={<Send size={15} color={c.accentContrast} />}
       />
     </View>
   );
 }
 
 function ReportForm() {
+  const styles = useThemedStyles(makeStyles);
   const toast = useToast();
   const [category, setCategory] = useState('harassment');
   const [target, setTarget] = useState('');
@@ -211,10 +216,11 @@ function ReportForm() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   strip: {
     paddingBottom: Spacing.xs,
@@ -225,14 +231,14 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.6,
     marginTop: Spacing.sm,
   },
   lead: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 14,
     lineHeight: 21,
   },
@@ -241,12 +247,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   heading: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 15,
     fontWeight: '800',
   },
   paragraph: {
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 20,
   },
@@ -255,13 +261,13 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   bulletMark: {
-    color: Colors.accent,
+    color: c.accent,
     fontSize: 14,
     lineHeight: 20,
   },
   bullet: {
     flex: 1,
-    color: Colors.textMuted,
+    color: c.textMuted,
     fontSize: 13,
     lineHeight: 20,
   },
@@ -269,13 +275,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
     padding: Spacing.lg,
     borderRadius: Radius.xl,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     gap: Spacing.sm,
   },
   fieldLabel: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,

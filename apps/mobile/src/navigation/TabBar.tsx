@@ -13,7 +13,8 @@ import Animated, {
 
 import { TAB_BAR_HEIGHT, useBottomInset } from '../theme/layout';
 import { SPRING_CONTROL, TIMING_FAST } from '../theme/motion';
-import { Colors, Elevation, Radius } from '../theme/tokens';
+import { Radius, type Palette, type ElevationSet } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 /**
  * The bottom tab bar.
@@ -30,6 +31,7 @@ import { Colors, Elevation, Radius } from '../theme/tokens';
  * a `tabBarIcon` and a `tabBarLabel` exactly as before.
  */
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const styles = useThemedStyles(makeStyles);
   const bottomInset = useBottomInset();
 
   return (
@@ -103,6 +105,8 @@ function TabBarItem({
   onPress: () => void;
   onLongPress: () => void;
 }) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const active = useSharedValue(focused ? 1 : 0);
   const press = useSharedValue(0);
 
@@ -124,7 +128,7 @@ function TabBarItem({
   const idleIconStyle = useAnimatedStyle(() => ({ opacity: 1 - active.value }));
 
   const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(active.value, [0, 1], [Colors.textDim, Colors.accentText]),
+    color: interpolateColor(active.value, [0, 1], [c.textDim, c.accentText]),
   }));
 
   return (
@@ -147,9 +151,9 @@ function TabBarItem({
 
         {/* Two copies of the glyph, crossfaded: an icon's colour is a prop, so
             this is the only way it can travel rather than switch. */}
-        <Animated.View style={idleIconStyle}>{renderIcon(Colors.textDim)}</Animated.View>
+        <Animated.View style={idleIconStyle}>{renderIcon(c.textDim)}</Animated.View>
         <Animated.View style={[styles.iconOverlay, activeIconStyle]}>
-          {renderIcon(Colors.accent)}
+          {renderIcon(c.accent)}
         </Animated.View>
 
         {/* Anchored to the icon rather than the whole tab, so the count sits on
@@ -170,15 +174,16 @@ function TabBarItem({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette, e: ElevationSet) =>
+  StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: c.border,
     paddingTop: 6,
-    ...Elevation.bar,
+    ...e.bar,
   },
   tab: {
     flex: 1,
@@ -196,7 +201,7 @@ const styles = StyleSheet.create({
   wash: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
   },
   // Stacked on the idle glyph, which is the one that sets the slot's size.
   iconOverlay: {
@@ -212,13 +217,13 @@ const styles = StyleSheet.create({
     height: 16,
     paddingHorizontal: 4,
     borderRadius: Radius.full,
-    backgroundColor: Colors.danger,
+    backgroundColor: c.danger,
     alignItems: 'center',
     justifyContent: 'center',
     // A ring in the bar's own colour, so the badge reads as sitting on top of
     // the icon rather than merging with it.
     borderWidth: 2,
-    borderColor: Colors.surface,
+    borderColor: c.surface,
   },
   badgeText: {
     color: '#fff',

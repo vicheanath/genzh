@@ -1,9 +1,10 @@
-import { Ban, Headphones, Lock, Server, Shield, User } from 'lucide-react-native';
+import { Ban, Headphones, Lock, Palette, Server, Shield, User } from 'lucide-react-native';
 
 export type SettingsTab =
   | 'profile'
   | 'anonymous'
   | 'account'
+  | 'appearance'
   | 'voice'
   | 'blocked'
   | 'server';
@@ -39,6 +40,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<{
   {
     heading: 'App settings',
     tabs: [
+      { id: 'appearance', label: 'Appearance', short: 'Look', icon: Palette },
       { id: 'voice', label: 'Voice & video', short: 'Voice', icon: Headphones },
       { id: 'blocked', label: 'Blocked users', short: 'Blocked', icon: Ban },
       { id: 'server', label: 'Server', short: 'Server', icon: Server },

@@ -10,6 +10,7 @@ import { Tabs } from '../../components/Tabs';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
 import { AccountTab } from '../../features/settings/AccountTab';
+import { AppearanceTab } from '../../features/settings/AppearanceTab';
 import { AnonymousTab } from '../../features/settings/AnonymousTab';
 import { BlockedTab } from '../../features/settings/BlockedTab';
 import { DevicesTab } from '../../features/settings/DevicesTab';
@@ -17,7 +18,8 @@ import { ProfileTab } from '../../features/settings/ProfileTab';
 import { ServerTab } from '../../features/settings/ServerTab';
 import { SETTINGS_TABS, type SettingsTab } from '../../features/settings/tabs';
 import { useAppStore } from '../../lib/store';
-import { Colors, Spacing } from '../../theme/tokens';
+import { Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * User settings.
@@ -27,6 +29,8 @@ import { Colors, Spacing } from '../../theme/tokens';
  * `SETTINGS_TABS` data so the two cannot drift.
  */
 export function SettingsScreen() {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { user, logout } = useAuth();
   const confirm = useConfirm();
 
@@ -59,7 +63,7 @@ export function SettingsScreen() {
               items={SETTINGS_TABS.map((item) => ({
                 value: item.id,
                 label: item.short,
-                icon: <item.icon size={14} color={tab === item.id ? Colors.text : Colors.textDim} />,
+                icon: <item.icon size={14} color={tab === item.id ? c.text : c.textDim} />,
               }))}
             />
           </View>
@@ -70,6 +74,7 @@ export function SettingsScreen() {
         {tab === 'profile' && <ProfileTab user={user} />}
         {tab === 'anonymous' && <AnonymousTab user={user} />}
         {tab === 'account' && <AccountTab user={user} />}
+        {tab === 'appearance' && <AppearanceTab />}
         {tab === 'voice' && <DevicesTab />}
         {tab === 'blocked' && <BlockedTab />}
         {tab === 'server' && <ServerTab />}
@@ -87,10 +92,11 @@ export function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   strip: {
     paddingBottom: Spacing.xs,
@@ -101,6 +107,6 @@ const styles = StyleSheet.create({
   footer: {
     padding: Spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: c.border,
   },
 });

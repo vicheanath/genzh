@@ -13,6 +13,20 @@ import { VoiceProvider } from './src/context/VoiceContext';
 import { NotificationsProvider } from './src/lib/useNotifications';
 import { PresenceProvider } from './src/lib/usePresence';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+
+/**
+ * The status bar follows the ground it sits on.
+ *
+ * `style` names the *content* colour, not the bar's background, so it is the
+ * inverse of the theme: light glyphs on the dark ground, dark on the bone one.
+ * It has to be a child of ThemeProvider to read the resolved scheme, which is
+ * why this is a component rather than a prop on the element below.
+ */
+function ThemedStatusBar() {
+  const { scheme } = useTheme();
+  return <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />;
+}
 
 /**
  * The provider stack, in the same order the web app nests it.
@@ -31,6 +45,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <PresenceProvider>
@@ -40,7 +55,7 @@ export default function App() {
                     <ToastProvider>
                       <ConfirmProvider>
                         <RootNavigator />
-                        <StatusBar style="light" />
+                        <ThemedStatusBar />
                       </ConfirmProvider>
                     </ToastProvider>
                   </VoiceProvider>
@@ -49,6 +64,7 @@ export default function App() {
             </PresenceProvider>
           </AuthProvider>
         </QueryClientProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

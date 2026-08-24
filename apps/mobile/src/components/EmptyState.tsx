@@ -3,7 +3,8 @@ import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { Button } from './Button';
-import { Colors, Radius, Spacing } from '../theme/tokens';
+import { Radius, Spacing, type Palette } from '../theme/tokens';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 export interface EmptyStateProps {
   icon?: React.ReactNode;
@@ -29,6 +30,7 @@ export function EmptyState({
   onAction,
   style,
 }: EmptyStateProps) {
+  const styles = useThemedStyles(makeStyles);
   return (
     // An empty state usually replaces a spinner, so it fades in rather than
     // snapping — otherwise "loading" and "there is nothing here" look like the
@@ -48,7 +50,8 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   root: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -59,19 +62,19 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.sm,
   },
   title: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
   },
   description: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',

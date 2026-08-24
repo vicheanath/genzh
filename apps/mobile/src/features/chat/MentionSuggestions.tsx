@@ -5,7 +5,8 @@ import { AtSign } from 'lucide-react-native';
 import type { MentionCandidate } from '@genzh/shared';
 
 import { Avatar } from '../../components/Avatar';
-import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 export interface MentionSuggestionsProps {
   candidates: MentionCandidate[];
@@ -21,6 +22,8 @@ export interface MentionSuggestionsProps {
  * order matches what a desktop would show.
  */
 export function MentionSuggestions({ candidates, onPick }: MentionSuggestionsProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   if (candidates.length === 0) return null;
 
   return (
@@ -45,7 +48,7 @@ export function MentionSuggestions({ candidates, onPick }: MentionSuggestionsPro
           >
             {candidate.everyone ? (
               <View style={styles.everyoneMark}>
-                <AtSign size={16} color={Colors.accent} />
+                <AtSign size={16} color={c.accent} />
               </View>
             ) : (
               <Avatar
@@ -54,7 +57,7 @@ export function MentionSuggestions({ candidates, onPick }: MentionSuggestionsPro
                 accent={candidate.accent}
                 size={28}
                 presence={candidate.online ? 'online' : 'offline'}
-                ringColor={Colors.surfaceRaised}
+                ringColor={c.surfaceRaised}
               />
             )}
 
@@ -73,11 +76,12 @@ export function MentionSuggestions({ candidates, onPick }: MentionSuggestionsPro
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   panel: {
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     borderTopWidth: 1,
-    borderColor: Colors.border,
+    borderColor: c.border,
     borderTopLeftRadius: Radius.lg,
     borderTopRightRadius: Radius.lg,
     maxHeight: 210,
@@ -93,13 +97,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
   },
   rowPressed: {
-    backgroundColor: Colors.hover,
+    backgroundColor: c.hover,
   },
   everyoneMark: {
     width: 28,
     height: 28,
     borderRadius: Radius.full,
-    backgroundColor: Colors.accentSubtle,
+    backgroundColor: c.accentSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -107,12 +111,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    color: Colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '700',
   },
   detail: {
-    color: Colors.textSubtle,
+    color: c.textSubtle,
     fontSize: 12,
   },
 });

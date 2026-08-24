@@ -17,7 +17,8 @@ import { GameExperience } from '../../features/experiences/GameExperience';
 import { PollExperience } from '../../features/experiences/PollExperience';
 import { QuickChatExperience } from '../../features/experiences/QuickChatExperience';
 import { roomTypeLabel } from '../../lib/roomTypes';
-import { Colors, Spacing } from '../../theme/tokens';
+import { Spacing, type Palette } from '../../theme/tokens';
+import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 /**
  * A playground room whose point is the experience rather than the transcript.
@@ -27,6 +28,8 @@ import { Colors, Spacing } from '../../theme/tokens';
  * the real transcript screen rather than growing a second, worse copy of it.
  */
 export function ExperienceRoomScreen({ route, navigation }: any) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
   const { roomId, roomName } = route.params ?? {};
   const { token } = useAuth();
   const [tab, setTab] = useState<'experience' | 'chat'>('experience');
@@ -62,7 +65,7 @@ export function ExperienceRoomScreen({ route, navigation }: any) {
             onPress={() =>
               navigation.navigate('MemberList', { roomId: current.id, title: current.name })
             }
-            icon={<Users size={18} color={Colors.textMuted} />}
+            icon={<Users size={18} color={c.textMuted} />}
           />
         }
         below={
@@ -89,14 +92,14 @@ export function ExperienceRoomScreen({ route, navigation }: any) {
                   icon: (
                     <Sparkles
                       size={14}
-                      color={tab === 'experience' ? Colors.accentContrast : Colors.textDim}
+                      color={tab === 'experience' ? c.accentContrast : c.textDim}
                     />
                   ),
                 },
                 {
                   value: 'chat',
                   label: 'Room chat',
-                  icon: <MessageSquare size={14} color={Colors.textDim} />,
+                  icon: <MessageSquare size={14} color={c.textDim} />,
                 },
               ]}
             />
@@ -116,10 +119,11 @@ export function ExperienceRoomScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: c.bg,
   },
   strip: {
     padding: Spacing.lg,

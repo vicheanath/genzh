@@ -3,7 +3,8 @@ import { Image, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { hueFor } from '@genzh/shared';
 
 import { PresenceDot, type Presence } from './PresenceDot';
-import { Colors } from '../theme/tokens';
+import { type Palette } from '../theme/tokens';
+import { useThemedStyles, useColors } from '../theme/ThemeContext';
 
 export interface AvatarProps {
   name: string;
@@ -33,9 +34,12 @@ export function Avatar({
   presence,
   online,
   accent,
-  ringColor = Colors.bg,
+  ringColor: ringColorProp,
   style,
 }: AvatarProps) {
+  const styles = useThemedStyles(makeStyles);
+  const c = useColors();
+  const ringColor = ringColorProp ?? c.bg;
   const hue = hueFor(name || 'User');
   const bgColor = accent || `hsl(${hue}, 60%, 35%)`;
   const initial = (name || '?').charAt(0).toUpperCase();
@@ -81,7 +85,8 @@ export function Avatar({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
   wrapper: {
     position: 'relative',
   },
@@ -90,15 +95,15 @@ const styles = StyleSheet.create({
   },
   speakingRing: {
     borderWidth: 2.5,
-    borderColor: Colors.accent,
-    shadowColor: Colors.accent,
+    borderColor: c.accent,
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 6,
     elevation: 6,
   },
   image: {
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
   },
   fallback: {
     alignItems: 'center',
