@@ -19,7 +19,10 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   overflow-anchor: none;
   padding: var(--space-4) 0 var(--space-2);
 }
