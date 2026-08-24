@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Compass, Lock, MessageSquare, Plus, Sparkles, Users } from 'lucide-react-native';
 import {
@@ -184,11 +185,20 @@ export function HomeScreen({ navigation }: any) {
           />
         ) : null}
 
-        {(discovery.data?.rooms ?? []).map((room: Room) => {
+        {(discovery.data?.rooms ?? []).map((room: Room, index: number) => {
           const Icon = roomTypeIcon(room.room_type);
           return (
-            <Pressable
+            // Cards land one after another rather than all at once — the feed
+            // reads as filling in, which is what it is doing.
+            //
+            // The animation sits on a wrapper rather than on the Pressable
+            // itself: `Pressable` takes its style as a callback of the press
+            // state, and an animated component has no way to evaluate that.
+            <Animated.View
               key={room.id}
+              entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(280)}
+            >
+            <Pressable
               onPress={() => openRoom(room.id, room.name, room.room_type)}
               style={({ pressed }) => [styles.roomCard, pressed && styles.pressed]}
             >
@@ -224,6 +234,7 @@ export function HomeScreen({ navigation }: any) {
                 <Text style={styles.enter}>Enter →</Text>
               </View>
             </Pressable>
+            </Animated.View>
           );
         })}
 
@@ -288,9 +299,12 @@ export function HomeScreen({ navigation }: any) {
           />
         ) : null}
 
-        {(communities.data ?? []).map((community) => (
-          <Pressable
+        {(communities.data ?? []).map((community, index) => (
+          <Animated.View
             key={community.id}
+            entering={FadeInDown.delay(Math.min(index, 6) * 45).duration(260)}
+          >
+          <Pressable
             onPress={() =>
               navigation.navigate('CommunityDetail', {
                 communityId: community.id,
@@ -309,6 +323,7 @@ export function HomeScreen({ navigation }: any) {
               </Text>
             </View>
           </Pressable>
+          </Animated.View>
         ))}
       </ScrollView>
 

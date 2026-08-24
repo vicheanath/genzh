@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { Check, Minus } from 'lucide-react-native';
 
+import { SPRING_CONTROL, TIMING_FAST } from '../theme/motion';
 import { Colors, Radius, Spacing } from '../theme/tokens';
 
 export interface CheckboxProps {
@@ -13,7 +21,13 @@ export interface CheckboxProps {
   style?: ViewStyle;
 }
 
-/** A checkbox, optionally with a label and a line of help text beside it. */
+/**
+ * A checkbox, optionally with a label and a line of help text beside it.
+ *
+ * The mark pops in on a spring while the box fills on a timing: the tick is the
+ * part the eye follows, and giving it the overshoot makes checking something
+ * feel like a decision landing rather than a colour swap.
+ */
 export function Checkbox({
   checked,
   onCheckedChange,
@@ -24,6 +38,33 @@ export function Checkbox({
 }: CheckboxProps) {
   const on = checked === true;
   const mixed = checked === 'indeterminate';
+  const marked = on || mixed;
+
+  const fill = useSharedValue(marked ? 1 : 0);
+  const pop = useSharedValue(marked ? 1 : 0);
+
+  useEffect(() => {
+    fill.value = withTiming(marked ? 1 : 0, TIMING_FAST);
+    pop.value = withSpring(marked ? 1 : 0, SPRING_CONTROL);
+  }, [marked, fill, pop]);
+
+  const boxStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      fill.value,
+      [0, 1],
+      [Colors.surfaceMuted, Colors.accent],
+    ),
+    borderColor: interpolateColor(
+      fill.value,
+      [0, 1],
+      [Colors.borderStrong, Colors.accent],
+    ),
+  }));
+
+  const markStyle = useAnimatedStyle(() => ({
+    opacity: pop.value,
+    transform: [{ scale: pop.value }],
+  }));
 
   return (
     <Pressable
@@ -34,13 +75,15 @@ export function Checkbox({
       onPress={() => onCheckedChange(!on)}
       style={[styles.row, disabled && styles.disabled, style]}
     >
-      <View style={[styles.box, (on || mixed) && styles.boxChecked]}>
-        {mixed ? (
-          <Minus size={13} color={Colors.accentContrast} strokeWidth={3} />
-        ) : on ? (
-          <Check size={13} color={Colors.accentContrast} strokeWidth={3} />
-        ) : null}
-      </View>
+      <Animated.View style={[styles.box, boxStyle]}>
+        <Animated.View style={markStyle}>
+          {mixed ? (
+            <Minus size={13} color={Colors.accentContrast} strokeWidth={3} />
+          ) : (
+            <Check size={13} color={Colors.accentContrast} strokeWidth={3} />
+          )}
+        </Animated.View>
+      </Animated.View>
 
       {(label || description) && (
         <View style={styles.text}>
@@ -63,15 +106,9 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: Radius.sm,
     borderWidth: 1.5,
-    borderColor: Colors.borderStrong,
-    backgroundColor: Colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
-  },
-  boxChecked: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
   },
   text: {
     flex: 1,

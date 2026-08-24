@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { Button } from './Button';
 import { Colors, Radius, Spacing } from '../theme/tokens';
@@ -29,14 +30,21 @@ export function EmptyState({
   style,
 }: EmptyStateProps) {
   return (
-    <View style={[styles.root, style]}>
-      {icon ? <View style={styles.icon}>{icon}</View> : null}
+    // An empty state usually replaces a spinner, so it fades in rather than
+    // snapping — otherwise "loading" and "there is nothing here" look like the
+    // same instant.
+    <Animated.View entering={FadeIn.duration(240)} style={[styles.root, style]}>
+      {icon ? (
+        <Animated.View entering={FadeInDown.delay(60).duration(260)} style={styles.icon}>
+          {icon}
+        </Animated.View>
+      ) : null}
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.description}>{description}</Text> : null}
       {actionLabel && onAction ? (
         <Button title={actionLabel} variant="secondary" onPress={onAction} style={styles.action} />
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 

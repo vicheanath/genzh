@@ -1,6 +1,14 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import React, { useEffect } from 'react';
+import { Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import Animated, {
+  interpolate,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
+import { SPRING_CONTROL } from '../theme/motion';
 import { Colors, Radius } from '../theme/tokens';
 
 export interface SwitchProps {
@@ -14,8 +22,17 @@ export interface SwitchProps {
 const TRACK_WIDTH = 44;
 const TRACK_HEIGHT = 26;
 const THUMB = 20;
+const TRAVEL = TRACK_WIDTH - THUMB - 6;
 
-/** An on/off toggle. Controlled via `checked` / `onCheckedChange`. */
+/**
+ * An on/off toggle. Controlled via `checked` / `onCheckedChange`.
+ *
+ * The thumb springs rather than eases, and squashes slightly as it goes — the
+ * small overshoot is what makes a toggle feel like a physical switch instead of
+ * a rectangle changing colour. Both the travel and the track colour are
+ * interpolated from one shared value on the UI thread, so the two can never
+ * drift out of step even under load.
+ */
 export function Switch({
   checked,
   onCheckedChange,
@@ -23,15 +40,32 @@ export function Switch({
   style,
   accessibilityLabel,
 }: SwitchProps) {
-  const progress = useRef(new Animated.Value(checked ? 1 : 0)).current;
+  const progress = useSharedValue(checked ? 1 : 0);
 
   useEffect(() => {
-    Animated.timing(progress, {
-      toValue: checked ? 1 : 0,
-      duration: 150,
-      useNativeDriver: false,
-    }).start();
+    progress.value = withSpring(checked ? 1 : 0, SPRING_CONTROL);
   }, [checked, progress]);
+
+  const trackStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      [Colors.surfaceActive, Colors.accent],
+    ),
+  }));
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      [Colors.textMuted, Colors.accentContrast],
+    ),
+    transform: [
+      { translateX: progress.value * TRAVEL },
+      // Widest at the midpoint of the throw, back to a circle at either end.
+      { scaleX: interpolate(progress.value, [0, 0.5, 1], [1, 1.15, 1]) },
+    ],
+  }));
 
   return (
     <Pressable
@@ -43,33 +77,8 @@ export function Switch({
       hitSlop={8}
       style={[disabled && styles.disabled, style]}
     >
-      <Animated.View
-        style={[
-          styles.track,
-          {
-            backgroundColor: progress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [Colors.surfaceActive, Colors.accent],
-            }),
-          },
-        ]}
-      >
-        <Animated.View
-          style={[
-            styles.thumb,
-            {
-              backgroundColor: checked ? Colors.accentContrast : Colors.textMuted,
-              transform: [
-                {
-                  translateX: progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, TRACK_WIDTH - THUMB - 6],
-                  }),
-                },
-              ],
-            },
-          ]}
-        />
+      <Animated.View style={[styles.track, trackStyle]}>
+        <Animated.View style={[styles.thumb, thumbStyle]} />
       </Animated.View>
     </Pressable>
   );

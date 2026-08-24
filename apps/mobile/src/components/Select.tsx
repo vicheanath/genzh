@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import Animated, {
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { Check, ChevronDown } from 'lucide-react-native';
+
+import { SPRING_CONTROL } from '../theme/motion';
 
 import { Sheet } from './Sheet';
 import { Colors, Radius, Spacing } from '../theme/tokens';
@@ -41,6 +49,17 @@ export function Select<T extends string>({
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
 
+  // The chevron flips while the sheet is up, so the trigger keeps saying which
+  // way the control will go if you press it again.
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    spin.value = withSpring(open ? 1 : 0, SPRING_CONTROL);
+  }, [open, spin]);
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value * 180}deg` }],
+  }));
+
   return (
     <>
       <Pressable
@@ -53,19 +72,22 @@ export function Select<T extends string>({
         <Text style={[styles.triggerText, !current && styles.placeholder]} numberOfLines={1}>
           {current?.label ?? placeholder}
         </Text>
-        <ChevronDown size={16} color={Colors.textSubtle} />
+        <Animated.View style={chevronStyle}>
+          <ChevronDown size={16} color={Colors.textSubtle} />
+        </Animated.View>
       </Pressable>
 
       <Sheet open={open} onOpenChange={setOpen}>
         {label ? <Text style={styles.sheetTitle}>{label}</Text> : null}
 
         <ScrollView contentContainerStyle={styles.list}>
-          {options.map((option) => {
+          {options.map((option, index) => {
             const selected = option.value === value;
 
             return (
-              <Pressable
+              <AnimatedPressable
                 key={option.value}
+                entering={FadeIn.delay(index * 25).duration(160)}
                 disabled={option.disabled}
                 onPress={() => {
                   onValueChange(option.value);
@@ -77,7 +99,7 @@ export function Select<T extends string>({
                   {option.label}
                 </Text>
                 {selected && <Check size={16} color={Colors.accent} strokeWidth={3} />}
-              </Pressable>
+              </AnimatedPressable>
             );
           })}
         </ScrollView>
@@ -85,6 +107,8 @@ export function Select<T extends string>({
     </>
   );
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const styles = StyleSheet.create({
   trigger: {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 
 import { Button } from './Button';
 import { Colors, Radius, Spacing } from '../theme/tokens';
@@ -23,6 +24,10 @@ export interface DialogProps {
 /**
  * A modal dialog: a titled card over a scrim, with its actions at the foot.
  *
+ * The card scales up from just under full size while the scrim fades. Arriving
+ * at a scale rather than appearing whole gives the dialog somewhere to come
+ * from, which is what stops a modal reading as the screen being replaced.
+ *
  * Content is scrollable so a long body — a role's permission list, say — cannot
  * push the buttons off a small screen.
  */
@@ -43,14 +48,22 @@ export function Dialog({
     <Modal
       visible={open}
       transparent
-      animationType="fade"
+      animationType="none"
       statusBarTranslucent
       onRequestClose={() => onOpenChange(false)}
     >
-      <View style={styles.backdrop}>
+      <Animated.View
+        entering={FadeIn.duration(160)}
+        exiting={FadeOut.duration(140)}
+        style={styles.backdrop}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpenChange(false)} />
 
-        <View style={styles.popup}>
+        <Animated.View
+          entering={ZoomIn.springify().damping(20).stiffness(240)}
+          exiting={ZoomOut.duration(140)}
+          style={styles.popup}
+        >
           <Text style={styles.title}>{title}</Text>
           {description ? <Text style={styles.description}>{description}</Text> : null}
 
@@ -83,8 +96,8 @@ export function Dialog({
               />
             ) : null}
           </View>
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }

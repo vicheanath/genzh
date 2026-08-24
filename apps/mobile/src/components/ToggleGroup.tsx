@@ -1,6 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
+import { SPRING_CONTROL, TIMING_FAST } from '../theme/motion';
 import { Colors, Radius, Spacing } from '../theme/tokens';
 
 export interface ToggleItem<T extends string> {
@@ -38,27 +46,81 @@ export function ToggleGroup<T extends string>({
 
   return (
     <View style={[styles.group, style]}>
-      {items.map((item) => {
-        const on = value.includes(item.value);
-
-        return (
-          <Pressable
-            key={item.value}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            onPress={() => toggle(item.value)}
-            style={[styles.item, on && styles.itemOn]}
-          >
-            {item.icon}
-            {item.label ? (
-              <Text style={[styles.label, on && styles.labelOn]}>{item.label}</Text>
-            ) : null}
-          </Pressable>
-        );
-      })}
+      {items.map((item) => (
+        <Toggle
+          key={item.value}
+          item={item}
+          on={value.includes(item.value)}
+          onPress={() => toggle(item.value)}
+        />
+      ))}
     </View>
   );
 }
+
+/**
+ * One chip.
+ *
+ * Split out so each chip owns its own shared values: a category filter can hold
+ * a dozen of these, and driving them from one parent would mean a React render
+ * per chip on every press.
+ */
+function Toggle<T extends string>({
+  item,
+  on,
+  onPress,
+}: {
+  item: ToggleItem<T>;
+  on: boolean;
+  onPress: () => void;
+}) {
+  const selected = useSharedValue(on ? 1 : 0);
+  const press = useSharedValue(0);
+
+  useEffect(() => {
+    selected.value = withTiming(on ? 1 : 0, TIMING_FAST);
+  }, [on, selected]);
+
+  const chipStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      selected.value,
+      [0, 1],
+      [Colors.surfaceMuted, Colors.accentSubtle],
+    ),
+    borderColor: interpolateColor(
+      selected.value,
+      [0, 1],
+      [Colors.border, Colors.accent],
+    ),
+    transform: [{ scale: 1 - press.value * 0.05 }],
+  }));
+
+  const labelStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(selected.value, [0, 1], [Colors.textMuted, Colors.accentText]),
+  }));
+
+  return (
+    <AnimatedPressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: on }}
+      onPress={onPress}
+      onPressIn={() => {
+        press.value = withSpring(1, SPRING_CONTROL);
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, SPRING_CONTROL);
+      }}
+      style={[styles.item, chipStyle]}
+    >
+      {item.icon}
+      {item.label ? (
+        <Animated.Text style={[styles.label, labelStyle]}>{item.label}</Animated.Text>
+      ) : null}
+    </AnimatedPressable>
+  );
+}
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const styles = StyleSheet.create({
   group: {
@@ -74,19 +136,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surfaceMuted,
-  },
-  itemOn: {
-    borderColor: Colors.accent,
-    backgroundColor: Colors.accentSubtle,
   },
   label: {
-    color: Colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
-  },
-  labelOn: {
-    color: Colors.accentText,
   },
 });

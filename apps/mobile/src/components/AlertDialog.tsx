@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 
 import { Button } from './Button';
 import { Colors, Radius, Spacing } from '../theme/tokens';
@@ -40,14 +41,25 @@ export function AlertDialog({
     <Modal
       visible={open}
       transparent
-      animationType="fade"
+      animationType="none"
       statusBarTranslucent
       // Android's back button is the one dismissal that cannot be taken away;
       // it answers the same as Cancel rather than leaving the caller hanging.
       onRequestClose={() => onOpenChange(false)}
     >
-      <View style={styles.backdrop}>
-        <View style={styles.popup}>
+      <Animated.View
+        entering={FadeIn.duration(160)}
+        exiting={FadeOut.duration(140)}
+        style={styles.backdrop}
+      >
+        {/* Springier than the ordinary dialog on purpose: this one interrupts,
+            and the small overshoot is what makes it read as an interruption
+            rather than as another panel sliding into place. */}
+        <Animated.View
+          entering={ZoomIn.springify().damping(15).stiffness(260)}
+          exiting={ZoomOut.duration(140)}
+          style={styles.popup}
+        >
           <Text style={styles.title}>{title}</Text>
           {description ? <Text style={styles.description}>{description}</Text> : null}
           {children}
@@ -69,8 +81,8 @@ export function AlertDialog({
               }}
             />
           </View>
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }

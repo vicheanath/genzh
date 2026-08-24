@@ -2,16 +2,26 @@ import React, {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  LinearTransition,
+  runOnJS,
+  SlideOutUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  ZoomIn,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X } from 'lucide-react-native';
 
+import { SPRING_GESTURE, SPRING_PANEL } from '../theme/motion';
 import { Colors, Radius, Spacing } from '../theme/tokens';
 
 interface ToastItem {
@@ -28,6 +38,10 @@ interface ToastApi {
 
 const ToastContext = createContext<ToastApi | null>(null);
 
+/** How far sideways a toast has to be pushed before letting go dismisses it. */
+const SWIPE_DISMISS_DISTANCE = 90;
+const SWIPE_DISMISS_VELOCITY = 700;
+
 /**
  * Transient confirmations.
  *
@@ -39,8 +53,16 @@ const ToastContext = createContext<ToastApi | null>(null);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
   const dismiss = useCallback((id: number) => {
+    // Clearing the timer matters when the toast was swiped away early:
+    // otherwise it fires later against an id that is already gone.
+    const timer = timers.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timers.current.delete(id);
+    }
     setItems((current) => current.filter((item) => item.id !== id));
   }, []);
 
@@ -48,7 +70,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (type: ToastItem['type'], title: string, description?: string) => {
       const id = nextId.current++;
       setItems((current) => [...current, { id, title, description, type }]);
-      setTimeout(() => dismiss(id), type === 'error' ? 6000 : 3500);
+      timers.current.set(
+        id,
+        setTimeout(() => dismiss(id), type === 'error' ? 6000 : 3500),
+      );
     },
     [dismiss],
   );
@@ -95,55 +120,74 @@ function ToastViewport({
 }
 
 function ToastRow({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
-  const enter = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.spring(enter, {
-      toValue: 1,
-      useNativeDriver: true,
-      damping: 18,
-      stiffness: 220,
-    }).start();
-  }, [enter]);
-
+  const shift = useSharedValue(0);
   const isError = item.type === 'error';
 
+  // Flick it aside to get rid of it early — the gesture people already use on
+  // every notification banner on the platform.
+  const pan = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate((event) => {
+      shift.value = event.translationX;
+    })
+    .onEnd((event) => {
+      const gone =
+        Math.abs(event.translationX) > SWIPE_DISMISS_DISTANCE ||
+        Math.abs(event.velocityX) > SWIPE_DISMISS_VELOCITY;
+
+      if (gone) {
+        shift.value = withSpring(
+          Math.sign(event.translationX || event.velocityX) * 500,
+          { ...SPRING_GESTURE, velocity: event.velocityX },
+          () => {
+            runOnJS(onDismiss)();
+          },
+        );
+        return;
+      }
+
+      shift.value = withSpring(0, SPRING_PANEL);
+    });
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: shift.value }],
+    // Fading with the distance means a half-committed swipe reads as
+    // "this is going" rather than as a toast that merely slid sideways.
+    opacity: 1 - Math.min(Math.abs(shift.value) / 260, 0.85),
+  }));
+
   return (
-    <Animated.View
-      style={[
-        styles.toast,
-        isError && styles.toastError,
-        {
-          opacity: enter,
-          transform: [
-            { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) },
-          ],
-        },
-      ]}
-    >
-      <View style={[styles.icon, isError && styles.iconError]}>
-        {isError ? (
-          <X size={13} color={Colors.danger} strokeWidth={3} />
-        ) : (
-          <Check size={13} color={Colors.accent} strokeWidth={3} />
-        )}
-      </View>
+    <GestureDetector gesture={pan}>
+      <Animated.View
+        // The stack re-flows when one in the middle leaves; `LinearTransition`
+        // slides the survivors into their new places instead of snapping.
+        layout={LinearTransition.springify().damping(20).stiffness(220)}
+        entering={ZoomIn.springify().damping(18).stiffness(240)}
+        exiting={SlideOutUp.duration(180)}
+        style={[styles.toast, isError && styles.toastError, style]}
+      >
+        <View style={[styles.icon, isError && styles.iconError]}>
+          {isError ? (
+            <X size={13} color={Colors.danger} strokeWidth={3} />
+          ) : (
+            <Check size={13} color={Colors.accent} strokeWidth={3} />
+          )}
+        </View>
 
-      <View style={styles.text}>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-        {item.description ? (
-          <Text style={styles.description} numberOfLines={3}>
-            {item.description}
+        <View style={styles.text}>
+          <Text style={styles.title} numberOfLines={2}>
+            {item.title}
           </Text>
-        ) : null}
-      </View>
+          {item.description ? (
+            <Text style={styles.description} numberOfLines={3}>
+              {item.description}
+            </Text>
+          ) : null}
+        </View>
 
-      <Pressable onPress={onDismiss} hitSlop={10} accessibilityLabel="Dismiss">
-        <X size={15} color={Colors.textSubtle} />
-      </Pressable>
-    </Animated.View>
+        <Text style={styles.hint}>Swipe</Text>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -210,5 +254,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16,
+  },
+  hint: {
+    color: Colors.textDim,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

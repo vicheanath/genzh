@@ -1,12 +1,19 @@
 import React from 'react';
 import {
-  TouchableOpacity,
+  Pressable,
   Text,
   ActivityIndicator,
   StyleSheet,
   ViewStyle,
   TextStyle,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+
+import { SPRING_CONTROL } from '../theme/motion';
 import { Colors, Radius } from '../theme/tokens';
 
 export interface ButtonProps {
@@ -62,6 +69,15 @@ export function Button({
     }
   };
 
+  // Pressing shrinks the button under the finger and it springs back on
+  // release. `TouchableOpacity`'s fade says "something was touched"; a scale
+  // says *this* was touched, and it is what makes a tap feel like a press.
+  const press = useSharedValue(0);
+  const pressStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - press.value * 0.04 }],
+    opacity: 1 - press.value * 0.12,
+  }));
+
   const getSizeStyle = () => {
     switch (size) {
       case 'sm':
@@ -74,15 +90,24 @@ export function Button({
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.8}
+    <AnimatedPressable
+      accessibilityRole="button"
+      accessibilityLabel={title || undefined}
+      accessibilityState={{ disabled: disabled || loading }}
       onPress={onPress}
+      onPressIn={() => {
+        press.value = withSpring(1, SPRING_CONTROL);
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, SPRING_CONTROL);
+      }}
       disabled={disabled || loading}
       style={[
         styles.base,
         getVariantStyle(),
         getSizeStyle(),
         (disabled || loading) && styles.disabled,
+        pressStyle,
         style,
       ]}
     >
@@ -91,14 +116,18 @@ export function Button({
       ) : (
         <>
           {icon}
-          <Text style={[styles.textBase, getTextStyle(), icon ? { marginLeft: 8 } : null, textStyle]}>
-            {title}
-          </Text>
+          {title ? (
+            <Text style={[styles.textBase, getTextStyle(), icon ? { marginLeft: 8 } : null, textStyle]}>
+              {title}
+            </Text>
+          ) : null}
         </>
       )}
-    </TouchableOpacity>
+    </AnimatedPressable>
   );
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const styles = StyleSheet.create({
   base: {

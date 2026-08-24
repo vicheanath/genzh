@@ -1,7 +1,10 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './src/lib/queryClient';
 import { ToastProvider } from './src/components/Toast';
 import { ConfirmProvider } from './src/components/useConfirm';
 import { AuthProvider } from './src/context/AuthContext';
@@ -18,26 +21,35 @@ import { RootNavigator } from './src/navigation/RootNavigator';
  * notifications sit above the chat provider but attach to the same module-level
  * socket, so their position here is about who reads their state, not about the
  * connection. Toast and confirm wrap the navigator so any screen can raise one.
+ *
+ * `GestureHandlerRootView` is outermost of all, and has to be: every gesture in
+ * the app — the sheet you drag down, the toast you flick away, the slider —
+ * is delivered through it, and a handler mounted outside it silently never
+ * fires.
  */
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <PresenceProvider>
-          <NotificationsProvider>
-            <ChatProvider>
-              <VoiceProvider>
-                <ToastProvider>
-                  <ConfirmProvider>
-                    <RootNavigator />
-                    <StatusBar style="light" />
-                  </ConfirmProvider>
-                </ToastProvider>
-              </VoiceProvider>
-            </ChatProvider>
-          </NotificationsProvider>
-        </PresenceProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <PresenceProvider>
+              <NotificationsProvider>
+                <ChatProvider>
+                  <VoiceProvider>
+                    <ToastProvider>
+                      <ConfirmProvider>
+                        <RootNavigator />
+                        <StatusBar style="light" />
+                      </ConfirmProvider>
+                    </ToastProvider>
+                  </VoiceProvider>
+                </ChatProvider>
+              </NotificationsProvider>
+            </PresenceProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

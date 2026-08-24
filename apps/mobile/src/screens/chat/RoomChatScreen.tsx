@@ -8,8 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Users } from 'lucide-react-native';
+import { Phone, PhoneOff, Users } from 'lucide-react-native';
 import {
   ApiError,
   can,
@@ -35,6 +36,7 @@ import { LoadingPanel, Spinner } from '../../components/Spinner';
 import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
+import { useVoice } from '../../context/VoiceContext';
 import { Composer } from '../../features/chat/Composer';
 import { EmojiPicker } from '../../features/chat/EmojiPicker';
 import { mergeMessages, useMessageHistory } from '../../features/chat/useMessageHistory';
@@ -53,12 +55,16 @@ import { Colors, Radius, Spacing } from '../../theme/tokens';
  */
 const TYPING_INTERVAL_MS = 1000;
 
+/** Room types that carry a call as well as a transcript. */
+const VOICE_ROOM_TYPES: readonly string[] = ['voice', 'video', 'stage'];
+
 export function RoomChatScreen({ route, navigation }: any) {
   const { roomId, roomName } = route.params ?? {};
   const { getToken, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const openProfile = useAppStore((s) => s.openProfile);
+  const voice = useVoice();
 
   const anonAlias = useAppStore((s) => s.anonymousAlias);
   const anonByDefault = useAppStore((s) => s.isAnonymousByDefault);
@@ -280,6 +286,7 @@ export function RoomChatScreen({ route, navigation }: any) {
   const canPost = can(current.your_permissions, 'send_message');
   const canReact = can(current.your_permissions, 'add_reaction');
   const canModerate = can(current.your_permissions, 'manage_room');
+  const inCall = voice.activeRoomId === current.id;
 
   // Newest first, because the list is inverted — which is what keeps the newest
   // message pinned to the composer as the keyboard opens.
@@ -292,19 +299,43 @@ export function RoomChatScreen({ route, navigation }: any) {
         subtitle={current.topic ?? undefined}
         onBack={() => navigation.goBack()}
         actions={
-          <Button
-            title=""
-            size="sm"
-            variant="ghost"
-            onPress={() =>
-              navigation.navigate('MemberList', {
-                communityId: current.community_id,
-                roomId: current.id,
-                title: current.name,
-              })
-            }
-            icon={<Users size={18} color={Colors.textMuted} />}
-          />
+          <>
+            {/* A voice-capable channel is joinable from its own transcript —
+                the call bar then follows you wherever you navigate next. */}
+            {VOICE_ROOM_TYPES.includes(current.room_type) ? (
+              inCall ? (
+                <Button
+                  title=""
+                  size="sm"
+                  variant="danger"
+                  onPress={() => void voice.leaveRoom()}
+                  icon={<PhoneOff size={17} color={Colors.danger} />}
+                />
+              ) : (
+                <Button
+                  title=""
+                  size="sm"
+                  variant="ghost"
+                  onPress={() => void voice.joinRoom(current.id, current.name)}
+                  icon={<Phone size={17} color={Colors.live} />}
+                />
+              )
+            ) : null}
+
+            <Button
+              title=""
+              size="sm"
+              variant="ghost"
+              onPress={() =>
+                navigation.navigate('MemberList', {
+                  communityId: current.community_id,
+                  roomId: current.id,
+                  title: current.name,
+                })
+              }
+              icon={<Users size={18} color={Colors.textMuted} />}
+            />
+          </>
         }
       />
 
@@ -379,10 +410,14 @@ export function RoomChatScreen({ route, navigation }: any) {
         )}
 
         {typingNames.length > 0 ? (
-          <Text style={styles.typing}>
+          <Animated.Text
+            entering={FadeIn.duration(140)}
+            exiting={FadeOut.duration(140)}
+            style={styles.typing}
+          >
             {typingNames.slice(0, 3).join(', ')}
             {typingNames.length === 1 ? ' is' : ' are'} typing…
-          </Text>
+          </Animated.Text>
         ) : null}
 
         <Composer
@@ -528,17 +563,26 @@ function MessageRow({
 
         <View style={styles.reactions}>
           {message.reactions.map((reaction) => (
-            <Pressable
+            // A reaction arriving is the most common live change in a room, and
+            // the one most likely to be missed: it pops in, and the chips after
+            // it slide along rather than jumping.
+            <Animated.View
               key={reaction.reaction}
-              disabled={!canReact && !reaction.me}
-              onPress={() => onToggleReaction(message.id, reaction.reaction, reaction.me)}
-              style={[styles.reaction, reaction.me && styles.reactionMine]}
+              entering={ZoomIn.springify().damping(14).stiffness(300)}
+              exiting={FadeOut.duration(120)}
+              layout={LinearTransition.springify().damping(20).stiffness(240)}
             >
-              <Text style={styles.reactionEmoji}>{reaction.reaction}</Text>
-              <Text style={[styles.reactionCount, reaction.me && styles.reactionCountMine]}>
-                {reaction.count}
-              </Text>
-            </Pressable>
+              <Pressable
+                disabled={!canReact && !reaction.me}
+                onPress={() => onToggleReaction(message.id, reaction.reaction, reaction.me)}
+                style={[styles.reaction, reaction.me && styles.reactionMine]}
+              >
+                <Text style={styles.reactionEmoji}>{reaction.reaction}</Text>
+                <Text style={[styles.reactionCount, reaction.me && styles.reactionCountMine]}>
+                  {reaction.count}
+                </Text>
+              </Pressable>
+            </Animated.View>
           ))}
 
           {canReact

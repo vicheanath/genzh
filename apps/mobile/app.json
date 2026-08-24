@@ -7,11 +7,20 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow GenZH to access your camera for video calls and profile pictures.",
+        "NSMicrophoneUsageDescription": "Allow GenZH to access your microphone for voice rooms and calls."
+      }
     },
     "android": {
       "package": "com.genzh.mobile",
       "usesCleartextTraffic": true,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

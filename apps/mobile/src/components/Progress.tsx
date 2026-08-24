@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
+import { SPRING_PANEL } from '../theme/motion';
 import { Colors, Radius, Spacing } from '../theme/tokens';
 
 export interface ProgressProps {
@@ -17,7 +23,13 @@ export interface ProgressProps {
   style?: ViewStyle;
 }
 
-/** A determinate bar — a poll result, an upload, a quota. */
+/**
+ * A determinate bar — a poll result, an upload, a quota.
+ *
+ * The fill springs to each new value. That matters most where this is used
+ * hardest: a poll bar that jumps has no way to show that a vote just landed,
+ * while one that travels makes the change the thing you notice.
+ */
 export function Progress({
   value,
   label,
@@ -28,6 +40,15 @@ export function Progress({
   style,
 }: ProgressProps) {
   const fill = Math.min(100, Math.max(0, value));
+  const progress = useSharedValue(fill);
+
+  useEffect(() => {
+    progress.value = withSpring(fill, SPRING_PANEL);
+  }, [fill, progress]);
+
+  const barStyle = useAnimatedStyle(() => ({
+    width: `${progress.value}%`,
+  }));
 
   return (
     <View style={[styles.root, style]}>
@@ -45,10 +66,11 @@ export function Progress({
       )}
 
       <View style={[styles.track, size === 'sm' && styles.trackSm]}>
-        <View
+        <Animated.View
           style={[
             styles.indicator,
-            { width: `${fill}%`, backgroundColor: color ?? (tone === 'live' ? Colors.live : Colors.accent) },
+            { backgroundColor: color ?? (tone === 'live' ? Colors.live : Colors.accent) },
+            barStyle,
           ]}
         />
       </View>

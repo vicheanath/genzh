@@ -10,14 +10,16 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { Callout } from '../../components/Callout';
 import { Colors, Radius } from '../../theme/tokens';
 
-export function SignInScreen() {
+export function SignInScreen({ navigation }: any) {
   const { login, register, error, clearError } = useAuth();
+  const toast = useToast();
   const [tab, setTab] = useState<'login' | 'register'>('login');
 
   const [identifier, setIdentifier] = useState('');
@@ -37,14 +39,14 @@ export function SignInScreen() {
     try {
       if (tab === 'login') {
         if (!identifier || !password) {
-          Alert.alert('Validation Error', 'Please enter your handle/email and password.');
+          toast.error('Enter your handle or email, and your password.');
           setLoading(false);
           return;
         }
         await login(identifier.trim(), password);
       } else {
         if (!handle || !email || !password) {
-          Alert.alert('Validation Error', 'Please fill in handle, email, and password.');
+          toast.error('A handle, an email and a password are all required.');
           setLoading(false);
           return;
         }
@@ -161,6 +163,25 @@ export function SignInScreen() {
               </View>
             )}
           </View>
+
+          {/* The help and legal pages are reachable without a session, exactly
+              as the web routes are — somebody who cannot get in still needs the
+              contact address and the report form. */}
+          <View style={styles.legal}>
+            {[
+              { page: 'terms', label: 'Terms' },
+              { page: 'privacy', label: 'Privacy' },
+              { page: 'guidelines', label: 'Guidelines' },
+              { page: 'contact', label: 'Contact' },
+            ].map((link) => (
+              <TouchableOpacity
+                key={link.page}
+                onPress={() => navigation.navigate('Info', { page: link.page })}
+              >
+                <Text style={styles.legalLink}>{link.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -168,6 +189,18 @@ export function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
+  legal: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 24,
+  },
+  legalLink: {
+    color: Colors.textDim,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   safeArea: {
     flex: 1,
     backgroundColor: Colors.bg,

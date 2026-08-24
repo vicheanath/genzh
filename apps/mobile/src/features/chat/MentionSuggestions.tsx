@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutDown, LinearTransition } from 'react-native-reanimated';
 import { AtSign } from 'lucide-react-native';
 import type { MentionCandidate } from '@genzh/shared';
 
@@ -23,7 +24,14 @@ export function MentionSuggestions({ candidates, onPick }: MentionSuggestionsPro
   if (candidates.length === 0) return null;
 
   return (
-    <View style={styles.panel}>
+    // Rises out of the composer rather than appearing over it, so the list
+    // reads as belonging to the field it completes.
+    <Animated.View
+      entering={FadeInDown.duration(160)}
+      exiting={FadeOutDown.duration(120)}
+      layout={LinearTransition.springify().damping(22).stiffness(240)}
+      style={styles.panel}
+    >
       <ScrollView
         horizontal={false}
         keyboardShouldPersistTaps="always"
@@ -61,7 +69,7 @@ export function MentionSuggestions({ candidates, onPick }: MentionSuggestionsPro
           </Pressable>
         ))}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 

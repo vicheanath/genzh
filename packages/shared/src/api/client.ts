@@ -70,10 +70,18 @@ export function setTokenProvider(provider: TokenProvider | null): void {
  * Shared Axios instance for all API calls across web and mobile.
  */
 export const apiClient: AxiosInstance = axios.create({
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
+
+const AUTH_EXEMPT_PATHS = [
+  '/api/v1/auth/login',
+  '/api/v1/auth/register',
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/config',
+]
 
 // Request interceptor: inject base URL & authorization token
 apiClient.interceptors.request.use(
@@ -82,11 +90,19 @@ apiClient.interceptors.request.use(
       config.baseURL = defaultBaseUrl
     }
 
-    // Don't overwrite explicit authorization header if provided in request config
-    if (!config.headers.Authorization) {
+    const url = config.url ?? ''
+    const isAuthExempt = AUTH_EXEMPT_PATHS.some((path) => url.includes(path))
+
+    // Don't overwrite explicit authorization header if provided in request config,
+    // and don't try to fetch tokens for auth-exempt endpoints (prevents recursion/deadlock).
+    if (!config.headers.Authorization && !isAuthExempt) {
       let token = globalToken
       if (!token && tokenProvider) {
-        token = await tokenProvider()
+        try {
+          token = await tokenProvider()
+        } catch {
+          token = null
+        }
       }
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
@@ -106,8 +122,15 @@ apiClient.interceptors.response.use(
     }
 
     if (!error.response) {
-      // Network or transport failure
-      return Promise.reject(new ApiError(0, 'NETWORK_ERROR', 'Could not reach the server'))
+      // Network, timeout, or transport failure
+      const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout')
+      return Promise.reject(
+        new ApiError(
+          0,
+          isTimeout ? 'TIMEOUT_ERROR' : 'NETWORK_ERROR',
+          isTimeout ? 'Request timed out' : 'Could not reach the server',
+        ),
+      )
     }
 
     const status = error.response.status

@@ -1,13 +1,14 @@
-import React, { useRef, useState } from 'react';
-import {
-  PanResponder,
-  StyleSheet,
-  Text,
-  View,
-  type LayoutChangeEvent,
-  type ViewStyle,
-} from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
+import { SPRING_CONTROL } from '../theme/motion';
 import { Colors, Radius, Spacing } from '../theme/tokens';
 
 export interface SliderProps {
@@ -25,9 +26,20 @@ export interface SliderProps {
   style?: ViewStyle;
 }
 
-const THUMB = 20;
+const THUMB = 22;
 
-/** A single-value slider with an optional label and live value readout. */
+/**
+ * A single-value slider with an optional label and live value readout.
+ *
+ * The fill and the thumb are driven from a shared value on the UI thread, so
+ * the control tracks the finger at display rate even while JS is busy — which,
+ * for the playback-volume slider, is exactly when it is being dragged.
+ *
+ * `onValueChange` is only called when the *quantised* value actually changes,
+ * not on every frame: a 0–100 slider crossing a step fires about a hundred
+ * times across its whole travel instead of once per frame, and each of those is
+ * a React render.
+ */
 export function Slider({
   value,
   onValueChange,
@@ -40,59 +52,74 @@ export function Slider({
   disabled,
   style,
 }: SliderProps) {
-  const [width, setWidth] = useState(0);
+  const width = useSharedValue(0);
+  const ratio = useSharedValue(fractionOf(value, min, max));
+  const grabbed = useSharedValue(0);
 
-  // The drag handlers are installed once, so they close over the first render's
-  // props. These refs are what keeps them reading current values.
-  const widthRef = useRef(0);
-  const valueRef = useRef(value);
-  const changeRef = useRef(onValueChange);
-  const commitRef = useRef(onValueCommit);
-  valueRef.current = value;
-  changeRef.current = onValueChange;
-  commitRef.current = onValueCommit;
+  // Follow the prop while the finger is off the control. During a drag the
+  // gesture owns the position, or a late render would yank the thumb back —
+  // and this runs in an effect rather than in render because reading a shared
+  // value while rendering is exactly the tearing Reanimated warns about.
+  const externalRatio = fractionOf(value, min, max);
+  useEffect(() => {
+    if (grabbed.value === 0) ratio.value = externalRatio;
+  }, [externalRatio, grabbed, ratio]);
 
-  const quantize = (raw: number) => {
-    const clamped = Math.min(max, Math.max(min, raw));
-    const stepped = Math.round((clamped - min) / step) * step + min;
-    // Steps like 0.1 accumulate float error; rounding to the step's own
-    // precision keeps 0.30000000000000004 out of the readout.
-    const decimals = (String(step).split('.')[1] ?? '').length;
-    return Number(stepped.toFixed(decimals));
+  const emit = useCallback(
+    (next: number) => {
+      if (next !== value) onValueChange(next);
+    },
+    [onValueChange, value],
+  );
+
+  const commit = useCallback(
+    (next: number) => onValueCommit?.(next),
+    [onValueCommit],
+  );
+
+  const quantise = (fraction: number) => {
+    'worklet';
+    const raw = min + fraction * (max - min);
+    const stepped = Math.round((raw - min) / step) * step + min;
+    return Math.min(max, Math.max(min, stepped));
   };
 
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) => {
-        const track = widthRef.current;
-        if (track <= 0) return;
-        changeRef.current(quantizeAt(event.nativeEvent.locationX, track));
-      },
-      onPanResponderMove: (event) => {
-        const track = widthRef.current;
-        if (track <= 0) return;
-        changeRef.current(quantizeAt(event.nativeEvent.locationX, track));
-      },
-      onPanResponderRelease: () => {
-        commitRef.current?.(valueRef.current);
-      },
-    }),
-  ).current;
-
-  function quantizeAt(x: number, track: number) {
-    return quantize(min + (Math.min(track, Math.max(0, x)) / track) * (max - min));
-  }
-
-  const ratio = max > min ? (value - min) / (max - min) : 0;
-  const fill = Math.min(1, Math.max(0, ratio));
-
-  const onLayout = (event: LayoutChangeEvent) => {
-    const next = event.nativeEvent.layout.width;
-    widthRef.current = next;
-    setWidth(next);
+  const apply = (x: number) => {
+    'worklet';
+    if (width.value <= 0) return;
+    ratio.value = Math.min(1, Math.max(0, x / width.value));
+    runOnJS(emit)(quantise(ratio.value));
   };
+
+  const pan = Gesture.Pan()
+    .enabled(!disabled)
+    // A tap anywhere on the track jumps there, which is what people expect from
+    // a volume bar and what a drag-only slider makes needlessly fiddly.
+    .minDistance(0)
+    .onBegin((event) => {
+      grabbed.value = withSpring(1, SPRING_CONTROL);
+      apply(event.x);
+    })
+    .onUpdate((event) => {
+      apply(event.x);
+    })
+    .onFinalize(() => {
+      grabbed.value = withSpring(0, SPRING_CONTROL);
+      runOnJS(commit)(quantise(ratio.value));
+    });
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: ratio.value * width.value,
+  }));
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: ratio.value * width.value - THUMB / 2 },
+      // Grows under the thumb while held, so the finger covering it still
+      // leaves something visible at its edges.
+      { scale: 1 + grabbed.value * 0.25 },
+    ],
+  }));
 
   return (
     <View style={[styles.root, disabled && styles.disabled, style]}>
@@ -103,23 +130,26 @@ export function Slider({
         </View>
       )}
 
-      <View
-        style={styles.control}
-        onLayout={onLayout}
-        {...(disabled ? {} : responder.panHandlers)}
-      >
-        <View style={styles.track}>
-          <View style={[styles.indicator, { width: `${fill * 100}%` }]} />
-        </View>
+      <GestureDetector gesture={pan}>
         <View
-          style={[
-            styles.thumb,
-            { left: Math.max(0, fill * width - THUMB / 2) },
-          ]}
-        />
-      </View>
+          style={styles.control}
+          onLayout={(event: LayoutChangeEvent) => {
+            width.value = event.nativeEvent.layout.width;
+          }}
+        >
+          <View style={styles.track}>
+            <Animated.View style={[styles.indicator, fillStyle]} />
+          </View>
+          <Animated.View style={[styles.thumb, thumbStyle]} />
+        </View>
+      </GestureDetector>
     </View>
   );
+}
+
+function fractionOf(value: number, min: number, max: number): number {
+  if (max <= min) return 0;
+  return Math.min(1, Math.max(0, (value - min) / (max - min)));
 }
 
 const styles = StyleSheet.create({
@@ -143,7 +173,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   control: {
-    height: THUMB + 12,
+    height: THUMB + 14,
     justifyContent: 'center',
   },
   track: {

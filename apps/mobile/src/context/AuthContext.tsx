@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ApiError,
   auth,
+  setTokenProvider,
   type AuthResponse,
   type CurrentUser,
   type Profile,
@@ -153,6 +154,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return refreshing.current;
   }, [signOutLocally]);
+
+  useEffect(() => {
+    setTokenProvider(getToken);
+    return () => {
+      setTokenProvider(null);
+    };
+  }, [getToken]);
 
   const loadSession = useCallback(async () => {
     try {

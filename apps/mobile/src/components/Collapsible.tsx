@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View, type ViewStyle } from 'react-native';
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { ChevronDown } from 'lucide-react-native';
 
+import { SPRING_PANEL, TIMING_BASE } from '../theme/motion';
 import { Colors, Radius, Spacing } from '../theme/tokens';
-
-// Android opts out of layout animation unless it is switched on explicitly.
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export interface CollapsibleProps {
   title: string;
@@ -25,9 +28,14 @@ export interface CollapsibleProps {
 /**
  * A disclosure.
  *
- * The open/close is a `LayoutAnimation` rather than a measured height: the
- * panels here hold lists whose length is not knowable ahead of time, and
- * animating a hardcoded max-height either clips them or jumps.
+ * The panel animates to its *measured* height rather than to a guess. These
+ * panels hold lists whose length is not knowable ahead of time — a server's
+ * channels, a role's permissions — so a hardcoded max-height either clips them
+ * or leaves a gap, and `LayoutAnimation` (what this used before) cannot be
+ * interrupted halfway or driven from the UI thread.
+ *
+ * One chevron rotates instead of two icons swapping, which is the difference
+ * between a control that turns and one that flickers.
  */
 export function Collapsible({
   title,
@@ -42,13 +50,29 @@ export function Collapsible({
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlledOpen ?? uncontrolledOpen;
 
+  const contentHeight = useSharedValue(0);
+  const progress = useSharedValue(open ? 1 : 0);
+
   const toggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    if (controlledOpen === undefined) setUncontrolledOpen(!open);
-    onOpenChange?.(!open);
+    const next = !open;
+    progress.value = withSpring(next ? 1 : 0, SPRING_PANEL);
+    if (controlledOpen === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
   };
 
-  const Chevron = open ? ChevronDown : ChevronRight;
+  // Derived rather than set in an effect: the height follows the measurement
+  // the moment it lands, so a panel whose content grows while open — a channel
+  // list that just loaded — expands with it instead of clipping.
+  const height = useDerivedValue(() => progress.value * contentHeight.value);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    height: height.value,
+    opacity: progress.value,
+  }));
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${progress.value * 90 - 90}deg` }],
+  }));
 
   return (
     <View style={style}>
@@ -59,7 +83,9 @@ export function Collapsible({
           onPress={toggle}
           style={styles.trigger}
         >
-          <Chevron size={section ? 12 : 16} color={Colors.textSubtle} />
+          <Animated.View style={chevronStyle}>
+            <ChevronDown size={section ? 12 : 16} color={Colors.textSubtle} />
+          </Animated.View>
           <Text style={[styles.title, section && styles.sectionTitle]} numberOfLines={1}>
             {title}
           </Text>
@@ -67,7 +93,18 @@ export function Collapsible({
         {adornment}
       </View>
 
-      {open ? <View style={styles.panel}>{children}</View> : null}
+      <Animated.View style={[styles.panel, panelStyle]}>
+        {/* Measured off-flow inside the clipping panel: the wrapper always has
+            its natural height, and the panel above animates to it. */}
+        <View
+          style={styles.measure}
+          onLayout={(event: LayoutChangeEvent) => {
+            contentHeight.value = withTiming(event.nativeEvent.layout.height, TIMING_BASE);
+          }}
+        >
+          {children}
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -103,6 +140,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   panel: {
+    overflow: 'hidden',
+  },
+  measure: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
     paddingTop: Spacing.xs,
   },
 });

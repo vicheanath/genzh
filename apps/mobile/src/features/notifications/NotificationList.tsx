@@ -1,5 +1,6 @@
 import React from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { AtSign, Bell, MessageSquare, UserPlus } from 'lucide-react-native';
 import {
   formatRelative,
@@ -85,7 +86,7 @@ export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationList
           description="Mentions, direct messages and friend requests land here."
         />
       }
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         const Icon = ICONS[item.kind];
         const profile = item.actor_id ? lookup(item.actor_id) : null;
         // A notification from an anonymous message carries no actor by design,
@@ -93,6 +94,12 @@ export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationList
         const actor = profile?.display_name ?? 'Someone';
 
         return (
+          <Animated.View
+            // Staggered only over the first screenful: past that the delay is
+            // capped, or scrolling into old notifications would wait on it.
+            entering={FadeInDown.delay(Math.min(index, 6) * 45).duration(260)}
+            layout={LinearTransition.springify().damping(22).stiffness(220)}
+          >
           <Pressable
             onPress={() => open(item)}
             style={({ pressed }) => [
@@ -127,6 +134,7 @@ export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationList
 
             {!item.read_at ? <View style={styles.dot} /> : null}
           </Pressable>
+          </Animated.View>
         );
       }}
     />
