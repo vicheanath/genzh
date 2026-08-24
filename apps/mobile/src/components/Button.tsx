@@ -7,13 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
 
-import { SPRING_CONTROL } from '../theme/motion';
 import { Colors, Radius } from '../theme/tokens';
 
 export interface ButtonProps {
@@ -69,15 +63,6 @@ export function Button({
     }
   };
 
-  // Pressing shrinks the button under the finger and it springs back on
-  // release. `TouchableOpacity`'s fade says "something was touched"; a scale
-  // says *this* was touched, and it is what makes a tap feel like a press.
-  const press = useSharedValue(0);
-  const pressStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - press.value * 0.04 }],
-    opacity: 1 - press.value * 0.12,
-  }));
-
   const getSizeStyle = () => {
     switch (size) {
       case 'sm':
@@ -90,56 +75,58 @@ export function Button({
   };
 
   return (
-    <AnimatedPressable
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={title || undefined}
       accessibilityState={{ disabled: disabled || loading }}
       onPress={onPress}
-      onPressIn={() => {
-        press.value = withSpring(1, SPRING_CONTROL);
-      }}
-      onPressOut={() => {
-        press.value = withSpring(0, SPRING_CONTROL);
-      }}
       disabled={disabled || loading}
-      style={[
+      style={({ pressed }) => [
         styles.base,
         getVariantStyle(),
         getSizeStyle(),
         (disabled || loading) && styles.disabled,
-        pressStyle,
+        pressed && !disabled && !loading && styles.pressed,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? Colors.accentContrast : Colors.accent} size="small" />
+        <ActivityIndicator
+          color={variant === 'primary' ? Colors.accentContrast : Colors.accent}
+          size="small"
+        />
       ) : (
         <>
           {icon}
           {title ? (
-            <Text style={[styles.textBase, getTextStyle(), icon ? { marginLeft: 8 } : null, textStyle]}>
+            <Text
+              style={[
+                styles.textBase,
+                getTextStyle(),
+                icon ? { marginLeft: 8 } : null,
+                textStyle,
+              ]}
+            >
               {title}
             </Text>
           ) : null}
         </>
       )}
-    </AnimatedPressable>
+    </Pressable>
   );
 }
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const styles = StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radius.pill, // Rule 4: Pill controls
+    borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   btnPrimary: {
-    backgroundColor: Colors.accent, // Rule 1: Ink on Lime
+    backgroundColor: Colors.accent,
     borderColor: Colors.accent,
   },
   btnSecondary: {
@@ -175,7 +162,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   textPrimary: {
-    color: Colors.accentContrast, // #0f1202 Ink text
+    color: Colors.accentContrast,
   },
   textSecondary: {
     color: Colors.text,
@@ -191,5 +178,9 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.45,
+  },
+  pressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
   },
 });

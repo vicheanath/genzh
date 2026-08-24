@@ -102,3 +102,25 @@ export async function saveApiUrl(url: string): Promise<void> {
 export function getApiUrl(): string {
   return currentBaseUrl;
 }
+
+/**
+ * Rewrite media server WebSocket URL so it reaches the host on Android emulators and physical devices.
+ */
+export function resolveMediaWsUrl(mediaUrl: string): string {
+  try {
+    const rawWs = mediaUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+    const mediaUri = new URL(rawWs);
+    const apiUri = new URL(currentBaseUrl);
+
+    // If media_url points to loopback but the device reached the API on another host/IP:
+    if (isLoopback(mediaUri.hostname) && !isLoopback(apiUri.hostname)) {
+      mediaUri.hostname = apiUri.hostname;
+    } else if (Platform.OS === 'android' && isLoopback(mediaUri.hostname) && apiUri.hostname === '10.0.2.2') {
+      mediaUri.hostname = '10.0.2.2';
+    }
+
+    return mediaUri.toString();
+  } catch {
+    return mediaUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+  }
+}

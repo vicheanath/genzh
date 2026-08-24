@@ -474,7 +474,8 @@ export class VoiceClient {
   }
 
   private openSocket(session: MediaJoinResponse): void {
-    const socket = new WebSocket(session.media_url)
+    const wsUrl = session.media_url.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+    const socket = new WebSocket(wsUrl)
     this.socket = socket
 
     socket.addEventListener('open', () => {

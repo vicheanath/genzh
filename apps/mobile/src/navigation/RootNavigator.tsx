@@ -1,8 +1,9 @@
 import React from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
 
 import { LoadingPanel } from '../components/Spinner';
@@ -10,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { ProfileSheet } from '../features/profile/ProfileSheet';
 import { useNotifications } from '../lib/useNotifications';
 import { SignInScreen } from '../screens/auth/SignInScreen';
+import { CallScreen } from '../screens/call/CallScreen';
 import { RoomChatScreen } from '../screens/chat/RoomChatScreen';
 import { CommunitiesScreen } from '../screens/communities/CommunitiesScreen';
 import { CommunityDetailScreen } from '../screens/communities/CommunityDetailScreen';
@@ -30,6 +32,11 @@ const Tab = createBottomTabNavigator();
 
 function MainTabs() {
   const { unread } = useNotifications();
+  const insets = useSafeAreaInsets();
+
+  // Safely pad above Android system navigation buttons and iOS home indicator
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 16);
+  const tabHeight = 56 + bottomInset;
 
   return (
     <Tab.Navigator
@@ -38,15 +45,20 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
-          height: 62,
-          paddingBottom: 8,
+          borderTopWidth: 1,
+          height: tabHeight,
+          paddingBottom: bottomInset - 4,
           paddingTop: 8,
         },
         tabBarActiveTintColor: Colors.accent,
         tabBarInactiveTintColor: Colors.textDim,
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 11.5,
           fontWeight: '700',
+          marginTop: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 2,
         },
       }}
     >
@@ -55,7 +67,7 @@ function MainTabs() {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => <Home size={size - 2} color={color} />,
+          tabBarIcon: ({ color }) => <Home size={22} color={color} />,
         }}
       />
       <Tab.Screen
@@ -63,7 +75,7 @@ function MainTabs() {
         component={CommunitiesScreen}
         options={{
           tabBarLabel: 'Servers',
-          tabBarIcon: ({ color, size }) => <Users size={size - 2} color={color} />,
+          tabBarIcon: ({ color }) => <Users size={22} color={color} />,
         }}
       />
       <Tab.Screen
@@ -71,7 +83,7 @@ function MainTabs() {
         component={FriendsScreen}
         options={{
           tabBarLabel: 'Friends',
-          tabBarIcon: ({ color, size }) => <MessageSquare size={size - 2} color={color} />,
+          tabBarIcon: ({ color }) => <MessageSquare size={22} color={color} />,
         }}
       />
       <Tab.Screen
@@ -79,8 +91,6 @@ function MainTabs() {
         component={NotificationsScreen}
         options={{
           tabBarLabel: 'Activity',
-          // Driven by the notifications provider, so the badge and the list can
-          // never disagree about how many are unread.
           tabBarBadge: unread > 0 ? unread : undefined,
           tabBarBadgeStyle: {
             backgroundColor: Colors.accent,
@@ -88,7 +98,7 @@ function MainTabs() {
             fontSize: 10,
             fontWeight: '800',
           },
-          tabBarIcon: ({ color, size }) => <Bell size={size - 2} color={color} />,
+          tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
         }}
       />
       <Tab.Screen
@@ -96,7 +106,7 @@ function MainTabs() {
         component={SettingsScreen}
         options={{
           tabBarLabel: 'Settings',
-          tabBarIcon: ({ color, size }) => <Settings size={size - 2} color={color} />,
+          tabBarIcon: ({ color }) => <Settings size={22} color={color} />,
         }}
       />
     </Tab.Navigator>
@@ -141,6 +151,11 @@ export function RootNavigator() {
               <Stack.Screen name="ExperienceRoom" component={ExperienceRoomScreen} />
               <Stack.Screen name="Explore" component={ExploreScreen} />
               <Stack.Screen name="Info" component={InfoScreen} />
+              <Stack.Screen
+                name="Call"
+                component={CallScreen}
+                options={{ animation: 'slide_from_bottom', gestureDirection: 'vertical' }}
+              />
             </>
           )}
         </Stack.Navigator>

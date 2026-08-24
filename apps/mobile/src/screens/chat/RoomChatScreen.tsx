@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Phone, PhoneOff, Users } from 'lucide-react-native';
+import { Phone, PhoneOff, Users, Video } from 'lucide-react-native';
 import {
   ApiError,
   can,
@@ -304,21 +304,42 @@ export function RoomChatScreen({ route, navigation }: any) {
                 the call bar then follows you wherever you navigate next. */}
             {VOICE_ROOM_TYPES.includes(current.room_type) ? (
               inCall ? (
-                <Button
-                  title=""
-                  size="sm"
-                  variant="danger"
-                  onPress={() => void voice.leaveRoom()}
-                  icon={<PhoneOff size={17} color={Colors.danger} />}
-                />
+                <>
+                  <Button
+                    title="Active Call"
+                    size="sm"
+                    variant="primary"
+                    onPress={() => navigation.navigate('Call')}
+                    icon={<Phone size={14} color={Colors.accentContrast} />}
+                  />
+                  <Button
+                    title=""
+                    size="sm"
+                    variant="danger"
+                    onPress={() => void voice.leaveRoom()}
+                    icon={<PhoneOff size={16} color={Colors.danger} />}
+                  />
+                </>
               ) : (
-                <Button
-                  title=""
-                  size="sm"
-                  variant="ghost"
-                  onPress={() => void voice.joinRoom(current.id, current.name)}
-                  icon={<Phone size={17} color={Colors.live} />}
-                />
+                <>
+                  <Button
+                    title=""
+                    size="sm"
+                    variant="ghost"
+                    onPress={() => void voice.joinRoom(current.id, current.name)}
+                    icon={<Phone size={17} color={Colors.live} />}
+                  />
+                  <Button
+                    title=""
+                    size="sm"
+                    variant="ghost"
+                    onPress={async () => {
+                      await voice.joinRoom(current.id, current.name);
+                      await voice.toggleCamera();
+                    }}
+                    icon={<Video size={17} color={Colors.accent} />}
+                  />
+                </>
               )
             ) : null}
 

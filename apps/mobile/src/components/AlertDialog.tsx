@@ -52,12 +52,9 @@ export function AlertDialog({
         exiting={FadeOut.duration(140)}
         style={styles.backdrop}
       >
-        {/* Springier than the ordinary dialog on purpose: this one interrupts,
-            and the small overshoot is what makes it read as an interruption
-            rather than as another panel sliding into place. */}
         <Animated.View
-          entering={ZoomIn.springify().damping(15).stiffness(260)}
-          exiting={ZoomOut.duration(140)}
+          entering={FadeIn.duration(120)}
+          exiting={FadeOut.duration(100)}
           style={styles.popup}
         >
           <Text style={styles.title}>{title}</Text>

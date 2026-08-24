@@ -3,19 +3,20 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AtSign, Lock, Mail, Server, Sparkles, User } from 'lucide-react-native';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { Callout } from '../../components/Callout';
-import { Colors, Radius } from '../../theme/tokens';
+import { Colors, Radius, Spacing } from '../../theme/tokens';
+import { getApiUrl, saveApiUrl } from '../../api/config';
 
 export function SignInScreen({ navigation }: any) {
   const { login, register, error, clearError } = useAuth();
@@ -29,9 +30,19 @@ export function SignInScreen({ navigation }: any) {
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [showServerConfig, setShowServerConfig] = useState(false);
+  const [serverUrlInput, setServerUrlInput] = useState(getApiUrl());
+
   const handleTabSwitch = (t: 'login' | 'register') => {
     setTab(t);
     clearError();
+  };
+
+  const handleSaveServer = async () => {
+    if (!serverUrlInput.trim()) return;
+    await saveApiUrl(serverUrlInput.trim());
+    toast.success('Server endpoint updated');
+    setShowServerConfig(false);
   };
 
   const handleSubmit = async () => {
@@ -70,117 +81,152 @@ export function SignInScreen({ navigation }: any) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Text style={styles.logo}>genzh</Text>
-            <Text style={styles.tagline}>CITRINE VOICE & CHAT</Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Brand Header */}
+          <View style={styles.brandContainer}>
+            <View style={styles.brandIconWrapper}>
+              <Sparkles size={28} color={Colors.accent} />
+            </View>
+            <Text style={styles.brandTitle}>genzh</Text>
+            <Text style={styles.brandSubtitle}>REAL-TIME VOICE & COMMUNITY CHAT</Text>
           </View>
 
+          {/* Main Auth Card */}
           <View style={styles.card}>
-            <View style={styles.tabBar}>
-              <TouchableOpacity
-                style={[styles.tabBtn, tab === 'login' && styles.tabBtnActive]}
+            {/* Segmented Switcher */}
+            <View style={styles.segmentedControl}>
+              <Pressable
+                style={[styles.segmentBtn, tab === 'login' && styles.segmentBtnActive]}
                 onPress={() => handleTabSwitch('login')}
               >
-                <Text style={[styles.tabText, tab === 'login' && styles.tabTextActive]}>
+                <Text style={[styles.segmentText, tab === 'login' && styles.segmentTextActive]}>
                   Sign In
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
 
-              <TouchableOpacity
-                style={[styles.tabBtn, tab === 'register' && styles.tabBtnActive]}
+              <Pressable
+                style={[styles.segmentBtn, tab === 'register' && styles.segmentBtnActive]}
                 onPress={() => handleTabSwitch('register')}
               >
-                <Text style={[styles.tabText, tab === 'register' && styles.tabTextActive]}>
-                  Register
+                <Text style={[styles.segmentText, tab === 'register' && styles.segmentTextActive]}>
+                  Create Account
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
 
-            {error && <Callout type="danger" text={error} />}
-
-            {tab === 'login' ? (
-              <View style={styles.form}>
-                <Input
-                  label="Handle or Email"
-                  placeholder="username or user@example.com"
-                  autoCapitalize="none"
-                  value={identifier}
-                  onChangeText={setIdentifier}
-                />
-                <Input
-                  label="Password"
-                  placeholder="••••••••"
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                <Button
-                  title="Sign In"
-                  size="lg"
-                  onPress={handleSubmit}
-                  loading={loading}
-                  style={styles.submitBtn}
-                />
+            {error ? (
+              <View style={styles.errorWrapper}>
+                <Callout type="danger" text={error} />
               </View>
-            ) : (
-              <View style={styles.form}>
-                <Input
-                  label="Handle"
-                  placeholder="alex_smith"
-                  autoCapitalize="none"
-                  value={handle}
-                  onChangeText={setHandle}
-                />
-                <Input
-                  label="Email"
-                  placeholder="alex@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-                <Input
-                  label="Display Name (Optional)"
-                  placeholder="Alex Smith"
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                />
-                <Input
-                  label="Password"
-                  placeholder="••••••••"
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                <Button
-                  title="Create Account"
-                  size="lg"
-                  onPress={handleSubmit}
-                  loading={loading}
-                  style={styles.submitBtn}
-                />
-              </View>
-            )}
-          </View>
+            ) : null}
 
-          {/* The help and legal pages are reachable without a session, exactly
-              as the web routes are — somebody who cannot get in still needs the
-              contact address and the report form. */}
-          <View style={styles.legal}>
-            {[
-              { page: 'terms', label: 'Terms' },
-              { page: 'privacy', label: 'Privacy' },
-              { page: 'guidelines', label: 'Guidelines' },
-              { page: 'contact', label: 'Contact' },
-            ].map((link) => (
-              <TouchableOpacity
-                key={link.page}
-                onPress={() => navigation.navigate('Info', { page: link.page })}
+            {/* Form Fields */}
+            <View style={styles.formFields}>
+              {tab === 'login' ? (
+                <>
+                  <Input
+                    label="Handle or Email"
+                    placeholder="e.g. alex or alex@domain.com"
+                    value={identifier}
+                    onChangeText={setIdentifier}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    leftIcon={<User size={18} color={Colors.textDim} />}
+                  />
+                  <Input
+                    label="Password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    leftIcon={<Lock size={18} color={Colors.textDim} />}
+                  />
+                </>
+              ) : (
+                <>
+                  <Input
+                    label="Handle"
+                    placeholder="choose_handle (letters, numbers, _)"
+                    value={handle}
+                    onChangeText={setHandle}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    leftIcon={<AtSign size={18} color={Colors.textDim} />}
+                  />
+                  <Input
+                    label="Email"
+                    placeholder="you@domain.com"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    leftIcon={<Mail size={18} color={Colors.textDim} />}
+                  />
+                  <Input
+                    label="Display Name (Optional)"
+                    placeholder="What should friends call you?"
+                    value={displayName}
+                    onChangeText={setDisplayName}
+                    leftIcon={<User size={18} color={Colors.textDim} />}
+                  />
+                  <Input
+                    label="Password"
+                    placeholder="At least 8 characters"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    leftIcon={<Lock size={18} color={Colors.textDim} />}
+                  />
+                </>
+              )}
+
+              <Button
+                title={tab === 'login' ? 'Sign In' : 'Create Account'}
+                onPress={handleSubmit}
+                loading={loading}
+                variant="primary"
+                size="lg"
+                style={styles.submitBtn}
+              />
+            </View>
+
+            {/* Server Endpoint Override Accordion */}
+            <View style={styles.serverSection}>
+              <Pressable
+                onPress={() => setShowServerConfig((v) => !v)}
+                style={styles.serverToggle}
               >
-                <Text style={styles.legalLink}>{link.label}</Text>
-              </TouchableOpacity>
-            ))}
+                <Server size={14} color={Colors.textDim} />
+                <Text style={styles.serverToggleText}>
+                  {showServerConfig ? 'Hide Server Configuration' : 'Configure Server Endpoint'}
+                </Text>
+              </Pressable>
+
+              {showServerConfig ? (
+                <View style={styles.serverConfigBox}>
+                  <Input
+                    label="Backend API Endpoint"
+                    value={serverUrlInput}
+                    onChangeText={setServerUrlInput}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="http://192.168.1.x:8080"
+                  />
+                  <Button
+                    title="Save Endpoint"
+                    onPress={handleSaveServer}
+                    variant="secondary"
+                    size="sm"
+                    style={{ marginTop: Spacing.sm }}
+                  />
+                </View>
+              ) : null}
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -189,18 +235,6 @@ export function SignInScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  legal: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 16,
-    marginTop: 24,
-  },
-  legalLink: {
-    color: Colors.textDim,
-    fontSize: 12,
-    fontWeight: '600',
-  },
   safeArea: {
     flex: 1,
     backgroundColor: Colors.bg,
@@ -211,62 +245,116 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
   },
-  header: {
+  brandContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: Spacing.xl,
   },
-  logo: {
-    fontSize: 48,
-    fontWeight: '900',
+  brandIconWrapper: {
+    width: 60,
+    height: 60,
+    borderRadius: Radius.xxl,
+    backgroundColor: Colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  brandTitle: {
     color: Colors.text,
-    letterSpacing: -1.5,
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.5,
   },
-  tagline: {
-    fontSize: 12,
-    color: Colors.accent,
-    marginTop: 6,
+  brandSubtitle: {
+    color: Colors.textDim,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.2,
+    marginTop: 4,
   },
   card: {
     backgroundColor: Colors.surface,
-    borderRadius: Radius.xxl, // Rule 4: Slab container
-    padding: 24,
+    borderRadius: Radius.xxl,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  tabBar: {
+  segmentedControl: {
     flexDirection: 'row',
     backgroundColor: Colors.sunken,
-    borderRadius: Radius.pill, // Rule 4: Pill controls
+    borderRadius: Radius.pill,
     padding: 4,
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.borderSubtle,
   },
-  tabBtn: {
+  segmentBtn: {
     flex: 1,
     paddingVertical: 10,
-    alignItems: 'center',
     borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tabBtnActive: {
+  segmentBtnActive: {
     backgroundColor: Colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  tabText: {
+  segmentText: {
+    color: Colors.textDim,
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.textMuted,
   },
-  tabTextActive: {
+  segmentTextActive: {
     color: Colors.text,
   },
-  form: {
-    width: '100%',
+  errorWrapper: {
+    marginBottom: Spacing.md,
+  },
+  formFields: {
+    gap: Spacing.sm,
   },
   submitBtn: {
-    marginTop: 8,
+    marginTop: Spacing.md,
+  },
+  serverSection: {
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderSubtle,
+    alignItems: 'center',
+  },
+  serverToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  serverToggleText: {
+    color: Colors.textDim,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  serverConfigBox: {
+    width: '100%',
+    marginTop: Spacing.md,
+    backgroundColor: Colors.sunken,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 });

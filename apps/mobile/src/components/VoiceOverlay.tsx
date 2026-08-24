@@ -1,16 +1,22 @@
-import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
-  Easing,
-  ReduceMotion,
   SlideInDown,
   SlideOutDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
 } from 'react-native-reanimated';
-import { Headphones, HeadphoneOff, Mic, MicOff, PhoneOff, Radio, Users } from 'lucide-react-native';
+import {
+  Headphones,
+  HeadphoneOff,
+  Mic,
+  MicOff,
+  PhoneOff,
+  Radio,
+  Users,
+  Video,
+  VideoOff,
+} from 'lucide-react-native';
 
 import { useVoice } from '../context/VoiceContext';
 import { VOICE_UNAVAILABLE_REASON } from '../lib/voiceSupport';
@@ -31,17 +37,26 @@ export function VoiceOverlay() {
     participants,
     muted,
     deafened,
+    isCameraOn,
     toggleMute,
     toggleDeafen,
+    toggleCamera,
     leaveRoom,
   } = useVoice();
+
+  const insets = useSafeAreaInsets();
+  const bottomOffset = 64 + Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 16);
+
+  const navigation = useNavigation<any>();
 
   if (status === 'idle') return null;
 
   const label =
     status === 'connected'
       ? audioAvailable
-        ? 'Voice connected'
+        ? isCameraOn
+          ? 'Video call active'
+          : 'Voice connected'
         : 'In room · audio off'
       : status === 'error'
         ? 'Could not connect'
@@ -49,26 +64,31 @@ export function VoiceOverlay() {
 
   return (
     <Animated.View
-      // The bar belongs to the call, not to the screen, so it slides in from
-      // the edge it sits on and leaves the same way — it is arriving over the
-      // app rather than being part of it.
-      entering={SlideInDown.springify().damping(20).stiffness(220)}
-      exiting={SlideOutDown.duration(180)}
-      style={styles.container}
+      entering={SlideInDown.duration(180)}
+      exiting={SlideOutDown.duration(150)}
+      style={[styles.container, { bottom: bottomOffset }]}
     >
       <View style={styles.row}>
-        <View style={styles.info}>
+        <Pressable
+          accessibilityLabel="Open call screen"
+          onPress={() => navigation.navigate('Call')}
+          style={styles.info}
+        >
           <View style={styles.indicatorRow}>
-            <LiveDot
-              live={status === 'connected' && audioAvailable}
-              color={
-                status === 'error'
-                  ? Colors.danger
-                  : status === 'connected' && audioAvailable
-                    ? Colors.live
-                    : Colors.idle
-              }
-            />
+            <View style={styles.dotWrapper}>
+              <Radio
+                size={13}
+                color={
+                  status === 'error'
+                    ? Colors.danger
+                    : status === 'connected' && audioAvailable
+                      ? isCameraOn
+                        ? Colors.accent
+                        : Colors.live
+                      : Colors.idle
+                }
+              />
+            </View>
             <Text style={styles.statusText}>{label.toUpperCase()}</Text>
 
             {participants.length > 0 ? (
@@ -82,7 +102,7 @@ export function VoiceOverlay() {
           <Text style={styles.roomName} numberOfLines={1}>
             {activeRoomName ?? 'Voice room'}
           </Text>
-        </View>
+        </Pressable>
 
         <View style={styles.actions}>
           <Pressable
@@ -94,6 +114,18 @@ export function VoiceOverlay() {
               <MicOff size={17} color={Colors.danger} />
             ) : (
               <Mic size={17} color={Colors.text} />
+            )}
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+            onPress={() => void toggleCamera()}
+            style={[styles.actionBtn, isCameraOn && styles.actionBtnCameraActive]}
+          >
+            {isCameraOn ? (
+              <Video size={17} color={Colors.accent} />
+            ) : (
+              <VideoOff size={17} color={Colors.textDim} />
             )}
           </Pressable>
 
@@ -119,49 +151,7 @@ export function VoiceOverlay() {
         </View>
       </View>
 
-      {/* Said once, in the place the call actually is, rather than letting the
-          bar imply audio that this build cannot carry. */}
-      {status === 'connected' && !audioAvailable ? (
-        <Text style={styles.note}>{VOICE_UNAVAILABLE_REASON}</Text>
-      ) : null}
-
       {error ? <Text style={styles.error}>{error}</Text> : null}
-    </Animated.View>
-  );
-}
-
-/**
- * The transmission indicator.
- *
- * It breathes only while audio is actually flowing. A static icon cannot
- * distinguish "connected" from "in the room but silent", which is precisely the
- * distinction this build needs to make.
- */
-function LiveDot({ live, color }: { live: boolean; color: string }) {
-  const pulse = useSharedValue(1);
-
-  useEffect(() => {
-    if (!live) {
-      pulse.value = withTiming(1, { duration: 160 });
-      return;
-    }
-
-    pulse.value = withRepeat(
-      withTiming(0.45, {
-        duration: 900,
-        easing: Easing.inOut(Easing.quad),
-        reduceMotion: ReduceMotion.System,
-      }),
-      -1,
-      true,
-    );
-  }, [live, pulse]);
-
-  const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
-
-  return (
-    <Animated.View style={style}>
-      <Radio size={13} color={color} />
     </Animated.View>
   );
 }
@@ -199,6 +189,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
   },
+  dotWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   statusText: {
     color: Colors.textSubtle,
     fontSize: 10,
@@ -234,6 +228,10 @@ const styles = StyleSheet.create({
   actionBtnActive: {
     backgroundColor: Colors.dangerSubtle,
     borderColor: Colors.danger,
+  },
+  actionBtnCameraActive: {
+    backgroundColor: Colors.accentSubtle,
+    borderColor: Colors.accent,
   },
   leaveBtn: {
     width: 36,

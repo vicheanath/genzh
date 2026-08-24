@@ -1,11 +1,9 @@
 import React from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
-import { Callout } from '../../components/Callout';
 import { Slider } from '../../components/Slider';
 import { Switch } from '../../components/Switch';
 import { useAppStore } from '../../lib/store';
-import { VOICE_AVAILABLE, VOICE_UNAVAILABLE_REASON } from '../../lib/voiceSupport';
 
 import { panel } from './styles';
 
@@ -34,8 +32,6 @@ export function DevicesTab() {
         How calls sound on this device. Changes apply immediately, including to a call you
         are already in.
       </Text>
-
-      {!VOICE_AVAILABLE ? <Callout tone="warning" text={VOICE_UNAVAILABLE_REASON} /> : null}
 
       <View style={panel.section}>
         <Text style={panel.sectionTitle}>Output</Text>

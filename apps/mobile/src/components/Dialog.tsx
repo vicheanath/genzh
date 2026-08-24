@@ -60,8 +60,8 @@ export function Dialog({
         <Pressable style={StyleSheet.absoluteFill} onPress={() => onOpenChange(false)} />
 
         <Animated.View
-          entering={ZoomIn.springify().damping(20).stiffness(240)}
-          exiting={ZoomOut.duration(140)}
+          entering={FadeIn.duration(120)}
+          exiting={FadeOut.duration(100)}
           style={styles.popup}
         >
           <Text style={styles.title}>{title}</Text>
