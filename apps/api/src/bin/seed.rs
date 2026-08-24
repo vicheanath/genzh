@@ -4,12 +4,12 @@
 use std::sync::Arc;
 
 use genzh_auth::jwt::JwtService;
-use genzh_auth::{AuthService, RegisterInput};
+use genzh_auth::{AuthService, RegisterInput, UpdateProfile};
 use genzh_community::{CommunityService, CreateCommunity};
-use genzh_domain::room::{RoomParticipantRole, RoomType, RoomVisibility};
+use genzh_domain::room::{RoomType, RoomVisibility};
 use genzh_domain::UserId;
 use genzh_graph::SocialService;
-use genzh_infrastructure::{PgConfig, connect};
+use genzh_infrastructure::{PermissiveFloodGuard, PgConfig, connect};
 use genzh_messaging::MessagingService;
 use genzh_room::{CreateRoom, RoomService};
 
@@ -41,8 +41,13 @@ async fn main() -> anyhow::Result<()> {
     let social = SocialService::new(pool.clone());
     let rooms = RoomService::new(pool.clone(), communities.clone(), social.clone());
     // Seeding writes a room's worth of history in a tight loop, which is
-    // exactly what the flood guard exists to refuse.
-    let messaging = MessagingService::unguarded(pool.clone(), rooms.clone());
+    // exactly what the flood guard exists to refuse — so it says so, rather
+    // than reaching for a constructor that quietly leaves the guard out.
+    let messaging = MessagingService::new(
+        pool.clone(),
+        rooms.clone(),
+        PermissiveFloodGuard::new(),
+    );
 
     println!("--- 1. Seeding Users ---");
     let test_users = [
@@ -77,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
                 res.0.user
             }
             Err(_) => {
-                let existing = auth.users().find_by_identifier(handle).await?.expect("user exists");
+                let existing = auth.find_by_identifier(handle).await?.expect("user exists");
                 println!("  * Found existing user: @{} ({})", handle, display_name);
                 existing
             }
@@ -85,14 +90,13 @@ async fn main() -> anyhow::Result<()> {
 
         // Update profile bio & accent color
         let _ = auth
-            .users()
             .update_profile(
                 user.id,
-                None,
-                Some(bio),
-                None,
-                None,
-                color,
+                UpdateProfile {
+                    bio: Some(bio),
+                    accent_color: color,
+                    ..Default::default()
+                },
             )
             .await;
 
@@ -168,7 +172,10 @@ async fn main() -> anyhow::Result<()> {
 
         // Add other users as members
         for (_, uid) in user_ids.iter().skip(1).take(5) {
-            let _ = communities.repository().add_member(comm.id, *uid, None).await;
+            // Joining themselves, which is the same path the app uses — the
+            // seed has no business reaching around the membership rules it is
+            // meant to be producing realistic data for.
+            let _ = communities.add_member(comm.id, *uid, *uid).await;
         }
 
         // Create channels
@@ -293,10 +300,10 @@ async fn main() -> anyhow::Result<()> {
         // Seed participants and anonymous identities
         for i in 0..participant_count.min(user_ids.len()) {
             let uid = user_ids[i].1;
-            let _ = rooms.repository().join_room(room.id, uid, RoomParticipantRole::Participant).await;
-            if is_anon {
-                let _ = rooms.repository().get_or_create_anonymous_identity(room.id, uid).await;
-            }
+            // `join` picks the participant's role and mints the anonymous
+            // identity when the room calls for one, so the seeded rooms end up
+            // in the same state a real join would leave them in.
+            let _ = rooms.join(room.id, uid).await;
         }
 
         println!("  ✨ Moment: {} [{} - {:?}] ({} participants)", room.name, category, room.room_type, participant_count);

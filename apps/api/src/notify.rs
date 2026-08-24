@@ -68,7 +68,7 @@ pub async fn notify_for_message(
     // ── named mentions ──────────────────────────────────────────────────────
     let handles = mentioned_handles(&message.content);
     if !handles.is_empty() {
-        match state.auth.users().find_ids_by_handles(&handles).await {
+        match state.auth.ids_by_handles(&handles).await {
             Ok(resolved) => {
                 planned.extend(
                     resolved
@@ -81,8 +81,8 @@ pub async fn notify_for_message(
     }
 
     // ── @everyone, and direct conversations ─────────────────────────────────
-    let audience = if mentions_everyone(&message.content) || room.category == "dm" {
-        match state.rooms.repository().list_participants(room.id).await {
+    let audience = if mentions_everyone(&message.content) || room.is_direct() {
+        match state.rooms.list_participants(room.id).await {
             Ok(participants) => participants
                 .into_iter()
                 .map(|participant| participant.user_id)
@@ -97,7 +97,7 @@ pub async fn notify_for_message(
         Vec::new()
     };
 
-    if room.category == "dm" {
+    if room.is_direct() {
         // A direct message is itself the notification; nobody has to be named
         // in it to be told about it.
         planned.extend(

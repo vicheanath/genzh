@@ -319,8 +319,8 @@ pub async fn remove_role(
     Path((community_id, user_id, role_id)): Path<(CommunityId, UserId, RoleId)>,
 ) -> ApiResult<StatusCode> {
     state
-        .communities
-        .remove_role(community_id, caller.user_id, user_id, role_id)
+        .roles
+        .remove(community_id, caller.user_id, user_id, role_id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -332,8 +332,8 @@ pub async fn list_roles(
     Path(community_id): Path<CommunityId>,
 ) -> ApiResult<Json<Vec<RoleView>>> {
     let roles = state
-        .communities
-        .list_roles(community_id, caller.user_id)
+        .roles
+        .list(community_id, caller.user_id)
         .await?;
     Ok(Json(roles.into_iter().map(RoleView::from).collect()))
 }
@@ -346,8 +346,8 @@ pub async fn create_role(
     ApiJson(body): ApiJson<CreateRoleRequest>,
 ) -> ApiResult<(StatusCode, Json<RoleView>)> {
     let role = state
-        .communities
-        .create_role(
+        .roles
+        .create(
             community_id,
             caller.user_id,
             genzh_community::CreateRole {
@@ -375,8 +375,8 @@ pub async fn update_role(
         .transpose()?;
 
     let role = state
-        .communities
-        .update_role(
+        .roles
+        .update(
             community_id,
             caller.user_id,
             role_id,
@@ -399,8 +399,8 @@ pub async fn assign_role(
     ApiJson(body): ApiJson<AssignRoleRequest>,
 ) -> ApiResult<StatusCode> {
     state
-        .communities
-        .assign_role(community_id, caller.user_id, user_id, body.role_id)
+        .roles
+        .assign(community_id, caller.user_id, user_id, body.role_id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

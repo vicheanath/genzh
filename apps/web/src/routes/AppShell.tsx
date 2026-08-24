@@ -11,6 +11,7 @@ import { useIsMobile } from '@/lib/useMediaQuery'
 import { chatSocket } from '@/lib/ws/ChatSocket'
 
 import { AddCommunityDialog } from './AddCommunityDialog'
+import { CallDialogs } from './CallDialogs'
 import { ProfileDialog } from './ProfileDialog'
 import { ChannelSidebar, CommunityRail, MobileNav, MobileTopBar } from './shell'
 
@@ -154,6 +155,10 @@ export function AppShell() {
         open={userSettingsOpen}
         onClose={closeUserSettings}
       />
+
+      {/* Above every screen in the shell: a call arrives while you are looking
+          at something else, by definition. */}
+      <CallDialogs />
 
       {profileUserId && (
         <ProfileDialog

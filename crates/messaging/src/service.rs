@@ -8,7 +8,7 @@ use genzh_domain::message::{self, Message, ReactionSummary};
 use genzh_domain::spam;
 use genzh_domain::{DomainError, MessageId, Permission, RoomId, UserId, now};
 use genzh_infrastructure::{
-    DbPool, FloodGuard, FloodVerdict, PermissiveFloodGuard, ServiceError, ServiceResult,
+    DbPool, FloodGuard, FloodVerdict, ServiceError, ServiceResult,
 };
 use genzh_room::RoomService;
 
@@ -47,18 +47,28 @@ impl MessagingService {
         }
     }
 
-    /// Build the service with no flood guard at all.
+    /// The same service, guarded differently.
     ///
-    /// For seeding and for tests, which post a room's worth of history in a
-    /// tight loop and would otherwise be refused for it. Named for what it
-    /// leaves out, so nothing reaches for it as the convenient constructor.
-    pub fn unguarded(pool: DbPool, rooms: RoomService) -> Self {
-        Self::new(pool, rooms, PermissiveFloodGuard::new())
+    /// The guard is a port, so choosing another one should not mean rebuilding
+    /// the service around a connection pool — which is what the composition
+    /// root had to do, and what a second `unguarded()` constructor was working
+    /// around. Both of those knew how this service is assembled; this one only
+    /// knows that a guard can be replaced.
+    pub fn with_flood_guard(&self, flood: Arc<dyn FloodGuard>) -> Self {
+        Self {
+            flood,
+            ..self.clone()
+        }
     }
 
-    /// Underlying repository.
-    pub fn repository(&self) -> &MessageRepository {
-        &self.messages
+    /// One message, whether or not the caller may see it.
+    ///
+    /// A raw read: the routes that use it are about to run their own check —
+    /// deleting needs the author or a moderator, and the broadcast that follows
+    /// needs the room the message was in. Anything that renders a message to a
+    /// user goes through [`Self::history`], which is access-checked.
+    pub async fn find(&self, message_id: MessageId) -> ServiceResult<Option<Message>> {
+        Ok(self.messages.find(message_id).await?)
     }
 
     /// Post a message.

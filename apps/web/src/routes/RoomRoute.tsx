@@ -14,6 +14,8 @@ import {
   MessageSquareIcon,
   MicIcon,
   PaletteIcon,
+  PhoneIcon,
+  PhoneOffIcon,
   RadioIcon,
   UsersIcon,
   VideoIcon,
@@ -25,8 +27,10 @@ import { Tooltip } from '@/components/Tooltip'
 import { rooms as roomsApi, type RoomType, type RoomWithPermissions, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
+import { useVoiceRoom } from '@/lib/media'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
+import { useCall } from '@/lib/useCall'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
@@ -112,6 +116,32 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const partnerId = otherParticipant?.user_id ?? (room.owner_id !== user?.id ? room.owner_id : null)
   const lookup = useProfiles(partnerId ? [partnerId] : [])
   const partner = partnerId ? lookup(partnerId) : null
+
+  // A direct conversation is its own call: the media session belongs to this
+  // room, so calling somebody is joining the room you are already reading.
+  const voice = useVoiceRoom(room.id)
+  const call = useCall()
+  const inCall = isDM && voice.isCurrent && voice.status !== 'idle'
+  const ringing = call.outgoing?.roomId === room.id
+
+  async function startCall(video: boolean) {
+    if (!partnerId) return
+    try {
+      await call.start(room.id, partnerId, partner?.display_name ?? 'Friend', video)
+    } catch {
+      // `start` already backed the call out; the ring simply never went.
+    }
+  }
+
+  async function hangUp() {
+    // Cancelling tells the other side to stop ringing; once they have picked
+    // up there is nobody to tell, and leaving is the whole of it.
+    if (ringing) {
+      await call.cancel()
+      return
+    }
+    await voice.leave()
+  }
 
   async function handleTogglePersona(nextIsAnon: boolean) {
     setIsAnonymous(nextIsAnon)
@@ -202,6 +232,46 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
             </div>
           )}
 
+          {isDM && partnerId && (
+            <div className={styles.callControls}>
+              {inCall ? (
+                <Tooltip content={ringing ? 'Stop calling' : 'Leave the call'}>
+                  <button
+                    type="button"
+                    className={cx(styles.headerButton, styles.headerButtonDanger)}
+                    onClick={() => void hangUp()}
+                    aria-label={ringing ? 'Stop calling' : 'Leave call'}
+                  >
+                    <PhoneOffIcon size={17} />
+                  </button>
+                </Tooltip>
+              ) : (
+                <>
+                  <Tooltip content={`Call ${partner?.display_name ?? 'them'}`}>
+                    <button
+                      type="button"
+                      className={styles.headerButton}
+                      onClick={() => void startCall(false)}
+                      aria-label="Start a voice call"
+                    >
+                      <PhoneIcon size={17} />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Start a video call">
+                    <button
+                      type="button"
+                      className={styles.headerButton}
+                      onClick={() => void startCall(true)}
+                      aria-label="Start a video call"
+                    >
+                      <VideoIcon size={17} />
+                    </button>
+                  </Tooltip>
+                </>
+              )}
+            </div>
+          )}
+
           {isMediaRoom && (
             <Badge tone="mint" dot>
               {room.room_type}
@@ -255,6 +325,14 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
           </div>
         ) : (
           <>
+            {/* A call in a direct conversation sits above the transcript rather
+                than replacing it — the messages are usually what it is about. */}
+            {inCall && (
+              <div className={styles.dmCallStage}>
+                <VoicePanel room={room} />
+              </div>
+            )}
+
             {/* Experience Type Interactive feature engines */}
             {room.room_type === 'debate' && <DebateExperience room={room} />}
             {room.room_type === 'poll' && <PollExperience room={room} />}

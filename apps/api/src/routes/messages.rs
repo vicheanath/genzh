@@ -114,8 +114,7 @@ pub async fn list(
         if msg.is_anonymous && !anon_identities.contains_key(&msg.author_id) {
             if let Ok(Some(ident)) = state
                 .rooms
-                .repository()
-                .find_anonymous_identity(room_id, msg.author_id)
+                .get_anonymous_identity(room_id, msg.author_id)
                 .await
             {
                 anon_identities.insert(msg.author_id, ident);
@@ -157,8 +156,7 @@ pub async fn post(
     // Determine anonymity: explicit choice in body > participant preference > room default
     let participant = state
         .rooms
-        .repository()
-        .find_participant(room_id, caller.user_id)
+        .participant(room_id, caller.user_id)
         .await
         .unwrap_or(None);
 
@@ -176,8 +174,7 @@ pub async fn post(
     let anonymous_author = if is_anonymous {
         state
             .rooms
-            .repository()
-            .get_or_create_anonymous_identity(room_id, caller.user_id)
+            .ensure_anonymous_identity(room_id, caller.user_id)
             .await
             .ok()
     } else {
@@ -223,8 +220,7 @@ pub async fn edit(
     let anonymous_author = if updated.is_anonymous {
         state
             .rooms
-            .repository()
-            .find_anonymous_identity(updated.room_id, updated.author_id)
+            .get_anonymous_identity(updated.room_id, updated.author_id)
             .await
             .ok()
             .flatten()
@@ -260,10 +256,8 @@ pub async fn delete(
 ) -> ApiResult<StatusCode> {
     let msg = state
         .messaging
-        .repository()
         .find(message_id)
-        .await
-        .map_err(genzh_infrastructure::ServiceError::from)?
+        .await?
         .ok_or_else(|| genzh_infrastructure::ServiceError::not_found("message"))?;
 
     state.messaging.delete(message_id, caller.user_id).await?;
@@ -290,7 +284,7 @@ pub async fn react(
         .react(message_id, caller.user_id, &body.reaction)
         .await?;
 
-    if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
+    if let Ok(Some(msg)) = state.messaging.find(message_id).await {
         state
             .broadcast(ChatServerEvent::ReactionsUpdated {
                 room_id: msg.room_id,
@@ -315,7 +309,7 @@ pub async fn unreact(
         .unreact(message_id, caller.user_id, &body.reaction)
         .await?;
 
-    if let Ok(Some(msg)) = state.messaging.repository().find(message_id).await {
+    if let Ok(Some(msg)) = state.messaging.find(message_id).await {
         state
             .broadcast(ChatServerEvent::ReactionsUpdated {
                 room_id: msg.room_id,

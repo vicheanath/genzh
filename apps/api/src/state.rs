@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use genzh_auth::{AuthService, JwtService};
-use genzh_community::CommunityService;
+use genzh_community::{CommunityService, RoleService};
 use genzh_graph::SocialService;
 use genzh_infrastructure::{
     DbPool, EventBus, FloodGuard, FloodPolicy, InMemoryEventBus, InMemoryFloodGuard,
@@ -17,7 +17,7 @@ use genzh_infrastructure::{
 use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
 use genzh_notification::NotificationService;
-use genzh_room::{MediaSessionService, RoomService, StaticMediaServers};
+use genzh_room::{DirectRooms, MediaSessionService, RoomDirectory, RoomService, StaticMediaServers};
 
 use crate::config::Config;
 use crate::routes::ws::ChatServerEvent;
@@ -46,10 +46,16 @@ pub struct AppState {
     pub pool: DbPool,
     /// Registration, login, sessions.
     pub auth: AuthService,
-    /// Communities, members, roles.
+    /// Communities and their membership.
     pub communities: CommunityService,
+    /// Roles, and the rule that nobody may grant what they do not hold.
+    pub roles: RoleService,
     /// Rooms and room authorization.
     pub rooms: RoomService,
+    /// Two-person conversations.
+    pub directs: DirectRooms,
+    /// Finding rooms you are not in yet.
+    pub directory: RoomDirectory,
     /// Messages and reactions.
     pub messaging: MessagingService,
     /// Friendships and blocks.
@@ -96,10 +102,13 @@ impl AppState {
 
         let auth = AuthService::new(pool.clone(), jwt);
         let communities = CommunityService::new(pool.clone());
+        let roles = communities.roles();
         // Rooms consult the social graph so a block makes a direct conversation
         // invisible; everything layered on rooms inherits that.
         let social = SocialService::new(pool.clone());
         let rooms = RoomService::new(pool.clone(), communities.clone(), social.clone());
+        let directs = rooms.directs();
+        let directory = rooms.directory();
         // The one guard both message paths share. Handing the same `Arc` to the
         // service and to the socket loop is deliberate: a flood that switches
         // from REST to WebSocket halfway through is still one flood.
@@ -161,7 +170,10 @@ impl AppState {
             pool,
             auth,
             communities,
+            roles,
             rooms,
+            directs,
+            directory,
             messaging,
             social,
             notifications,
@@ -182,7 +194,7 @@ impl AppState {
     /// would be testing a guard nothing asks. Changing both together is the
     /// whole reason this is a method rather than a `pub` field.
     pub fn set_flood_guard(&mut self, guard: Arc<dyn FloodGuard>) {
-        self.messaging = MessagingService::new(self.pool.clone(), self.rooms.clone(), guard.clone());
+        self.messaging = self.messaging.with_flood_guard(guard.clone());
         self.flood = guard;
     }
 

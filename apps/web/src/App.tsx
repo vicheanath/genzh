@@ -6,8 +6,10 @@ import { AuthProvider, useAuth } from '@/lib/auth'
 import { VoiceProvider } from '@/lib/media'
 import { queryClient } from '@/lib/queryClient'
 import { useIsMobile } from '@/lib/useMediaQuery'
+import { CallProvider } from '@/lib/useCall'
 import { NotificationsProvider } from '@/lib/useNotifications'
 import { PresenceProvider } from '@/lib/usePresence'
+import { SocialGraphProvider } from '@/lib/useSocialGraph'
 
 import { AccountRoute } from './routes/AccountRoute'
 import { AppShell } from './routes/AppShell'
@@ -27,11 +29,17 @@ export function App() {
       <AuthProvider>
         <PresenceProvider>
           <NotificationsProvider>
-            <VoiceProvider>
-              <BrowserRouter>
-                <Router />
-              </BrowserRouter>
-            </VoiceProvider>
+            <SocialGraphProvider>
+              <VoiceProvider>
+                <BrowserRouter>
+                  {/* Inside the router, because answering a call navigates to
+                      the conversation it is happening in. */}
+                  <CallProvider>
+                    <Router />
+                  </CallProvider>
+                </BrowserRouter>
+              </VoiceProvider>
+            </SocialGraphProvider>
           </NotificationsProvider>
         </PresenceProvider>
       </AuthProvider>

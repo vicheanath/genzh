@@ -6,6 +6,7 @@
 
 import type {
   AppNotification,
+  CallEndReason,
   Message,
   ReactionSummary,
   RoomAnonymousIdentity,
@@ -55,6 +56,21 @@ export type ChatServerEvent =
       type: 'notification_created'
       user_id: Uuid
       notification: AppNotification
+    }
+  | {
+      type: 'call_ringing'
+      user_id: Uuid
+      room_id: Uuid
+      from_user_id: Uuid
+      from_display_name: string
+      video: boolean
+    }
+  | {
+      type: 'call_ended'
+      user_id: Uuid
+      room_id: Uuid
+      from_user_id: Uuid
+      reason: CallEndReason
     }
   | {
       type: 'presence_changed'

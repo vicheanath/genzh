@@ -11,11 +11,14 @@ import {
   CopyIcon,
   MessageSquareIcon,
   MoreIcon,
+  PhoneIcon,
   SearchIcon,
   ShieldIcon,
   TrashIcon,
+  UserIcon,
   UserPlusIcon,
   UsersIcon,
+  VideoIcon,
   XIcon,
 } from '@/components/Icons'
 import { Menu, MenuItem } from '@/components/Menu'
@@ -35,8 +38,10 @@ import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { formatRelative } from '@/lib/time'
 import { useAsync } from '@/lib/useAsync'
+import { useCall } from '@/lib/useCall'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
+import { useSocialGraph } from '@/lib/useSocialGraph'
 
 import { ProfileDialog } from './ProfileDialog'
 import styles from './FriendsRoute.module.css'
@@ -58,6 +63,8 @@ export function FriendsRoute() {
   const setTab = useAppStore((s) => s.setFriendsTab)
 
   const { isOnline } = usePresence()
+  const call = useCall()
+  const refreshGraph = useSocialGraph().refresh
   const [search, setSearch] = useState('')
   const [selectedUserId, setSelectedUserId] = useState<Uuid | null>(null)
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
@@ -91,18 +98,39 @@ export function FriendsRoute() {
     friends.reload()
     requests.reload()
     sent.reload()
-  }, [friends, requests, sent])
+    // This screen is where the graph changes, and the profile card, the DM
+    // header and the member list all read it. Reloading only the three lists
+    // here would leave "Add Friend" on somebody you just accepted.
+    refreshGraph()
+  }, [friends, requests, sent, refreshGraph])
 
-  async function openDM(friendId: Uuid) {
-    const prof = lookup(friendId)
+  /**
+   * Open the conversation with a friend, and go there.
+   *
+   * Returns the room so a call can start in it. No toast on the way: the
+   * navigation is the feedback, and announcing it while the screen was already
+   * changing was one notification per click on a list built for clicking.
+   */
+  async function openDM(friendId: Uuid): Promise<Uuid | null> {
     try {
-      const token = await getToken()
-      const targetName = prof?.display_name ?? 'Friend'
-      const dmRoom = await roomsApi.openDM(token, friendId)
-      toast.success(`Opening conversation with ${targetName}!`)
+      const dmRoom = await roomsApi.openDM(await getToken(), friendId)
       void navigate(`/rooms/${dmRoom.id}`)
+      return dmRoom.id
     } catch {
-      toast.error('Could not start direct chat')
+      toast.error('Could not open the conversation')
+      return null
+    }
+  }
+
+  /** Ring a friend, in the conversation the two of you already share. */
+  async function callFriend(friendId: Uuid, video: boolean) {
+    const prof = lookup(friendId)
+    const roomId = await openDM(friendId)
+    if (!roomId) return
+    try {
+      await call.start(roomId, friendId, prof?.display_name ?? 'Friend', video)
+    } catch {
+      toast.error('Could not start the call')
     }
   }
 
@@ -315,12 +343,23 @@ export function FriendsRoute() {
                       accentColor={prof?.accent_color}
                       presence={isOnline(friendId) ? 'online' : 'offline'}
                       secondary={`@${prof?.handle ?? friendId.slice(0, 8)}`}
-                      onSelect={() => {
-                        setSelectedUserId(friendId)
-                        setProfileDialogOpen(true)
-                      }}
+                      // The name is the conversation. Clicking a friend used
+                      // to open a card about them, which is rarely what you
+                      // came to this list for — the profile is one line down
+                      // in the menu for the times it is.
+                      onSelect={() => void openDM(friendId)}
                       actions={
                         <>
+                          <button
+                            type="button"
+                            className={styles.actionButton}
+                            onClick={() => void callFriend(friendId, false)}
+                            aria-label={`Call ${prof?.display_name ?? 'this friend'}`}
+                            title="Start a voice call"
+                          >
+                            <PhoneIcon size={16} />
+                          </button>
+
                           <button
                             type="button"
                             className={styles.actionButton}
@@ -342,6 +381,21 @@ export function FriendsRoute() {
                               </button>
                             }
                           >
+                            <MenuItem
+                              icon={<VideoIcon size={15} />}
+                              onClick={() => void callFriend(friendId, true)}
+                            >
+                              Start video call
+                            </MenuItem>
+                            <MenuItem
+                              icon={<UserIcon size={15} />}
+                              onClick={() => {
+                                setSelectedUserId(friendId)
+                                setProfileDialogOpen(true)
+                              }}
+                            >
+                              View profile
+                            </MenuItem>
                             <MenuItem
                               icon={<TrashIcon size={15} />}
                               onClick={() => void removeFriend(friendId)}

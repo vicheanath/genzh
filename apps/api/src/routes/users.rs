@@ -43,29 +43,19 @@ pub async fn get(
     _caller: CurrentUser,
     Path(user_id): Path<UserId>,
 ) -> ApiResult<Json<PublicProfile>> {
-    let user = state
+    let identity = state
         .auth
-        .users()
-        .find_by_id(user_id)
-        .await
-        .map_err(genzh_infrastructure::ServiceError::Repository)?
+        .identity(user_id)
+        .await?
         .ok_or(ApiError::Domain(genzh_domain::DomainError::NotFound("user")))?;
 
-    let profile = state
-        .auth
-        .users()
-        .find_profile(user_id)
-        .await
-        .map_err(genzh_infrastructure::ServiceError::Repository)?
-        .ok_or(ApiError::Domain(genzh_domain::DomainError::NotFound("profile")))?;
-
     Ok(Json(PublicProfile {
-        id: user.id,
-        handle: user.handle,
-        display_name: profile.display_name,
-        bio: profile.bio,
-        avatar_url: profile.avatar_url,
-        avatar_effect: profile.avatar_effect,
-        accent_color: profile.accent_color,
+        id: identity.user.id,
+        handle: identity.user.handle,
+        display_name: identity.profile.display_name,
+        bio: identity.profile.bio,
+        avatar_url: identity.profile.avatar_url,
+        avatar_effect: identity.profile.avatar_effect,
+        accent_color: identity.profile.accent_color,
     }))
 }

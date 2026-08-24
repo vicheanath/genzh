@@ -101,6 +101,9 @@ pub fn build(state: AppState) -> Router {
         // ---- media ----
         .route("/rooms/{id}/media/join", post(routes::media::join))
         .route("/rooms/{id}/media/leave", post(routes::media::leave))
+        // ---- direct calls ----
+        .route("/rooms/{id}/call/ring", post(routes::media::ring))
+        .route("/rooms/{id}/call/end", post(routes::media::end_call))
         // ---- messages ----
         .route(
             "/rooms/{id}/messages",

@@ -1,6 +1,5 @@
 //! The room application service.
 
-use std::collections::HashMap;
 
 use genzh_community::CommunityService;
 use genzh_community::authorization::apply_room_overrides;
@@ -64,6 +63,13 @@ pub struct UpdateRoom {
 }
 
 /// Rooms and room authorization.
+///
+/// The repository is private. While it was reachable, five modules in the API
+/// read participants, personas and anonymous identities straight off it, which
+/// put the storage shape in the API's hands and left each call site to remember
+/// its own access check — `set_persona` was a raw write with a `visible_access`
+/// call above it, correct only for as long as the next caller copied both
+/// halves. Each of those reads now has a method here that carries its rule.
 #[derive(Debug, Clone)]
 pub struct RoomService {
     rooms: RoomRepository,
@@ -82,9 +88,19 @@ impl RoomService {
         }
     }
 
-    /// The room repository, for services layered on top (messaging, media).
-    pub fn repository(&self) -> &RoomRepository {
-        &self.rooms
+    /// The social graph, for the rules that consult it.
+    pub(crate) fn social(&self) -> &SocialService {
+        &self.social
+    }
+
+    /// Direct conversations, over this service's storage.
+    pub fn directs(&self) -> crate::directs::DirectRooms {
+        crate::directs::DirectRooms::new(self.rooms.clone(), self.clone())
+    }
+
+    /// The public room directory, over this service's storage.
+    pub fn directory(&self) -> crate::directory::RoomDirectory {
+        crate::directory::RoomDirectory::new(self.rooms.clone())
     }
 
     /// Resolve a caller's standing in a room.
@@ -152,7 +168,7 @@ impl RoomService {
         let access = self.access(room_id, user_id).await?;
         access.require_visible()?;
 
-        if access.room.category == "dm" {
+        if access.room.is_direct() {
             if let Some(peer) = self.rooms.direct_peer(room_id, user_id).await? {
                 self.social.ensure_can_reach(user_id, peer).await?;
             }
@@ -264,84 +280,6 @@ impl RoomService {
     }
 
     /// List standalone or direct conversation rooms the user participates in.
-    pub async fn list_user_rooms(&self, user_id: UserId) -> ServiceResult<Vec<Room>> {
-        self.rooms
-            .list_user_rooms(user_id)
-            .await
-            .map_err(ServiceError::from)
-    }
-
-    /// Pair each of the caller's direct rooms with the person it is with.
-    ///
-    /// Callers render a DM as that person — their avatar and display name — so
-    /// the peer has to travel with the room rather than being inferred from a
-    /// name that was fixed when the conversation was opened.
-    pub async fn direct_peers(
-        &self,
-        user_id: UserId,
-        rooms: &[Room],
-    ) -> ServiceResult<HashMap<RoomId, UserId>> {
-        let direct: Vec<RoomId> = rooms
-            .iter()
-            .filter(|room| room.category == "dm")
-            .map(|room| room.id)
-            .collect();
-
-        Ok(self
-            .rooms
-            .direct_peers(user_id, &direct)
-            .await?
-            .into_iter()
-            .collect())
-    }
-
-    /// Find or create a 1-on-1 direct message room between two users.
-    ///
-    /// The boolean says whether this call created the room. Callers use it to
-    /// announce a genuinely new conversation to both participants without
-    /// re-announcing every time somebody reopens an old one.
-    pub async fn get_or_create_dm(
-        &self,
-        user_a: UserId,
-        user_b: UserId,
-        target_name: &str,
-        target_handle: &str,
-    ) -> ServiceResult<(Room, bool)> {
-        // Refused before the room exists, so a block cannot be worked around by
-        // opening the conversation from the blocked side.
-        self.social.ensure_can_reach(user_a, user_b).await?;
-
-        if let Some(existing) = self.rooms.find_direct_room(user_a, user_b).await? {
-            return Ok((existing, false));
-        }
-
-        let name = if target_handle.is_empty() {
-            format!("DM: @{}", target_name)
-        } else {
-            format!("DM: @{}", target_handle)
-        };
-
-        self.create(
-            None,
-            user_a,
-            CreateRoom {
-                community_id: None,
-                name,
-                topic: Some(format!("Direct message with {}", target_name)),
-                category: Some("dm".to_string()),
-                room_type: RoomType::Text,
-                visibility: Some(RoomVisibility::Private),
-                is_anonymous: false,
-                duration_minutes: None,
-                position: None,
-                max_participants: None,
-                participant_ids: Some(vec![user_b]),
-            },
-        )
-        .await
-        .map(|room| (room, true))
-    }
-
     /// Fetch a room the caller can see.
     pub async fn get(&self, room_id: RoomId, user_id: UserId) -> ServiceResult<Room> {
         Ok(self.visible_access(room_id, user_id).await?.room)
@@ -369,34 +307,6 @@ impl RoomService {
             }
         }
         Ok(visible)
-    }
-
-    /// List rooms for discovery feed.
-    pub async fn list_discovery(
-        &self,
-        category: Option<&str>,
-        limit: i64,
-    ) -> ServiceResult<Vec<Room>> {
-        Ok(self.rooms.list_discovery(category, limit).await?)
-    }
-
-    /// List trending rooms.
-    pub async fn list_trending(&self, limit: i64) -> ServiceResult<Vec<Room>> {
-        Ok(self.rooms.list_trending(limit).await?)
-    }
-
-    /// List live voice/video/stage rooms.
-    pub async fn list_live(&self, limit: i64) -> ServiceResult<Vec<Room>> {
-        Ok(self.rooms.list_live(limit).await?)
-    }
-
-    /// Find a random room for instant matchmaking.
-    pub async fn find_random(
-        &self,
-        category: Option<&str>,
-        room_type: Option<RoomType>,
-    ) -> ServiceResult<Option<Room>> {
-        Ok(self.rooms.find_random(category, room_type).await?)
     }
 
     /// Join a room (assigns anonymous identity if anonymous).
@@ -436,6 +346,48 @@ impl RoomService {
     /// Leave a room.
     pub async fn leave(&self, room_id: RoomId, user_id: UserId) -> ServiceResult<bool> {
         Ok(self.rooms.leave_room(room_id, user_id).await?)
+    }
+
+    /// One participant's row in a room, if they are in it.
+    pub async fn participant(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> ServiceResult<Option<RoomParticipant>> {
+        Ok(self.rooms.find_participant(room_id, user_id).await?)
+    }
+
+    /// Switch a participant between their public and anonymous persona.
+    ///
+    /// Visibility is checked here rather than at the call site: a persona is a
+    /// property of being in the room, so somebody who cannot see the room
+    /// cannot have one in it.
+    pub async fn set_persona(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+        is_anonymous: bool,
+    ) -> ServiceResult<RoomParticipant> {
+        self.visible_access(room_id, user_id).await?;
+        self.rooms
+            .set_participant_persona(room_id, user_id, is_anonymous)
+            .await?
+            .ok_or_else(|| ServiceError::not_found("participant"))
+    }
+
+    /// This user's anonymous identity in a room, minting it if they have none.
+    ///
+    /// Deterministic per room and user, so the alias somebody posted under an
+    /// hour ago is the alias they post under now.
+    pub async fn ensure_anonymous_identity(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> ServiceResult<RoomAnonymousIdentity> {
+        Ok(self
+            .rooms
+            .get_or_create_anonymous_identity(room_id, user_id)
+            .await?)
     }
 
     /// Get anonymous identity for a user in a room.

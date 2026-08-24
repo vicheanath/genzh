@@ -6,12 +6,17 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
+  CheckIcon,
   CopyIcon,
   LockIcon,
   MessageSquareIcon,
+  PhoneIcon,
   ShieldIcon,
+  UserMinusIcon,
   UserPlusIcon,
   UsersIcon,
+  VideoIcon,
+  XIcon,
 } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Skeleton } from '@/components/Skeleton'
@@ -32,7 +37,9 @@ import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
+import { useCall } from '@/lib/useCall'
 import { usePresence } from '@/lib/usePresence'
+import { useSocialGraph } from '@/lib/useSocialGraph'
 import { ACCENT_COLORS as ACCENTS } from '@/lib/palette'
 import { primeProfile } from '@/lib/useProfiles'
 
@@ -106,6 +113,8 @@ function PublicProfileCard({
   const navigate = useNavigate()
   const toast = useToast()
   const { isOnline } = usePresence()
+  const { relationship, refresh: refreshGraph } = useSocialGraph()
+  const call = useCall()
 
   const publicProfile = useAsync(
     async () => usersApi.get(await getToken(), userId),
@@ -114,17 +123,53 @@ function PublicProfileCard({
 
   const [busy, setBusy] = useState(false)
 
+  // What this card offers depends on what you already are to each other. It
+  // used to offer "Add Friend" unconditionally — to people you had been friends
+  // with for months, and to people whose request was sitting unanswered in your
+  // own Pending tab.
+  const status = relationship(userId)
+  const name = publicProfile.data?.display_name ?? 'User'
+
+  /** Open the conversation, creating it if this is the first word between you. */
+  async function openDMRoom(): Promise<Uuid | null> {
+    try {
+      const dmRoom = await roomsApi.openDM(await getToken(), userId)
+      return dmRoom.id
+    } catch (cause) {
+      toast.error(
+        'Could not open the conversation',
+        cause instanceof ApiError ? cause.message : undefined,
+      )
+      return null
+    }
+  }
+
   async function handleOpenDM() {
     setBusy(true)
+    const roomId = await openDMRoom()
+    setBusy(false)
+    if (!roomId) return
+    onClose()
+    void navigate(`/rooms/${roomId}`)
+  }
+
+  async function handleCall(video: boolean) {
+    setBusy(true)
+    const roomId = await openDMRoom()
+    if (!roomId) {
+      setBusy(false)
+      return
+    }
+
     try {
-      const token = await getToken()
-      const targetName = publicProfile.data?.display_name ?? 'User'
-      const dmRoom = await roomsApi.openDM(token, userId)
-      toast.success(`Opening conversation with ${targetName}!`)
+      // Navigate first: the call's controls live in the conversation, so
+      // landing anywhere else would leave the user ringing from a screen with
+      // no way to hang up.
       onClose()
-      void navigate(`/rooms/${dmRoom.id}`)
+      void navigate(`/rooms/${roomId}`)
+      await call.start(roomId, userId, name, video)
     } catch (cause) {
-      toast.error('Could not start direct message', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not start the call', cause instanceof ApiError ? cause.message : undefined)
     } finally {
       setBusy(false)
     }
@@ -135,8 +180,36 @@ function PublicProfileCard({
     try {
       await friendsApi.request(await getToken(), userId)
       toast.success('Friend request sent!')
+      refreshGraph()
     } catch (cause) {
       toast.error('Could not send request', cause instanceof ApiError ? cause.message : undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRespond(accept: boolean) {
+    setBusy(true)
+    try {
+      await friendsApi.respond(await getToken(), userId, accept)
+      toast.success(accept ? `You and ${name} are now friends!` : 'Friend request declined')
+      refreshGraph()
+    } catch (cause) {
+      toast.error('Could not answer the request', cause instanceof ApiError ? cause.message : undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Withdrawing a request and unfriending are the same call: the row goes. */
+  async function handleRemoveFriend(message: string) {
+    setBusy(true)
+    try {
+      await friendsApi.remove(await getToken(), userId)
+      toast.success(message)
+      refreshGraph()
+    } catch (cause) {
+      toast.error('Could not update the friendship', cause instanceof ApiError ? cause.message : undefined)
     } finally {
       setBusy(false)
     }
@@ -147,9 +220,23 @@ function PublicProfileCard({
     try {
       await blocksApi.block(await getToken(), userId)
       toast.success('User blocked', 'They can no longer message or interact with you.')
+      refreshGraph()
       onClose()
     } catch (cause) {
       toast.error('Could not block user', cause instanceof ApiError ? cause.message : undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleUnblockUser() {
+    setBusy(true)
+    try {
+      await blocksApi.unblock(await getToken(), userId)
+      toast.success('User unblocked')
+      refreshGraph()
+    } catch (cause) {
+      toast.error('Could not unblock user', cause instanceof ApiError ? cause.message : undefined)
     } finally {
       setBusy(false)
     }
@@ -213,37 +300,122 @@ function PublicProfileCard({
         </div>
 
         <div className={styles.cardActions}>
-          <Button
-            size="sm"
-            onClick={() => void handleOpenDM()}
-            disabled={busy}
-          >
-            {busy && <Spinner />}
-            <MessageSquareIcon size={15} />
-            Send Direct Message (DM)
-          </Button>
-
-          <div className={styles.actionRow}>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void handleSendFriendRequest()}
-              disabled={busy}
-              style={{ flex: 1 }}
-            >
-              <UserPlusIcon size={15} />
-              Add Friend
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => void handleBlockUser()}
-              disabled={busy}
-            >
+          {/* Blocked people get one button, and it is the one that undoes it.
+              Offering to message somebody you have shut out is offering
+              something the server would refuse anyway. */}
+          {status === 'blocked' ? (
+            <Button size="sm" variant="secondary" onClick={() => void handleUnblockUser()} disabled={busy}>
+              {busy && <Spinner />}
               <ShieldIcon size={15} />
-              Block
+              Unblock
             </Button>
-          </div>
+          ) : (
+            <>
+              <Button size="sm" onClick={() => void handleOpenDM()} disabled={busy}>
+                {busy && <Spinner />}
+                <MessageSquareIcon size={15} />
+                Message
+              </Button>
+
+              {/* Calling is for friends. Anyone may message — that is what a
+                  request is for — but a stranger who can make your browser ring
+                  is a nuisance vector, so the buttons appear once you both
+                  agreed to be reachable. */}
+              {status === 'friends' && (
+                <div className={styles.actionRow}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleCall(false)}
+                    disabled={busy}
+                    style={{ flex: 1 }}
+                  >
+                    <PhoneIcon size={15} />
+                    Call
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleCall(true)}
+                    disabled={busy}
+                    style={{ flex: 1 }}
+                  >
+                    <VideoIcon size={15} />
+                    Video
+                  </Button>
+                </div>
+              )}
+
+              {status === 'incoming' && (
+                <div className={styles.actionRow}>
+                  <Button
+                    size="sm"
+                    onClick={() => void handleRespond(true)}
+                    disabled={busy}
+                    style={{ flex: 1 }}
+                  >
+                    <CheckIcon size={15} />
+                    Accept request
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => void handleRespond(false)} disabled={busy}>
+                    <XIcon size={15} />
+                    Decline
+                  </Button>
+                </div>
+              )}
+
+              <div className={styles.actionRow}>
+                {status === 'none' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleSendFriendRequest()}
+                    disabled={busy}
+                    style={{ flex: 1 }}
+                  >
+                    <UserPlusIcon size={15} />
+                    Add Friend
+                  </Button>
+                )}
+
+                {status === 'outgoing' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleRemoveFriend('Friend request withdrawn')}
+                    disabled={busy}
+                    style={{ flex: 1 }}
+                  >
+                    <XIcon size={15} />
+                    Cancel request
+                  </Button>
+                )}
+
+                {status === 'friends' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleRemoveFriend('Friend removed')}
+                    disabled={busy}
+                    style={{ flex: 1 }}
+                  >
+                    <UserMinusIcon size={15} />
+                    Remove friend
+                  </Button>
+                )}
+
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => void handleBlockUser()}
+                  disabled={busy}
+                >
+                  <ShieldIcon size={15} />
+                  Block
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

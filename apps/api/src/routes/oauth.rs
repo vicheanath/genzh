@@ -1,12 +1,16 @@
-//! OAuth handlers for Google and Discord login and registration.
+//! OAuth sign-in endpoints.
+//!
+//! Three handlers, none of which name a provider: which ones exist, and what
+//! each one does differently, lives in [`crate::oauth`]. Adding a provider does
+//! not touch this file.
 
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Json, Redirect, Response};
-use genzh_auth::OAuthUserInput;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ApiError, ApiResult};
+use crate::oauth;
 use crate::routes::auth::session_context;
 use crate::state::AppState;
 
@@ -22,6 +26,11 @@ pub struct AuthConfigResponse {
 }
 
 /// Available OAuth providers.
+///
+/// One flag per provider rather than a list, because that is the shape clients
+/// already read. A new provider adds a field here, which is the one place
+/// outside `crate::oauth` that has to hear about it — the wire format is a
+/// published contract and cannot quietly become an array.
 #[derive(Debug, Serialize)]
 pub struct OAuthProvidersConfig {
     pub google: bool,
@@ -39,12 +48,16 @@ pub struct CallbackQuery {
 
 /// `GET /api/v1/auth/config`
 pub async fn config(State(state): State<AppState>) -> Json<AuthConfigResponse> {
+    let configured = |key: &str| {
+        oauth::provider(key).is_some_and(|provider| provider.credentials(&state.config).is_some())
+    };
+
     Json(AuthConfigResponse {
         app_env: state.config.app_env.clone(),
         allow_password_signup: state.config.allow_password_signup,
         oauth_providers: OAuthProvidersConfig {
-            google: state.config.google_client_id.is_some(),
-            discord: state.config.discord_client_id.is_some(),
+            google: configured("google"),
+            discord: configured("discord"),
         },
     })
 }
@@ -52,64 +65,30 @@ pub async fn config(State(state): State<AppState>) -> Json<AuthConfigResponse> {
 /// `GET /api/v1/auth/oauth/{provider}/authorize`
 pub async fn authorize(
     State(state): State<AppState>,
-    Path(provider): Path<String>,
+    Path(key): Path<String>,
 ) -> ApiResult<Response> {
+    let provider = provider_or_error(&key)?;
+    let credentials = provider.require_credentials(&state.config)?;
     let csrf_state = uuid::Uuid::new_v4().to_string();
-    let url = match provider.as_str() {
-        "google" => {
-            let client_id = state
-                .config
-                .google_client_id
-                .as_deref()
-                .ok_or_else(|| ApiError::BadRequest("Google OAuth is not configured".to_owned()))?;
-            let redirect_uri = state
-                .config
-                .google_redirect_uri
-                .clone()
-                .unwrap_or_else(|| format!("{}/api/v1/auth/oauth/google/callback", state.config.frontend_url));
 
-            format!(
-                "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={}&redirect_uri={}&scope=openid%20email%20profile&state={}&access_type=online",
-                urlencoding::encode(client_id),
-                urlencoding::encode(&redirect_uri),
-                urlencoding::encode(&csrf_state),
-            )
-        }
-        "discord" => {
-            let client_id = state
-                .config
-                .discord_client_id
-                .as_deref()
-                .ok_or_else(|| ApiError::BadRequest("Discord OAuth is not configured".to_owned()))?;
-            let redirect_uri = state
-                .config
-                .discord_redirect_uri
-                .clone()
-                .unwrap_or_else(|| format!("{}/api/v1/auth/oauth/discord/callback", state.config.frontend_url));
-
-            format!(
-                "https://discord.com/oauth2/authorize?response_type=code&client_id={}&redirect_uri={}&scope=identify%20email&state={}",
-                urlencoding::encode(client_id),
-                urlencoding::encode(&redirect_uri),
-                urlencoding::encode(&csrf_state),
-            )
-        }
-        _ => return Err(ApiError::BadRequest(format!("Unsupported OAuth provider: {provider}"))),
-    };
-
+    let url = provider.authorize_url(&credentials, &csrf_state);
     Ok(Redirect::temporary(&url).into_response())
 }
 
 /// `GET /api/v1/auth/oauth/{provider}/callback`
 pub async fn callback(
     State(state): State<AppState>,
-    Path(provider): Path<String>,
+    Path(key): Path<String>,
     headers: HeaderMap,
     Query(query): Query<CallbackQuery>,
 ) -> ApiResult<Response> {
+    let provider = provider_or_error(&key)?;
+
+    // The user said no, or the provider refused. Either way this is not an API
+    // error: the browser is mid-redirect and needs somewhere to land.
     if let Some(err) = query.error {
         let desc = query.error_description.unwrap_or(err);
-        tracing::warn!(error = %desc, "OAuth authorization error");
+        tracing::warn!(error = %desc, provider = %key, "OAuth authorization error");
         let target = format!(
             "{}/login?error={}",
             state.config.frontend_url,
@@ -122,11 +101,7 @@ pub async fn callback(
         return Err(ApiError::BadRequest("Missing authorization code".to_owned()));
     };
 
-    let user_info = match provider.as_str() {
-        "google" => fetch_google_user(&state, &code).await?,
-        "discord" => fetch_discord_user(&state, &code).await?,
-        _ => return Err(ApiError::BadRequest(format!("Unsupported OAuth provider: {provider}"))),
-    };
+    let user_info = oauth::exchange_code(provider, &state.config, &code).await?;
 
     let context = session_context(&headers);
     let (_user, tokens) = state
@@ -144,205 +119,7 @@ pub async fn callback(
     Ok(Redirect::temporary(&redirect_url).into_response())
 }
 
-#[derive(Debug, Deserialize)]
-struct GoogleTokenResponse {
-    access_token: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GoogleUserInfo {
-    sub: String,
-    email: Option<String>,
-    #[serde(default)]
-    email_verified: Option<bool>,
-    name: Option<String>,
-    picture: Option<String>,
-}
-
-async fn fetch_google_user(state: &AppState, code: &str) -> ApiResult<OAuthUserInput> {
-    let client_id = state
-        .config
-        .google_client_id
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("Google OAuth is not configured".to_owned()))?;
-    let client_secret = state
-        .config
-        .google_client_secret
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("Google OAuth secret is not configured".to_owned()))?;
-    let redirect_uri = state
-        .config
-        .google_redirect_uri
-        .clone()
-        .unwrap_or_else(|| format!("{}/api/v1/auth/oauth/google/callback", state.config.frontend_url));
-
-    let client = reqwest::Client::new();
-    let token_res = client
-        .post("https://oauth2.googleapis.com/token")
-        .form(&[
-            ("code", code),
-            ("client_id", client_id),
-            ("client_secret", client_secret),
-            ("redirect_uri", &redirect_uri),
-            ("grant_type", "authorization_code"),
-        ])
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!(%err, "failed to call google token endpoint");
-            ApiError::BadRequest("Failed to exchange Google OAuth code".to_owned())
-        })?;
-
-    if !token_res.status().is_success() {
-        let status = token_res.status();
-        let body = token_res.text().await.unwrap_or_default();
-        tracing::error!(%status, %body, "Google token endpoint returned non-200");
-        return Err(ApiError::BadRequest("Google authentication failed".to_owned()));
-    }
-
-    let token_data: GoogleTokenResponse = token_res.json().await.map_err(|err| {
-        tracing::error!(%err, "failed to parse google token response");
-        ApiError::BadRequest("Failed to parse Google token response".to_owned())
-    })?;
-
-    let user_res = client
-        .get("https://openidconnect.googleapis.com/v1/userinfo")
-        .bearer_auth(&token_data.access_token)
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!(%err, "failed to call google userinfo endpoint");
-            ApiError::BadRequest("Failed to retrieve Google user info".to_owned())
-        })?;
-
-    if !user_res.status().is_success() {
-        let status = user_res.status();
-        let body = user_res.text().await.unwrap_or_default();
-        tracing::error!(%status, %body, "Google userinfo returned non-200");
-        return Err(ApiError::BadRequest("Failed to fetch Google profile".to_owned()));
-    }
-
-    let user_info: GoogleUserInfo = user_res.json().await.map_err(|err| {
-        tracing::error!(%err, "failed to parse google userinfo response");
-        ApiError::BadRequest("Failed to parse Google profile".to_owned())
-    })?;
-
-    let email = if user_info.email_verified.unwrap_or(false) {
-        user_info.email
-    } else {
-        None
-    };
-
-    Ok(OAuthUserInput {
-        provider: "google".to_owned(),
-        provider_user_id: user_info.sub,
-        email,
-        suggested_handle: None,
-        display_name: user_info.name,
-        avatar_url: user_info.picture,
-    })
-}
-
-#[derive(Debug, Deserialize)]
-struct DiscordTokenResponse {
-    access_token: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct DiscordUserInfo {
-    id: String,
-    username: String,
-    global_name: Option<String>,
-    email: Option<String>,
-    #[serde(default)]
-    verified: Option<bool>,
-    avatar: Option<String>,
-}
-
-async fn fetch_discord_user(state: &AppState, code: &str) -> ApiResult<OAuthUserInput> {
-    let client_id = state
-        .config
-        .discord_client_id
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("Discord OAuth is not configured".to_owned()))?;
-    let client_secret = state
-        .config
-        .discord_client_secret
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("Discord OAuth secret is not configured".to_owned()))?;
-    let redirect_uri = state
-        .config
-        .discord_redirect_uri
-        .clone()
-        .unwrap_or_else(|| format!("{}/api/v1/auth/oauth/discord/callback", state.config.frontend_url));
-
-    let client = reqwest::Client::new();
-    let token_res = client
-        .post("https://discord.com/api/oauth2/token")
-        .form(&[
-            ("code", code),
-            ("client_id", client_id),
-            ("client_secret", client_secret),
-            ("redirect_uri", &redirect_uri),
-            ("grant_type", "authorization_code"),
-        ])
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!(%err, "failed to call discord token endpoint");
-            ApiError::BadRequest("Failed to exchange Discord OAuth code".to_owned())
-        })?;
-
-    if !token_res.status().is_success() {
-        let status = token_res.status();
-        let body = token_res.text().await.unwrap_or_default();
-        tracing::error!(%status, %body, "Discord token endpoint returned non-200");
-        return Err(ApiError::BadRequest("Discord authentication failed".to_owned()));
-    }
-
-    let token_data: DiscordTokenResponse = token_res.json().await.map_err(|err| {
-        tracing::error!(%err, "failed to parse discord token response");
-        ApiError::BadRequest("Failed to parse Discord token response".to_owned())
-    })?;
-
-    let user_res = client
-        .get("https://discord.com/api/users/@me")
-        .bearer_auth(&token_data.access_token)
-        .send()
-        .await
-        .map_err(|err| {
-            tracing::error!(%err, "failed to call discord userinfo endpoint");
-            ApiError::BadRequest("Failed to retrieve Discord user info".to_owned())
-        })?;
-
-    if !user_res.status().is_success() {
-        let status = user_res.status();
-        let body = user_res.text().await.unwrap_or_default();
-        tracing::error!(%status, %body, "Discord userinfo returned non-200");
-        return Err(ApiError::BadRequest("Failed to fetch Discord profile".to_owned()));
-    }
-
-    let user_info: DiscordUserInfo = user_res.json().await.map_err(|err| {
-        tracing::error!(%err, "failed to parse discord userinfo response");
-        ApiError::BadRequest("Failed to parse Discord profile".to_owned())
-    })?;
-
-    let avatar_url = user_info.avatar.map(|hash| {
-        format!("https://cdn.discordapp.com/avatars/{}/{}.png", user_info.id, hash)
-    });
-
-    let email = if user_info.verified.unwrap_or(false) {
-        user_info.email
-    } else {
-        None
-    };
-
-    Ok(OAuthUserInput {
-        provider: "discord".to_owned(),
-        provider_user_id: user_info.id,
-        email,
-        suggested_handle: Some(user_info.username),
-        display_name: user_info.global_name,
-        avatar_url,
-    })
+fn provider_or_error(key: &str) -> ApiResult<&'static dyn oauth::OAuthProvider> {
+    oauth::provider(key)
+        .ok_or_else(|| ApiError::BadRequest(format!("Unsupported OAuth provider: {key}")))
 }

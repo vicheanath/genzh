@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::http::header::USER_AGENT;
-use genzh_auth::{LoginInput, RegisterInput, SessionContext, TokenPair};
+use genzh_auth::{LoginInput, RegisterInput, SessionContext, TokenPair, UpdateProfile};
 use genzh_domain::user::Profile;
 use serde::{Deserialize, Serialize};
 
@@ -201,17 +201,17 @@ pub async fn update_profile(
 
     let profile = state
         .auth
-        .users()
         .update_profile(
             caller.user_id,
-            body.display_name.as_deref(),
-            body.bio.as_deref(),
-            body.avatar_url.as_deref(),
-            body.avatar_effect.as_deref(),
-            body.accent_color.as_deref(),
+            UpdateProfile {
+                display_name: body.display_name.as_deref(),
+                bio: body.bio.as_deref(),
+                avatar_url: body.avatar_url.as_deref(),
+                avatar_effect: body.avatar_effect.as_deref(),
+                accent_color: body.accent_color.as_deref(),
+            },
         )
-        .await
-        .map_err(genzh_infrastructure::ServiceError::Repository)?;
+        .await?;
 
     Ok(Json(profile))
 }

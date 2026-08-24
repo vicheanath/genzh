@@ -2,6 +2,7 @@ import { request } from './client'
 import type {
   AuthConfig,
   AuthResponse,
+  CallEndReason,
   Community,
   CommunityMember,
   CommunityWithPermissions,
@@ -430,4 +431,27 @@ export const media = {
 
   leave: (token: string, roomId: Uuid) =>
     request<void>(`/api/v1/rooms/${roomId}/media/leave`, { method: 'POST', token }),
+
+  /**
+   * Ring the other person in a direct conversation.
+   *
+   * A notice, not a handshake: the caller has already joined the room's media
+   * session by the time this fires, and the callee accepts by joining the same
+   * one. Nothing here mints a token, so a ring that goes unheard costs the call
+   * nothing — whoever opens the conversation still walks into it.
+   */
+  ring: (token: string, roomId: Uuid, video: boolean) =>
+    request<void>(`/api/v1/rooms/${roomId}/call/ring`, {
+      method: 'POST',
+      body: { video },
+      token,
+    }),
+
+  /** Stop a call that has not connected — a hang-up before the answer, or a decline. */
+  endCall: (token: string, roomId: Uuid, reason: CallEndReason) =>
+    request<void>(`/api/v1/rooms/${roomId}/call/end`, {
+      method: 'POST',
+      body: { reason },
+      token,
+    }),
 }

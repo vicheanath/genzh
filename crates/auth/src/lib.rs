@@ -30,11 +30,16 @@
 //! attacker live sessions.
 
 pub mod error;
+pub mod handle;
 pub mod jwt;
+pub mod oauth;
 pub mod password;
 pub mod repository;
 pub mod service;
+pub mod sessions;
 
 pub use error::{AuthError, AuthResult};
 pub use jwt::{AccessClaims, CurrentUser, JwtService, TokenPair};
-pub use service::{AuthService, LoginInput, OAuthUserInput, RegisterInput, SessionContext};
+pub use oauth::OAuthUserInput;
+pub use service::{AuthService, AuthenticatedUser, LoginInput, RegisterInput, UpdateProfile};
+pub use sessions::{SessionContext, SessionManager};

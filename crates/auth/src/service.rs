@@ -1,33 +1,25 @@
 //! The authentication application service.
 //!
 //! Handlers call these methods; they contain no HTTP types and no SQL.
+//!
+//! What is left here is credentials and identity: proving who somebody is with
+//! a password, and answering questions about who somebody is. The two things
+//! that used to sit alongside it have moved out, because they change for their
+//! own reasons — [`crate::sessions`] owns the lifetime of a token pair, and
+//! [`crate::oauth`] owns signing in through a provider. Both are reachable
+//! through this service, so callers still have one place to go.
 
 use chrono::Utc;
 use genzh_domain::user::{self, Profile, User};
-use genzh_domain::{SessionId, UserId};
+use genzh_domain::{UserId};
 use genzh_infrastructure::{DbPool, RepositoryError};
 
 use crate::error::{AuthError, AuthResult};
-use crate::jwt::{CurrentUser, JwtService, TokenPair, hash_refresh_token};
+use crate::jwt::{CurrentUser, JwtService, TokenPair};
+use crate::oauth::{self, OAuthUserInput};
 use crate::password;
 use crate::repository::{SessionRepository, UserRepository};
-
-/// User information retrieved from an external OAuth provider.
-#[derive(Debug, Clone)]
-pub struct OAuthUserInput {
-    /// Provider identifier, e.g. "google" or "discord".
-    pub provider: String,
-    /// Unique subject or user ID from the provider.
-    pub provider_user_id: String,
-    /// Verified e-mail address from the provider, if provided.
-    pub email: Option<String>,
-    /// Suggested handle / username from the provider.
-    pub suggested_handle: Option<String>,
-    /// Full or display name from the provider.
-    pub display_name: Option<String>,
-    /// Avatar URL from the provider.
-    pub avatar_url: Option<String>,
-}
+use crate::sessions::{SessionContext, SessionManager};
 
 /// Registration input, already deserialised but not yet validated.
 #[derive(Debug, Clone)]
@@ -51,13 +43,24 @@ pub struct LoginInput {
     pub password: String,
 }
 
-/// Where a session was created from, recorded for the "your devices" screen.
+/// A partial profile edit.
+///
+/// A struct rather than six positional `Option<&str>`s, which is what this was:
+/// `update_profile(id, None, Some(bio), None, None, colour)` is a call nobody
+/// can read, and swapping two of the six is a bug the compiler cannot see.
+/// Absent fields are left alone.
 #[derive(Debug, Clone, Default)]
-pub struct SessionContext {
-    /// `User-Agent` header.
-    pub user_agent: Option<String>,
-    /// Client address.
-    pub ip_address: Option<String>,
+pub struct UpdateProfile<'a> {
+    /// New display name.
+    pub display_name: Option<&'a str>,
+    /// New bio.
+    pub bio: Option<&'a str>,
+    /// New avatar image URL.
+    pub avatar_url: Option<&'a str>,
+    /// New animated avatar effect key.
+    pub avatar_effect: Option<&'a str>,
+    /// New accent colour.
+    pub accent_color: Option<&'a str>,
 }
 
 /// An authenticated identity plus its public profile.
@@ -69,26 +72,36 @@ pub struct AuthenticatedUser {
     pub profile: Profile,
 }
 
-/// Registration, login, refresh and logout.
+/// Credentials, identity, and the way in to the rest of authentication.
+///
+/// The repositories are private. They were reachable through a `users()`
+/// accessor "for profile endpoints", and the endpoints then reached past the
+/// service for everything else on it — so a handler that wanted one display
+/// name depended on the whole storage surface. The narrow methods below are
+/// what those callers actually needed.
 #[derive(Debug, Clone)]
 pub struct AuthService {
     users: UserRepository,
-    sessions: SessionRepository,
-    jwt: std::sync::Arc<JwtService>,
+    sessions: SessionManager,
 }
 
 impl AuthService {
     /// Access the JWT service.
     pub fn jwt(&self) -> &JwtService {
-        &self.jwt
+        self.sessions.jwt()
+    }
+
+    /// Sessions, for callers that manage one directly.
+    pub fn sessions(&self) -> &SessionManager {
+        &self.sessions
     }
 
     /// Assemble the service from a pool and a configured [`JwtService`].
     pub fn new(pool: DbPool, jwt: std::sync::Arc<JwtService>) -> Self {
+        let users = UserRepository::new(pool.clone());
         Self {
-            users: UserRepository::new(pool.clone()),
-            sessions: SessionRepository::new(pool),
-            jwt,
+            sessions: SessionManager::new(users.clone(), SessionRepository::new(pool), jwt),
+            users,
         }
     }
 
@@ -126,7 +139,7 @@ impl AuthService {
             .await
             .map_err(map_registration_error)?;
 
-        let tokens = self.start_session(created.id, context).await?;
+        let tokens = self.sessions.start(created.id, context).await?;
         Ok((
             AuthenticatedUser {
                 user: created,
@@ -137,172 +150,15 @@ impl AuthService {
     }
 
     /// Sign in or register via an OAuth provider.
+    ///
+    /// The policy — link, then match on a verified e-mail, then provision — is
+    /// in [`crate::oauth`].
     pub async fn login_or_register_oauth(
         &self,
         input: OAuthUserInput,
         context: SessionContext,
     ) -> AuthResult<(AuthenticatedUser, TokenPair)> {
-        // 1. Check if this OAuth account is already linked to a user.
-        if let Some(link) = self
-            .users
-            .find_oauth_account(&input.provider, &input.provider_user_id)
-            .await?
-        {
-            let user = self
-                .users
-                .find_by_id(link.user_id)
-                .await?
-                .ok_or(RepositoryError::NotFound("user"))?;
-
-            if !user.is_active {
-                return Err(AuthError::AccountInactive);
-            }
-
-            let profile = self
-                .users
-                .find_profile(user.id)
-                .await?
-                .ok_or(RepositoryError::NotFound("profile"))?;
-
-            let tokens = self.start_session(user.id, context).await?;
-            return Ok((AuthenticatedUser { user, profile }, tokens));
-        }
-
-        // 2. If a verified email was provided, check if a user already exists with that email.
-        if let Some(ref email_raw) = input.email {
-            if let Ok(email) = user::normalize_email(email_raw) {
-                if let Some(user) = self.users.find_by_identifier(&email).await? {
-                    if !user.is_active {
-                        return Err(AuthError::AccountInactive);
-                    }
-
-                    // Link the OAuth account to this existing user.
-                    self.users
-                        .link_oauth_account(
-                            user.id,
-                            &input.provider,
-                            &input.provider_user_id,
-                            Some(&email),
-                        )
-                        .await?;
-
-                    let profile = self
-                        .users
-                        .find_profile(user.id)
-                        .await?
-                        .ok_or(RepositoryError::NotFound("profile"))?;
-
-                    let tokens = self.start_session(user.id, context).await?;
-                    return Ok((AuthenticatedUser { user, profile }, tokens));
-                }
-            }
-        }
-
-        // 3. Provision a new account for this OAuth user.
-        let raw_handle = input
-            .suggested_handle
-            .or_else(|| {
-                input
-                    .email
-                    .as_ref()
-                    .and_then(|e| e.split('@').next().map(|s| s.to_string()))
-            })
-            .unwrap_or_else(|| {
-                let uid_snippet = &input.provider_user_id[..input.provider_user_id.len().min(6)];
-                format!("{}_{}", input.provider, uid_snippet)
-            });
-
-        let mut base_handle: String = raw_handle
-            .to_lowercase()
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
-
-        if base_handle.len() < user::HANDLE_MIN_LEN {
-            let uid_snippet = &input.provider_user_id[..input.provider_user_id.len().min(4)];
-            base_handle = format!("{}_{}", base_handle, uid_snippet);
-        }
-        if base_handle.len() > user::HANDLE_MAX_LEN {
-            base_handle.truncate(user::HANDLE_MAX_LEN);
-        }
-        base_handle = base_handle.trim_matches('.').to_string();
-        if base_handle.is_empty() {
-            let uid_snippet = &input.provider_user_id[..input.provider_user_id.len().min(8)];
-            base_handle = format!("user_{}", uid_snippet);
-        }
-
-        // Ensure uniqueness of handle
-        let mut handle = base_handle.clone();
-        let mut attempts = 0;
-        while self.users.find_by_identifier(&handle).await?.is_some() {
-            attempts += 1;
-            let suffix = format!("{}", rand::random::<u16>() % 10000);
-            let mut prefix = base_handle.clone();
-            if prefix.len() + suffix.len() > user::HANDLE_MAX_LEN {
-                prefix.truncate(user::HANDLE_MAX_LEN - suffix.len());
-            }
-            handle = format!("{}{}", prefix, suffix);
-            if attempts > 10 {
-                handle = format!("u_{}", &uuid::Uuid::new_v4().to_string()[..12]);
-                break;
-            }
-        }
-
-        let email = match input
-            .email
-            .as_deref()
-            .and_then(|e| user::normalize_email(e).ok())
-        {
-            Some(e) => e,
-            None => format!(
-                "{}_{}@oauth.genzh.local",
-                input.provider, input.provider_user_id
-            ),
-        };
-
-        let display_name = input
-            .display_name
-            .and_then(|name| user::validate_display_name(&name).ok())
-            .unwrap_or_else(|| handle.clone());
-
-        let now = Utc::now();
-        let candidate = User {
-            id: UserId::new(),
-            handle,
-            email: email.clone(),
-            password_hash: None,
-            is_active: true,
-            created_at: now,
-            updated_at: now,
-        };
-
-        let (created, profile, _) = self
-            .users
-            .create_oauth(
-                &candidate,
-                &display_name,
-                input.avatar_url.as_deref(),
-                &input.provider,
-                &input.provider_user_id,
-                Some(&email),
-            )
-            .await
-            .map_err(map_registration_error)?;
-
-        let tokens = self.start_session(created.id, context).await?;
-        Ok((
-            AuthenticatedUser {
-                user: created,
-                profile,
-            },
-            tokens,
-        ))
+        oauth::login_or_register(&self.users, &self.sessions, input, context).await
     }
 
     /// Exchange credentials for a token pair.
@@ -340,69 +196,29 @@ impl AuthService {
             .await?
             .ok_or(RepositoryError::NotFound("profile"))?;
 
-        let tokens = self.start_session(user.id, context).await?;
+        let tokens = self.sessions.start(user.id, context).await?;
         Ok((AuthenticatedUser { user, profile }, tokens))
     }
 
     /// Rotate a refresh token.
     ///
-    /// The old session is revoked and a new one issued, so a stolen refresh
-    /// token is usable at most once. Presenting an already-revoked token is
-    /// treated as evidence of theft and ends every session for that account.
+    /// Reuse detection and revocation live in [`SessionManager::refresh`].
     pub async fn refresh(
         &self,
         refresh_token: &str,
         context: SessionContext,
     ) -> AuthResult<TokenPair> {
-        let hash = hash_refresh_token(refresh_token);
-        let session = self
-            .sessions
-            .find_by_token_hash(&hash)
-            .await?
-            .ok_or(AuthError::InvalidSession)?;
-
-        if session.revoked_at.is_some() {
-            tracing::warn!(
-                user_id = %session.user_id,
-                session_id = %session.id,
-                "refresh token reuse detected; revoking all sessions"
-            );
-            self.sessions.revoke_all_for_user(session.user_id).await?;
-            return Err(AuthError::InvalidSession);
-        }
-
-        if !session.is_usable(Utc::now()) {
-            return Err(AuthError::InvalidSession);
-        }
-
-        let user = self
-            .users
-            .find_by_id(session.user_id)
-            .await?
-            .ok_or(AuthError::InvalidSession)?;
-        if !user.is_active {
-            return Err(AuthError::AccountInactive);
-        }
-
-        self.sessions.revoke(session.id).await?;
-        self.start_session(session.user_id, context).await
+        self.sessions.refresh(refresh_token, context).await
     }
 
     /// End a session.
-    ///
-    /// Silent about whether the token was known: logging out is not a place to
-    /// leak which tokens exist.
     pub async fn logout(&self, refresh_token: &str) -> AuthResult<()> {
-        let hash = hash_refresh_token(refresh_token);
-        if let Some(session) = self.sessions.find_by_token_hash(&hash).await? {
-            self.sessions.revoke(session.id).await?;
-        }
-        Ok(())
+        self.sessions.end(refresh_token).await
     }
 
     /// Resolve the caller from a bearer token.
     pub fn authenticate(&self, access_token: &str) -> AuthResult<CurrentUser> {
-        self.jwt.authenticate(access_token)
+        self.jwt().authenticate(access_token)
     }
 
     /// Load the account and profile behind an authenticated request.
@@ -423,43 +239,64 @@ impl AuthService {
         Ok(AuthenticatedUser { user, profile })
     }
 
-    /// The underlying user repository, for profile endpoints.
-    pub fn users(&self) -> &UserRepository {
-        &self.users
+    /// The account and profile behind an id, for showing one user to another.
+    ///
+    /// Distinct from [`Self::current_user`], which is about *this* request's
+    /// caller and refuses a deactivated account. Looking somebody up is not
+    /// authenticating as them: a deactivated author still has a name on the
+    /// messages they already posted, and blanking those is not this method's
+    /// call to make.
+    pub async fn identity(&self, user_id: UserId) -> AuthResult<Option<AuthenticatedUser>> {
+        let Some(user) = self.users.find_by_id(user_id).await? else {
+            return Ok(None);
+        };
+        let Some(profile) = self.users.find_profile(user_id).await? else {
+            return Ok(None);
+        };
+        Ok(Some(AuthenticatedUser { user, profile }))
     }
 
-    async fn start_session(
+    /// One public profile.
+    pub async fn profile(&self, user_id: UserId) -> AuthResult<Option<Profile>> {
+        Ok(self.users.find_profile(user_id).await?)
+    }
+
+    /// Resolve `@handle` mentions to the accounts they name.
+    ///
+    /// Handles that match nobody are simply absent from the result — a mention
+    /// of a name that does not exist is a piece of text, not an error.
+    pub async fn ids_by_handles(&self, handles: &[String]) -> AuthResult<Vec<(String, UserId)>> {
+        Ok(self.users.find_ids_by_handles(handles).await?)
+    }
+
+    /// Find an account by handle or e-mail.
+    pub async fn find_by_identifier(&self, identifier: &str) -> AuthResult<Option<User>> {
+        Ok(self.users.find_by_identifier(identifier).await?)
+    }
+
+    /// Apply a partial profile edit.
+    pub async fn update_profile(
         &self,
         user_id: UserId,
-        context: SessionContext,
-    ) -> AuthResult<TokenPair> {
-        let session_id = SessionId::new();
-        let refresh_token = self.jwt.issue_refresh();
-
-        self.sessions
-            .create(
-                session_id,
+        input: UpdateProfile<'_>,
+    ) -> AuthResult<Profile> {
+        Ok(self
+            .users
+            .update_profile(
                 user_id,
-                &hash_refresh_token(&refresh_token),
-                context.user_agent.as_deref(),
-                context.ip_address.as_deref(),
-                self.jwt.refresh_expiry(),
+                input.display_name,
+                input.bio,
+                input.avatar_url,
+                input.avatar_effect,
+                input.accent_color,
             )
-            .await?;
-
-        let access_token = self.jwt.issue_access(user_id, session_id)?;
-
-        Ok(TokenPair {
-            access_token,
-            refresh_token,
-            expires_in: self.jwt.access_ttl_seconds(),
-            token_type: "Bearer",
-        })
+            .await?)
     }
+
 }
 
 /// Turn a unique-index violation into the field the user actually needs to fix.
-fn map_registration_error(error: RepositoryError) -> AuthError {
+pub(crate) fn map_registration_error(error: RepositoryError) -> AuthError {
     if error.is_conflict_on("users_handle_key") {
         return AuthError::AlreadyRegistered("handle");
     }

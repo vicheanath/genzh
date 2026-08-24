@@ -288,6 +288,15 @@ export interface MediaJoinResponse {
   ice_servers: Array<{ urls: string | string[]; username?: string; credential?: string }>
 }
 
+/**
+ * Why a call that never connected stopped.
+ *
+ * Three reasons rather than one flag, because each says something different to
+ * the person left holding the phone: a call that was declined was seen, one
+ * that was cancelled was not, and one that ended was the caller's choice.
+ */
+export type CallEndReason = 'cancelled' | 'declined' | 'ended'
+
 export interface AuthConfig {
   app_env: string
   allow_password_signup: boolean

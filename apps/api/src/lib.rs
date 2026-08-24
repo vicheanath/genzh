@@ -35,6 +35,7 @@ pub mod error;
 pub mod extract;
 pub mod middleware;
 pub mod notify;
+pub mod oauth;
 pub mod router;
 pub mod routes;
 pub mod state;

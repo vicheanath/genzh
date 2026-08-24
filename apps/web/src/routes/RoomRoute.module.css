@@ -184,3 +184,40 @@
 
 .dmHeader:hover:not(:disabled) { background: var(--color-hover); }
 .dmHeader:disabled { cursor: default; }
+
+/* The call, inside the conversation it belongs to.
+ *
+ * A pane above the transcript rather than a screen of its own: a one-to-one
+ * call is part of the conversation, and the messages either of you sent thirty
+ * seconds ago are usually what it is about. Capped so the transcript keeps
+ * enough room to still be a transcript. */
+.dmCallStage {
+  flex-shrink: 0;
+  display: flex;
+  height: clamp(14rem, 45vh, 26rem);
+  border-bottom: 1px solid var(--color-border);
+}
+
+@media (max-width: 768px) {
+  .dmCallStage {
+    height: 45vh;
+  }
+}
+
+/* The call buttons sit hard against the right of the DM header, past the name,
+ * so they land in the same place as the member-list toggle does elsewhere. */
+.callControls {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* Hanging up is the one destructive thing in the header, and it should not look
+ * like the button that toggles the member list. */
+.headerButtonDanger {
+  color: var(--color-danger);
+}
+
+.headerButtonDanger:hover {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}

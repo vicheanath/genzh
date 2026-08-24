@@ -203,8 +203,8 @@ pub async fn list_mine(
     State(state): State<AppState>,
     caller: CurrentUser,
 ) -> ApiResult<Json<Vec<UserRoomResponse>>> {
-    let rooms = state.rooms.list_user_rooms(caller.user_id).await?;
-    let peers = state.rooms.direct_peers(caller.user_id, &rooms).await?;
+    let rooms = state.directory.for_user(caller.user_id).await?;
+    let peers = state.directs.peers(caller.user_id, &rooms).await?;
 
     Ok(Json(
         rooms
@@ -223,35 +223,22 @@ pub async fn get_or_create_dm(
     caller: CurrentUser,
     Path(target_user_id): Path<UserId>,
 ) -> ApiResult<(StatusCode, Json<Room>)> {
-    let target_profile = state
-        .auth
-        .users()
-        .find_profile(target_user_id)
-        .await
-        .ok()
-        .flatten();
+    // One lookup for both halves of the name. A conversation with somebody the
+    // directory cannot resolve still opens — the room is named for whoever the
+    // caller can see, and an unresolvable peer is a display problem, not a
+    // reason to refuse the conversation.
+    let target = state.auth.identity(target_user_id).await.ok().flatten();
 
-    let target_user = state
-        .auth
-        .users()
-        .find_by_id(target_user_id)
-        .await
-        .ok()
-        .flatten();
-
-    let display_name = target_profile
+    let display_name = target
         .as_ref()
-        .map(|p| p.display_name.as_str())
+        .map(|t| t.profile.display_name.as_str())
         .unwrap_or("Friend");
 
-    let handle = target_user
-        .as_ref()
-        .map(|u| u.handle.as_str())
-        .unwrap_or("");
+    let handle = target.as_ref().map(|t| t.user.handle.as_str()).unwrap_or("");
 
     let (room, created) = state
-        .rooms
-        .get_or_create_dm(caller.user_id, target_user_id, display_name, handle)
+        .directs
+        .open(caller.user_id, target_user_id, display_name, handle)
         .await?;
 
     // Both sides, not just the recipient: the opener's own sidebar is built
@@ -278,9 +265,9 @@ pub async fn discovery(
     Query(query): Query<DiscoveryQuery>,
 ) -> ApiResult<Json<DiscoveryResponse>> {
     let limit = query.limit.unwrap_or(30).clamp(1, 100);
-    let trending = state.rooms.list_trending(6).await?;
-    let live_now = state.rooms.list_live(6).await?;
-    let rooms = state.rooms.list_discovery(query.category.as_deref(), limit).await?;
+    let trending = state.directory.trending(6).await?;
+    let live_now = state.directory.live(6).await?;
+    let rooms = state.directory.discover(query.category.as_deref(), limit).await?;
 
     let categories = vec![
         "gaming".into(),
@@ -307,7 +294,7 @@ pub async fn trending(
     State(state): State<AppState>,
     _caller: CurrentUser,
 ) -> ApiResult<Json<Vec<Room>>> {
-    Ok(Json(state.rooms.list_trending(20).await?))
+    Ok(Json(state.directory.trending(20).await?))
 }
 
 /// `GET /api/v1/rooms/live`
@@ -315,7 +302,7 @@ pub async fn live(
     State(state): State<AppState>,
     _caller: CurrentUser,
 ) -> ApiResult<Json<Vec<Room>>> {
-    Ok(Json(state.rooms.list_live(20).await?))
+    Ok(Json(state.directory.live(20).await?))
 }
 
 /// `GET /api/v1/rooms/random`
@@ -326,8 +313,8 @@ pub async fn random_room(
 ) -> ApiResult<Json<Option<Room>>> {
     Ok(Json(
         state
-            .rooms
-            .find_random(query.category.as_deref(), query.room_type)
+            .directory
+            .random(query.category.as_deref(), query.room_type)
             .await?,
     ))
 }
@@ -395,14 +382,10 @@ pub async fn set_persona(
     Path(room_id): Path<RoomId>,
     ApiJson(body): ApiJson<SetPersonaRequest>,
 ) -> ApiResult<Json<RoomParticipant>> {
-    let _ = state.rooms.visible_access(room_id, caller.user_id).await?;
     let participant = state
         .rooms
-        .repository()
-        .set_participant_persona(room_id, caller.user_id, body.is_anonymous)
-        .await
-        .map_err(genzh_infrastructure::ServiceError::from)?
-        .ok_or_else(|| genzh_infrastructure::ServiceError::not_found("participant"))?;
+        .set_persona(room_id, caller.user_id, body.is_anonymous)
+        .await?;
 
     Ok(Json(participant))
 }

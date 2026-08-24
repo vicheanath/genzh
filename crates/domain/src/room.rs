@@ -15,6 +15,11 @@ pub const ROOM_NAME_MAX_LEN: usize = 64;
 /// Hard ceiling on participants in one media room, enforced by the API before
 /// a media token is minted.
 pub const MEDIA_ROOM_MAX_PARTICIPANTS: i32 = 50;
+/// The `category` a two-person direct conversation carries.
+///
+/// Spelled once here because the string is load-bearing: block enforcement,
+/// sidebar grouping and media joins all key off it.
+pub const DIRECT_CATEGORY: &str = "dm";
 
 /// What a room is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
@@ -181,9 +186,24 @@ impl Room {
         self.max_participants.unwrap_or(MEDIA_ROOM_MAX_PARTICIPANTS)
     }
 
+    /// Is this a two-person direct conversation?
+    ///
+    /// Stored as a category rather than a room type: a direct conversation is a
+    /// text room in every respect except who can see it, and giving it a type of
+    /// its own would mean teaching every `match` on [`RoomType`] about a variant
+    /// that behaves like `Text`.
+    pub fn is_direct(&self) -> bool {
+        self.category == DIRECT_CATEGORY
+    }
+
     /// Reject media joins on non-media rooms early, with a typed error.
+    ///
+    /// A direct conversation passes despite being a text room. Calling someone
+    /// is not a different room from messaging them — the DM *is* the place the
+    /// two of them share, so the call happens in it rather than in a voice room
+    /// conjured alongside it that the sidebar would then have to hide.
     pub fn require_media(&self) -> DomainResult<()> {
-        if self.room_type.is_media() {
+        if self.room_type.is_media() || self.is_direct() {
             Ok(())
         } else {
             Err(DomainError::UnsupportedRoomType(self.room_type.as_str()))
@@ -320,6 +340,15 @@ mod tests {
 
         let err = room(RoomType::Text).require_media().unwrap_err();
         assert_eq!(err, DomainError::UnsupportedRoomType("text"));
+    }
+
+    #[test]
+    fn a_direct_conversation_accepts_a_call_despite_being_a_text_room() {
+        let mut dm = room(RoomType::Text);
+        dm.category = DIRECT_CATEGORY.to_string();
+
+        assert!(dm.is_direct());
+        assert!(dm.require_media().is_ok());
     }
 
     #[test]

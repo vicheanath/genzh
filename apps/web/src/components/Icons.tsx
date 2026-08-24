@@ -34,6 +34,7 @@ import {
   Music,
   Palette,
   Pencil,
+  Phone,
   PhoneOff,
   Play,
   Plus,
@@ -53,6 +54,7 @@ import {
   Trash2,
   Trophy,
   Tv,
+  User,
   UserMinus,
   UserPlus,
   Users,
@@ -90,6 +92,7 @@ export const VideoOffIcon: IconComponent = (props: IconProps) => <VideoOff size=
 export const SparkleIcon: IconComponent = (props: IconProps) => <Sparkles size={18} {...props} />
 export const SparklesIcon: IconComponent = (props: IconProps) => <Sparkles size={18} {...props} />
 export const HeadphonesIcon: IconComponent = (props: IconProps) => <Headphones size={18} {...props} />
+export const PhoneIcon: IconComponent = (props: IconProps) => <Phone size={18} {...props} />
 export const PhoneOffIcon: IconComponent = (props: IconProps) => <PhoneOff size={18} {...props} />
 export const ScreenShareIcon: IconComponent = (props: IconProps) => <ScreenShare size={18} {...props} />
 export const ScreenShareOffIcon: IconComponent = (props: IconProps) => <ScreenShareOff size={18} {...props} />
@@ -125,6 +128,7 @@ export const CheckIcon: IconComponent = (props: IconProps) => <Check size={18} {
 export const SearchIcon: IconComponent = (props: IconProps) => <Search size={18} {...props} />
 export const SettingsIcon: IconComponent = (props: IconProps) => <Settings size={18} {...props} />
 export const SignOutIcon: IconComponent = (props: IconProps) => <LogOut size={18} {...props} />
+export const UserIcon: IconComponent = (props: IconProps) => <User size={18} {...props} />
 export const UserPlusIcon: IconComponent = (props: IconProps) => <UserPlus size={18} {...props} />
 export const UserMinusIcon: IconComponent = (props: IconProps) => <UserMinus size={18} {...props} />
 export const ShieldIcon: IconComponent = (props: IconProps) => <Shield size={18} {...props} />
