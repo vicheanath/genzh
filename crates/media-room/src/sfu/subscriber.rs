@@ -193,6 +193,12 @@ impl SubscriberSink for WebRtcSubscriberSink {
             },
         );
 
+        // For video tracks, request an immediate keyframe so the new subscriber
+        // does not have to wait for the publisher's next periodic keyframe.
+        if !track.kind().is_audio() {
+            track.request_keyframe();
+        }
+
         // Adding a track changes the SDP, so the client needs a new offer.
         // `try_send` on a depth-1 channel coalesces a burst of attachments
         // into a single renegotiation.

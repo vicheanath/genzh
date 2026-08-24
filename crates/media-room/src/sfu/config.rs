@@ -7,7 +7,9 @@
 use genzh_media_core::codec::{CodecProfile, CodecRegistry, MediaKind};
 use genzh_media_core::ice::IceConfig;
 use genzh_media_core::vad::VadMode;
-use rtc::rtp_transceiver::rtp_sender::{RTCRtpCodec, RTCRtpCodecParameters, RtpCodecKind};
+use rtc::rtp_transceiver::rtp_sender::{
+    RTCPFeedback, RTCRtpCodec, RTCRtpCodecParameters, RtpCodecKind,
+};
 
 /// Configuration shared by every peer connection this server creates.
 #[derive(Debug, Clone)]
@@ -52,12 +54,41 @@ pub(crate) fn rtp_kind(kind: MediaKind) -> RtpCodecKind {
 }
 
 pub(crate) fn codec_from_profile(profile: &CodecProfile) -> RTCRtpCodec {
+    let rtcp_feedback = match profile.kind {
+        MediaKind::Video => vec![
+            RTCPFeedback {
+                typ: "goog-remb".to_owned(),
+                parameter: "".to_owned(),
+            },
+            RTCPFeedback {
+                typ: "transport-cc".to_owned(),
+                parameter: "".to_owned(),
+            },
+            RTCPFeedback {
+                typ: "ccm".to_owned(),
+                parameter: "fir".to_owned(),
+            },
+            RTCPFeedback {
+                typ: "nack".to_owned(),
+                parameter: "".to_owned(),
+            },
+            RTCPFeedback {
+                typ: "nack".to_owned(),
+                parameter: "pli".to_owned(),
+            },
+        ],
+        MediaKind::Audio => vec![RTCPFeedback {
+            typ: "transport-cc".to_owned(),
+            parameter: "".to_owned(),
+        }],
+    };
+
     RTCRtpCodec {
         mime_type: profile.mime_type.to_owned(),
         clock_rate: profile.clock_rate,
         channels: profile.channels,
         sdp_fmtp_line: profile.fmtp.to_owned(),
-        rtcp_feedback: Vec::new(),
+        rtcp_feedback,
     }
 }
 
@@ -84,6 +115,34 @@ mod tests {
                 .rtp_codec
                 .sdp_fmtp_line
                 .contains("useinbandfec=1")
+        );
+        assert!(
+            parameters
+                .rtp_codec
+                .rtcp_feedback
+                .iter()
+                .any(|f| f.typ == "transport-cc")
+        );
+    }
+
+    #[test]
+    fn video_codec_profiles_include_nack_and_pli_feedback() {
+        let parameters = codec_parameters(&genzh_media_core::codec::VP8);
+        assert_eq!(parameters.payload_type, 96);
+        assert_eq!(parameters.rtp_codec.mime_type, "video/VP8");
+        assert!(
+            parameters
+                .rtp_codec
+                .rtcp_feedback
+                .iter()
+                .any(|f| f.typ == "nack" && f.parameter == "pli")
+        );
+        assert!(
+            parameters
+                .rtp_codec
+                .rtcp_feedback
+                .iter()
+                .any(|f| f.typ == "goog-remb")
         );
     }
 }

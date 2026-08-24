@@ -7,7 +7,7 @@
  * returns it per room.
  */
 
-const DEFAULT_API_URL = 'http://127.0.0.1:8080'
+const DEFAULT_API_URL = ''
 
 export const config = {
   apiUrl: (import.meta.env.VITE_API_URL ?? DEFAULT_API_URL).replace(/\/$/, ''),

@@ -258,12 +258,17 @@ export class VoiceClient {
 
     const cameraStream = new MediaStream([track])
     this.cameraTrack = track
+    track.contentHint = 'motion'
     // Unplugging a webcam ends the track without any action from us.
     track.addEventListener('ended', () => void this.stopCamera())
 
     try {
       this.send({ type: 'publish_intent', kind: 'camera', client_track_id: track.id })
       this.cameraSender = this.publisher.addTrack(track, cameraStream)
+      await applyVideoSenderParameters(this.cameraSender, {
+        maxBitrate: 2_000_000,
+        degradationPreference: 'balanced',
+      })
       await this.renegotiatePublisher()
     } catch {
       track.stop()
@@ -335,7 +340,11 @@ export class VoiceClient {
         // No `displaySurface` hint: constraining it to 'monitor' makes some
         // browsers pre-select the whole screen, and sharing one window or one
         // tab is the common case.
-        video: { frameRate: { ideal: 30, max: 60 } },
+        video: {
+          width: { ideal: 1920, max: 3840 },
+          height: { ideal: 1080, max: 2160 },
+          frameRate: { ideal: 30, max: 60 },
+        },
         // The SFU carries one audio track per participant — the microphone —
         // so asking for system audio would capture something we cannot send.
         audio: false,
@@ -360,12 +369,17 @@ export class VoiceClient {
     // somebody's microphone and their screen in the same MediaStream.
     const screenStream = new MediaStream([track])
     this.screenTrack = track
+    track.contentHint = 'detail'
     // "Stop sharing" in the browser's own bar ends the track behind our back.
     track.addEventListener('ended', () => void this.stopScreenShare())
 
     try {
       this.send({ type: 'publish_intent', kind: 'screen_share', client_track_id: track.id })
       this.screenSender = this.publisher.addTrack(track, screenStream)
+      await applyVideoSenderParameters(this.screenSender, {
+        maxBitrate: 4_000_000,
+        degradationPreference: 'maintain-resolution',
+      })
       await this.renegotiatePublisher()
     } catch {
       track.stop()
@@ -787,16 +801,22 @@ export class VoiceClient {
     // has to be put back on it — in this same offer, not one offer per track.
     const cameraTrack = this.cameraTrack
     if (cameraTrack && cameraTrack.readyState === 'live') {
+      cameraTrack.contentHint = 'motion'
       this.send({ type: 'publish_intent', kind: 'camera', client_track_id: cameraTrack.id })
       this.cameraSender = publisher.addTrack(
         cameraTrack,
         this.state.cameraStream ?? new MediaStream([cameraTrack]),
       )
+      await applyVideoSenderParameters(this.cameraSender, {
+        maxBitrate: 2_000_000,
+        degradationPreference: 'balanced',
+      })
       this.send({ type: 'camera', enabled: true })
     }
 
     const screenTrack = this.screenTrack
     if (screenTrack && screenTrack.readyState === 'live') {
+      screenTrack.contentHint = 'detail'
       this.send({
         type: 'publish_intent',
         kind: 'screen_share',
@@ -806,6 +826,10 @@ export class VoiceClient {
         screenTrack,
         this.state.screenStream ?? new MediaStream([screenTrack]),
       )
+      await applyVideoSenderParameters(this.screenSender, {
+        maxBitrate: 4_000_000,
+        degradationPreference: 'maintain-resolution',
+      })
       this.send({ type: 'screen_share', enabled: true })
     }
 
@@ -1013,12 +1037,35 @@ async function captureAudio(deviceId: string): Promise<MediaStream> {
   }
 }
 
+/**
+ * Apply bandwidth and quality degradation preferences to a video sender.
+ */
+async function applyVideoSenderParameters(
+  sender: RTCRtpSender,
+  options: { maxBitrate: number; degradationPreference: RTCDegradationPreference },
+): Promise<void> {
+  try {
+    const params = sender.getParameters()
+    if (!params.encodings || params.encodings.length === 0) {
+      params.encodings = [{}]
+    }
+    const encoding = params.encodings[0]
+    if (encoding) {
+      encoding.maxBitrate = options.maxBitrate
+    }
+    params.degradationPreference = options.degradationPreference
+    await sender.setParameters(params)
+  } catch {
+    // Some browsers or specific codecs might reject individual encoding knobs.
+  }
+}
+
 /** The camera equivalent of {@link captureAudio}, with the same fallback. */
 async function captureVideo(deviceId: string): Promise<MediaStream> {
   const video: MediaTrackConstraints = {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    frameRate: { ideal: 30 },
+    width: { ideal: 1920, max: 1920 },
+    height: { ideal: 1080, max: 1080 },
+    frameRate: { ideal: 30, max: 60 },
   }
   // The microphone is published separately and independently of this, so asking
   // for it here would open a second capture of the same device and fight with
