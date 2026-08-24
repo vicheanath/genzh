@@ -53,11 +53,16 @@ export interface VoiceState {
   speaking: boolean;
   isCameraOn: boolean;
   cameraStream: any | null;
+  /** Which lens is publishing. Meaningless while the camera is off. */
+  cameraFacing: CameraFacing;
   isScreenSharing: boolean;
   screenStream: any | null;
   handRaised: boolean;
   error: string | null;
 }
+
+/** `user` is the selfie camera, `environment` the one on the back. */
+export type CameraFacing = 'user' | 'environment';
 
 export type SessionFactory = () => Promise<MediaJoinResponse>;
 
@@ -69,6 +74,7 @@ const INITIAL_STATE: VoiceState = {
   speaking: false,
   isCameraOn: false,
   cameraStream: null,
+  cameraFacing: 'user',
   isScreenSharing: false,
   screenStream: null,
   handRaised: false,
@@ -142,7 +148,7 @@ export class MobileVoiceClient {
     this.patch({ muted, speaking: !muted ? this.state.speaking : false });
   }
 
-  async startCamera(): Promise<any | null> {
+  async startCamera(facing: CameraFacing = this.state.cameraFacing): Promise<any | null> {
     if (!isWebRTCAvailable || !mediaDevices) return null;
     if (this.cameraTrack) return this.state.cameraStream;
 
@@ -150,7 +156,7 @@ export class MobileVoiceClient {
       const stream = await mediaDevices.getUserMedia({
         audio: false,
         video: {
-          facingMode: 'user',
+          facingMode: facing,
           width: { ideal: 1280 },
           height: { ideal: 720 },
           frameRate: { ideal: 30 },
@@ -174,7 +180,7 @@ export class MobileVoiceClient {
       }
 
       this.send({ type: 'camera', enabled: true });
-      this.patch({ isCameraOn: true, cameraStream: stream });
+      this.patch({ isCameraOn: true, cameraStream: stream, cameraFacing: facing });
       return stream;
     } catch {
       this.patch({ error: 'Could not access device camera' });
@@ -211,6 +217,40 @@ export class MobileVoiceClient {
     } else {
       await this.startCamera();
     }
+  }
+
+  /**
+   * Flip between the front and back lenses.
+   *
+   * `_switchCamera` is react-native-webrtc's own extension to `MediaStreamTrack`
+   * and is the path worth taking: it swaps the capture device underneath a live
+   * track, so the sender, the transceiver and the SFU's view of the room all
+   * stay exactly as they were. Tearing the track down and republishing would
+   * work too, but it costs a renegotiation and every other participant sees the
+   * tile blink — for what is meant to read as turning the phone around.
+   *
+   * The fallback is that republish, for a platform or a mock that has no such
+   * method. Not all of them do, and a camera button that silently does nothing
+   * is worse than one that takes a moment.
+   */
+  async switchCamera(): Promise<void> {
+    if (!this.state.isCameraOn) return;
+
+    const next: CameraFacing = this.state.cameraFacing === 'user' ? 'environment' : 'user';
+    const track = this.cameraTrack;
+
+    if (track && typeof track._switchCamera === 'function') {
+      try {
+        track._switchCamera();
+        this.patch({ cameraFacing: next });
+        return;
+      } catch {
+        // Fall through to the republish below.
+      }
+    }
+
+    await this.stopCamera();
+    await this.startCamera(next);
   }
 
   async startScreenShare(): Promise<any | null> {

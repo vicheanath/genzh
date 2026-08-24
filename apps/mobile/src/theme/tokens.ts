@@ -147,3 +147,39 @@ export const Elevation = {
     elevation: 8,
   },
 } as const;
+
+/**
+ * The stage — the call viewport.
+ *
+ * The one screen that does not use the page palette. A call is a place you
+ * entered, so it keeps its own darker ground, exactly as `--stage-*` does in
+ * tokens.css. Warm espresso rather than the cold slate a video app reaches for
+ * by default, per rule 2: the same neutrals as the page, dropped in lightness.
+ *
+ * If the call screen needs a colour that is not here, add it here rather than
+ * inlining a hex — that is how the last version ended up with four different
+ * greens in it.
+ */
+export const Stage = {
+  bg: '#141412',
+  surface: '#20201c',
+  surfaceRaised: '#2a2a24',
+  border: 'rgba(255, 255, 255, 0.09)',
+  borderStrong: 'rgba(255, 255, 255, 0.16)',
+  text: '#f7f7f3',
+  textSubtle: '#9b9b8f',
+  textDim: 'rgba(255, 255, 255, 0.45)',
+
+  /** A control on the stage: a light wash, not a filled surface. */
+  control: 'rgba(255, 255, 255, 0.08)',
+  controlPressed: 'rgba(255, 255, 255, 0.18)',
+
+  /** Panels floating over the stage — the dock, a name tag on a video. */
+  glass: 'rgba(23, 23, 20, 0.78)',
+  glassBorder: 'rgba(255, 255, 255, 0.12)',
+
+  /* Two off-centre pools of colour behind the tiles — lime warm-side, cyan
+     cold-side. The one thing that stops a dark grid reading flat. */
+  auroraAccent: 'rgba(186, 227, 16, 0.13)',
+  auroraLive: 'rgba(0, 210, 229, 0.14)',
+} as const;

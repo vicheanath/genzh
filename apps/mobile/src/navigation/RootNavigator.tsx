@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  useNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Bell, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
@@ -88,6 +92,24 @@ function MainTabs() {
 export function RootNavigator() {
   const { status } = useAuth();
 
+  /*
+   * Which screen is on top.
+   *
+   * Read here rather than inside the overlay itself: the floating call bubble
+   * is a *sibling* of the navigator, not a screen in it, so the navigation
+   * hooks that answer this are unavailable to it — `useNavigationState` throws
+   * "is your component inside a navigator?" from there. The container knows,
+   * and it is the one place that does.
+   */
+  // The navigators here are untyped, so the ref's default param list resolves
+  // to `never`. An open-ended map is what they actually are.
+  const navigationRef = useNavigationContainerRef<Record<string, object | undefined>>();
+  const [routeName, setRouteName] = useState<string | undefined>(undefined);
+
+  const readRoute = useCallback(() => {
+    setRouteName(navigationRef.getCurrentRoute()?.name);
+  }, [navigationRef]);
+
   if (status === 'loading') return <LoadingPanel />;
 
   const navTheme = {
@@ -102,7 +124,12 @@ export function RootNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onReady={readRoute}
+      onStateChange={readRoute}
+    >
       <View style={{ flex: 1, backgroundColor: Colors.bg }}>
         <Stack.Navigator
           screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
@@ -132,11 +159,13 @@ export function RootNavigator() {
           )}
         </Stack.Navigator>
 
-        {/* Global chrome: the floating voice bar and the profile card, both of
-            which any screen can raise. */}
+        {/* Global chrome: the floating call bubble and the profile card, both
+            of which any screen can raise. The bubble is a shortcut *to* the
+            call screen, so it hides once you are on it — otherwise it floats
+            over the very thing it opens. */}
         {status === 'authenticated' && (
           <>
-            <VoiceOverlay />
+            {routeName !== 'Call' && <VoiceOverlay />}
             <ProfileSheet />
           </>
         )}

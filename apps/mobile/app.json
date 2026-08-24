@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "GenZH",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "plugins": [
       [
         "@config-plugins/react-native-webrtc",
@@ -16,10 +16,12 @@
       ]
     ],
     "ios": {
+      "bundleIdentifier": "com.genzh.mobile",
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Allow GenZH to access your camera for video calls and profile pictures.",
-        "NSMicrophoneUsageDescription": "Allow GenZH to access your microphone for voice rooms and calls."
+        "NSMicrophoneUsageDescription": "Allow GenZH to access your microphone for voice rooms and calls.",
+        "UIBackgroundModes": ["audio", "voip"]
       }
     },
     "android": {
@@ -28,10 +30,14 @@
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "MODIFY_AUDIO_SETTINGS"
+        "MODIFY_AUDIO_SETTINGS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PROJECTION",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#181815",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
