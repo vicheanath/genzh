@@ -1,4 +1,5 @@
 import { Callout } from '@/components/Callout'
+import { Tabs } from '@/components/Tabs'
 import type { CommunityWithPermissions } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
@@ -59,43 +60,51 @@ export function CommunitySettings({
     )
   }
 
-  return (
-    <div className={cx(styles.shell, variant === 'page' && styles.shellPage)}>
-      <nav
-        className={cx(styles.nav, variant === 'page' && styles.navStrip)}
-        aria-label="Server settings"
-      >
-        {variant === 'dialog' && <div className={styles.navHeading}>{community.name}</div>}
+  // The two shapes are two tab layouts, not two components: a column of
+  // destinations beside the panel on a desktop, a strip across the top on a
+  // phone where a 15rem sidebar would leave no page.
+  const isDialog = variant === 'dialog'
 
-        {COMMUNITY_TABS.map(({ id, label, short, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            className={cx(styles.navButton, activeTab === id && styles.navButtonActive)}
-            onClick={() => onTabChange(id)}
-            aria-current={activeTab === id ? 'page' : undefined}
-          >
-            <Icon size={16} />
-            {variant === 'page' ? short : label}
-          </button>
-        ))}
+  return (
+    <Tabs.Root
+      value={activeTab}
+      onValueChange={(value) => onTabChange(value as CommunityTab)}
+      orientation={isDialog ? 'vertical' : 'horizontal'}
+      className={cx(styles.shell, !isDialog && styles.shellPage)}
+    >
+      <nav className={cx(styles.nav, !isDialog && styles.navStrip)} aria-label="Server settings">
+        {isDialog && <div className={styles.navHeading}>{community.name}</div>}
+
+        <Tabs.List variant={isDialog ? 'rail' : 'pill'} className={styles.navList}>
+          {COMMUNITY_TABS.map(({ id, label, short, icon: Icon }) => (
+            <Tabs.Tab key={id} value={id} className={styles.navTab}>
+              <Icon size={16} />
+              {isDialog ? label : short}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
       </nav>
 
-      {/* Keyed so switching tabs remounts rather than carrying one panel's
-          half-typed form into the next. */}
-      <div className={styles.panel} key={activeTab}>
-        {activeTab === 'overview' && (
-          <OverviewTab
-            community={community}
-            abilities={abilities}
-            onUpdated={onUpdated}
-            onDeleted={onDeleted}
-          />
-        )}
-        {activeTab === 'roles' && <RolesTab community={community} abilities={abilities} />}
-        {activeTab === 'members' && <MembersTab community={community} abilities={abilities} />}
-        {activeTab === 'channels' && <ChannelsTab community={community} abilities={abilities} />}
-      </div>
-    </div>
+      {/* Base UI does not mount a hidden panel, so each tab still fetches only
+          when it is looked at, and switching away drops its half-typed form
+          rather than carrying it into the next panel. */}
+      <Tabs.Panel value="overview" className={styles.panel}>
+        <OverviewTab
+          community={community}
+          abilities={abilities}
+          onUpdated={onUpdated}
+          onDeleted={onDeleted}
+        />
+      </Tabs.Panel>
+      <Tabs.Panel value="roles" className={styles.panel}>
+        <RolesTab community={community} abilities={abilities} />
+      </Tabs.Panel>
+      <Tabs.Panel value="members" className={styles.panel}>
+        <MembersTab community={community} abilities={abilities} />
+      </Tabs.Panel>
+      <Tabs.Panel value="channels" className={styles.panel}>
+        <ChannelsTab community={community} abilities={abilities} />
+      </Tabs.Panel>
+    </Tabs.Root>
   )
 }

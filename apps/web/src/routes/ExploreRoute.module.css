@@ -129,13 +129,24 @@
   box-shadow: var(--shadow-md);
 }
 
+/*
+ * The same community colour as its own page banner, at listing scale.
+ *
+ * `--seed` is a hue in degrees. This previously fed that number straight into
+ * `color-mix()` as if it were a colour, which is not a colour — the whole
+ * declaration was invalid and every card in the directory drew the same empty
+ * strip. Building the `oklch()` from the hue is what the community page does,
+ * so the card and the page it opens now agree.
+ */
 .cardBanner {
   height: 4.5rem;
-  background: linear-gradient(
-    135deg,
-    color-mix(in oklch, var(--banner-seed, var(--color-accent)) 70%, var(--color-surface)),
-    var(--color-sunken)
-  );
+  background:
+    radial-gradient(
+      130% 130% at 12% -20%,
+      oklch(0.74 0.19 calc(var(--seed) * 1deg)) 0%,
+      transparent 68%
+    ),
+    oklch(0.46 0.14 calc((var(--seed) + 35) * 1deg));
 }
 
 .cardBody {

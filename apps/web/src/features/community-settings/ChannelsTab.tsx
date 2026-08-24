@@ -29,6 +29,7 @@ import { useAsync } from '@/lib/useAsync'
 import { PanelList, PanelSkeleton } from './PanelList'
 import type { CommunityAbilities } from './tabs'
 import styles from './communitySettings.module.css'
+import { useConfirm } from '@/components/AlertDialog'
 
 /** What settings can create. The playful room types are made from the room
  *  screen, where the thing being made is explained rather than listed. */
@@ -59,6 +60,7 @@ export function ChannelsTab({
   community: CommunityWithPermissions
   abilities: CommunityAbilities
 }) {
+  const confirm = useConfirm()
   const { getToken } = useAuth()
   const toast = useToast()
 
@@ -94,7 +96,13 @@ export function ChannelsTab({
   }
 
   async function remove(roomId: Uuid, roomName: string) {
-    if (!window.confirm(`Delete #${roomName}? Its messages go with it.`)) return
+    const ok = await confirm({
+      title: `Delete #${roomName}?`,
+      description: 'Its messages go with it. This cannot be undone.',
+      confirmLabel: 'Delete channel',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await roomsApi.delete(await getToken(), roomId)
       rooms.reload()

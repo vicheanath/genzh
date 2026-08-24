@@ -15,6 +15,7 @@ import {
 } from '@/components/Icons'
 import { Badge } from '@/components/Badge'
 import { useToast } from '@/components/Toast'
+import { Radio, RadioGroup } from '@/components/RadioGroup'
 import { cx } from '@/lib/cx'
 import { messages as messagesApi, type RoomWithPermissions } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -488,15 +489,20 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
                 />
               </div>
 
-              <div className={styles.optionsGrid}>
+              {/* One group, not four loose inputs: `RadioGroup` owns the value
+                  so the arrow keys move between choices, and the whole set is a
+                  single tab stop on the way to the submit button. */}
+              <RadioGroup
+                className={styles.optionsGrid}
+                aria-label="Correct answer"
+                value={customAnswer}
+                onValueChange={(value) => setCustomAnswer(value as number)}
+              >
                 {customOptions.map((opt, idx) => (
                   <div key={idx} className={styles.builderOptionRow}>
-                    <input
-                      type="radio"
-                      name="correctAnswer"
-                      checked={customAnswer === idx}
-                      onChange={() => setCustomAnswer(idx)}
-                      title="Select this as the correct answer"
+                    <Radio
+                      value={idx}
+                      aria-label={`Choice ${['A', 'B', 'C', 'D'][idx]} is the correct answer`}
                     />
                     <input
                       type="text"
@@ -512,7 +518,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
                     />
                   </div>
                 ))}
-              </div>
+              </RadioGroup>
 
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                 <input

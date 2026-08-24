@@ -17,6 +17,7 @@ import { Input } from '@/components/Input'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
+import { Switch } from '@/components/Switch'
 import {
   ApiError,
   auth as authApi,
@@ -32,20 +33,12 @@ import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { useAsync } from '@/lib/useAsync'
 import { usePresence } from '@/lib/usePresence'
+import { ACCENT_COLORS as ACCENTS } from '@/lib/palette'
 import { primeProfile } from '@/lib/useProfiles'
 
 import styles from './ProfileDialog.module.css'
 
-const ACCENTS = [
-  '#5865f2',
-  '#57f287',
-  '#fee75c',
-  '#eb459e',
-  '#ed4245',
-  '#3ba55d',
-  '#a855f7',
-  '#06b6d4',
-]
+
 
 const RANDOM_ALIASES = [
   'Shadow Fox',
@@ -465,11 +458,13 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
                 Automatically enter rooms in anonymous persona
               </div>
             </div>
-            <input
-              type="checkbox"
-              className={styles.switch}
+            {/* Was an `<input type="checkbox">` with a stylesheet making it
+                look like a switch. It is a switch — the app already has one,
+                and Base UI's reports `role="switch"` rather than announcing
+                itself as a checkbox that happens to be drawn as a track. */}
+            <Switch
               checked={anonDefault}
-              onChange={(e) => setAnonDefault(e.target.checked)}
+              onCheckedChange={setAnonDefault}
               aria-label="Post Anonymously by Default"
             />
           </div>

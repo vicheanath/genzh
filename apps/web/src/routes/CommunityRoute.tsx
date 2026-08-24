@@ -42,6 +42,7 @@ import { can } from '@/lib/permissions'
 
 import { CommunitySettingsModal } from '@/features/community-settings'
 import { useIsMobile } from '@/lib/useMediaQuery'
+import { hueFor } from '@/lib/palette'
 
 import type { ShellContext } from './AppShell'
 import { MemberList } from './MemberList'
@@ -478,10 +479,3 @@ export function CommunityRoute() {
 }
 
 /** A stable hue per community name, matching the Avatar's scheme. */
-function hueFor(name: string): string {
-  let hash = 0
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) | 0
-  }
-  return `${Math.abs(hash) % 360}`
-}

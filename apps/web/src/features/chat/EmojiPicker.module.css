@@ -1,0 +1,35 @@
+/* A grid of tap targets wants the panel edge closer than a panel of prose
+   does. Set through Popover's own hook rather than as a competing rule. */
+.picker {
+  width: 15rem;
+  --popover-padding: var(--space-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.button {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-spring);
+}
+
+/* The lift is what makes a dense grid of identical squares feel aimed at
+   rather than scanned. */
+.button:hover {
+  background: var(--color-hover);
+  transform: scale(1.2);
+}

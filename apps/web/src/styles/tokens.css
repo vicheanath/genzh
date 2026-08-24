@@ -3,25 +3,48 @@
  *
  * Base UI ships no styles at all, so this file is the single source of visual
  * truth. Components reference tokens only — never a literal colour — which is
- * what makes theming a change in one place.
+ * what makes a redesign a change in one place.
  *
  * Theming has three states, and all three are handled:
  *   1. an explicit choice stamps [data-theme] on <html>
  *   2. no choice + OS dark  → prefers-color-scheme
  *   3. no choice + OS light → the :root defaults below
  *
- * ## The identity: "dusk"
+ * ── The identity: "citrine" ──────────────────────────────────────────────────
  *
- * The layout borrows the rail → sidebar → stage arrangement that every chat
- * app converged on, because it is the arrangement people already know. The
- * *look* deliberately does not: no blurple, no neutral slate greys. The ground
- * is a violet-black — every dark surface carries a purple cast rather than
- * being desaturated — and the accent is a violet→magenta gradient rather than
- * a flat brand fill. Three signatures carry that through the app:
+ * The layout borrows the rail → sidebar → stage arrangement that every chat app
+ * converged on, because it is the arrangement people already know. The *look*
+ * deliberately does not. Four rules carry the identity, and every component
+ * below is an application of them:
  *
- *   --gradient-accent   selection, active nav, primary buttons, speaking rings
- *   --glow-accent       what "active" means here, instead of a heavier fill
- *   --font-display      a wider, geometric face for titles against the UI face
+ *   1. INK ON LIGHT.  The primary action is a bright acid lime carrying
+ *      near-black text — `--color-accent` + `--color-accent-contrast`. Every
+ *      other app in this category fills its primary button with a mid-dark
+ *      brand colour and sets white on top. Inverting that is the single most
+ *      recognisable thing on screen, so it is spent only on primary actions.
+ *
+ *   2. WARM GROUND.  There is no cool grey and no violet-black anywhere. Every
+ *      neutral carries a small amount of chroma at hue 75 (a warm, paper-ish
+ *      cast), so surfaces read as bone and espresso rather than as slate. This
+ *      is why the neutrals below are not `oklch(L 0 0)`.
+ *
+ *   3. LIGHT IS DEPTH.  Elevation is a lit top edge plus a soft tinted
+ *      shadow — `--edge-highlight` and `--shadow-*` together — not a blur
+ *      dropped under a floating rectangle. Surfaces look lit from above rather
+ *      than cut out and pasted down.
+ *
+ *   4. PILLS ON SLABS.  Controls are fully round (`--radius-full`); the
+ *      surfaces holding them are soft squares (`--radius-lg`/`xl`). The shape
+ *      contrast is what separates "thing you press" from "thing you read"
+ *      without needing a border on either.
+ *
+ * ── On the colour space ─────────────────────────────────────────────────────
+ *
+ * Everything is `oklch()`. Two reasons, both practical rather than fashionable:
+ * ramps stay perceptually even (the muted/subtle text steps are actual equal
+ * lightness steps, which they were not in hex), and a chroma beyond the sRGB
+ * triangle renders wide on a P3 display and gamut-maps down on an sRGB one, so
+ * the lime is genuinely more vivid on modern hardware for free.
  *
  * If you are adding a surface and reaching for a hex, you want a token below.
  */
@@ -31,109 +54,162 @@
      Four levels, and they are ordered: sunken sits behind the page, bg is the
      page, surface is a panel on it, raised is a popup above that. A component
      picks the level it belongs to rather than a colour. */
-  --color-sunken: #f1ecfb;
-  --color-bg: #faf8ff;
-  --color-surface: #ffffff;
-  --color-surface-raised: #ffffff;
-  --color-overlay: rgb(24 16 43 / 0.5);
+  --color-sunken: oklch(0.949 0.011 85);
+  --color-bg: oklch(0.977 0.008 85);
+  --color-surface: oklch(0.995 0.004 85);
+  --color-surface-raised: oklch(1 0 0);
+  --color-overlay: oklch(0.24 0.02 75 / 0.42);
   /* Interaction states for a *filled* surface. Distinct from --color-hover,
      which is the translucent wash a transparent element gets. */
-  --color-surface-hover: #f6f2fd;
-  --color-surface-active: #efe8fb;
-  --color-surface-muted: #f5f1fc;
+  --color-surface-hover: oklch(0.963 0.013 85);
+  --color-surface-active: oklch(0.941 0.017 85);
+  --color-surface-muted: oklch(0.958 0.011 85);
 
-  /* A wash used for hover on transparent things — tinted rather than grey, so
-     hovering feels connected to the accent instead of dirty. */
-  --color-hover: rgb(124 58 237 / 0.08);
-  --color-active: rgb(124 58 237 / 0.14);
+  /* A wash used for hover on transparent things — tinted toward the accent
+     rather than grey, so hovering feels connected to the identity. */
+  --color-hover: oklch(0.72 0.15 122 / 0.12);
+  --color-active: oklch(0.70 0.16 122 / 0.20);
 
-  /* text */
-  --color-text: #1a1330;
-  --color-text-muted: #584d78;
-  --color-text-subtle: #8a7fae;
-  --color-text-inverted: #ffffff;
+  /* text — warm ink, never a pure black and never a cool grey */
+  --color-text: oklch(0.235 0.018 75);
+  --color-text-muted: oklch(0.475 0.017 78);
+  --color-text-subtle: oklch(0.625 0.015 80);
+  --color-text-inverted: oklch(0.985 0.005 85);
 
   /* lines */
-  --color-border: #e7e0f5;
-  --color-border-strong: #cdc2e6;
-  --color-border-hover: #d9cef0;
-  --color-border-subtle: #f0eaf9;
+  --color-border: oklch(0.903 0.012 85);
+  --color-border-strong: oklch(0.815 0.017 85);
+  --color-border-hover: oklch(0.858 0.015 85);
+  --color-border-subtle: oklch(0.940 0.010 85);
 
-  /* accent */
-  --color-accent: #7c3aed;
-  --color-accent-hover: #6d28d9;
-  --color-accent-active: #5b21b6;
-  --color-accent-subtle: #f1eafe;
-  --color-accent-text: #6d28d9;
-  --color-accent-ring: rgb(124 58 237 / 0.35);
-  --color-accent-contrast: #ffffff;
+  /* ── accent ──────────────────────────────────────────────────────────────
+     Acid lime. Note the lightness: 0.85 is far too bright to carry white text,
+     which is the point — `--color-accent-contrast` is ink, and rule 1 above
+     depends on nobody "fixing" that to white. Links and accent-coloured text
+     cannot use the fill (it vanishes on bone), so `--color-accent-text` is a
+     deep olive at the same hue: same family, legible weight. */
+  --color-accent: oklch(0.855 0.205 122);
+  --color-accent-hover: oklch(0.812 0.200 122);
+  --color-accent-active: oklch(0.768 0.190 122);
+  --color-accent-subtle: oklch(0.945 0.070 122);
+  --color-accent-text: oklch(0.480 0.130 128);
+  --color-accent-ring: oklch(0.800 0.190 122 / 0.45);
+  --color-accent-contrast: oklch(0.200 0.035 122);
 
-  /* A second hue, used only where two accents must be told apart —
-     the voice panel against the composer, a live badge against a link. */
-  --color-mint: #0fa47f;
-  --color-mint-subtle: #e0f8f1;
+  /* A second hue, used only where two accents must be told apart — the voice
+     panel against the composer, a live badge against a link. Electric cyan:
+     far enough from lime to never be confused with it, cold enough to read as
+     "transmitting". `--color-live` is the name to prefer in new code. */
+  --color-live: oklch(0.735 0.145 212);
+  --color-live-subtle: oklch(0.945 0.048 212);
+  --color-mint: var(--color-live);
+  --color-mint-subtle: var(--color-live-subtle);
 
-  /* status */
-  --color-danger: #e11d48;
-  --color-danger-subtle: #ffe4ea;
-  --color-success: #0fa47f;
-  --color-warning: #d97706;
+  /* status — kept clear of the accent hue so nothing reads as half-danger */
+  --color-danger: oklch(0.595 0.215 22);
+  --color-danger-subtle: oklch(0.945 0.048 22);
+  --color-success: oklch(0.665 0.170 150);
+  --color-warning: oklch(0.755 0.155 68);
 
-  /* presence — the dot on an avatar */
-  --color-online: #17b981;
-  --color-idle: #f5a524;
-  --color-busy: #f43f5e;
-  --color-offline: #a09bb5;
+  /* presence — the dot on an avatar. Online borrows the accent hue on purpose:
+     "someone is here" is the app's happiest state and should look like it. */
+  --color-online: oklch(0.790 0.200 133);
+  --color-idle: oklch(0.790 0.150 75);
+  --color-busy: oklch(0.620 0.215 22);
+  --color-offline: oklch(0.700 0.013 85);
 
   /* ── signatures ──────────────────────────────────────────────────────────
-     The three things that make a screen recognisably this app rather than a
-     re-skin. Used sparingly: an accent that is a gradient everywhere is just a
-     background. */
-  --gradient-accent: linear-gradient(135deg, #a855f7 0%, #7c3aed 48%, #ec4899 100%);
-  --gradient-live: linear-gradient(135deg, #0fa47f 0%, #06b6d4 100%);
-  --gradient-danger: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+     Sparingly used. An accent that is a gradient everywhere is just a
+     background, and a highlight on every edge is just a lighter border. */
+
+  /* The lit top edge from rule 3. Added by anything that sits above the page —
+     cards, popups, the primary button — as the first entry in `box-shadow`. */
+  --edge-highlight: inset 0 1px 0 oklch(1 0 0 / 0.85);
+  --edge-highlight-strong: inset 0 1px 0 oklch(1 0 0 / 1);
+
+  /* Citrus sweep rather than a two-brand-colour blend: the gradient moves
+     through lightness and hue within one family, so it still reads as "the
+     accent" and not as decoration. */
+  --gradient-accent: linear-gradient(
+    135deg,
+    oklch(0.895 0.190 138) 0%,
+    oklch(0.855 0.205 120) 52%,
+    oklch(0.820 0.190 98) 100%
+  );
+  /*
+   * The gradient, for text.
+   *
+   * `--gradient-accent` is a *fill* — it sits at L 0.82–0.90 because it has ink
+   * on top of it. Painting type with it on a bone page puts light-on-light and
+   * fails contrast outright, which is what the brand mark used to do. Same hue
+   * family, dropped far enough in lightness to be read.
+   */
+  --gradient-accent-text: linear-gradient(
+    135deg,
+    oklch(0.520 0.140 140) 0%,
+    oklch(0.455 0.135 122) 55%,
+    oklch(0.430 0.125 98) 100%
+  );
+
+  --gradient-live: linear-gradient(135deg, oklch(0.790 0.140 198) 0%, oklch(0.715 0.150 232) 100%);
+  --gradient-danger: linear-gradient(135deg, oklch(0.665 0.200 32) 0%, oklch(0.585 0.215 18) 100%);
 
   /* "Active" reads as a glow here rather than as a heavier fill, which is what
      lets nav rows stay quiet until they matter. */
-  --glow-accent: 0 6px 20px rgb(124 58 237 / 0.28);
-  --glow-live: 0 6px 20px rgb(15 164 127 / 0.3);
-  --glow-danger: 0 6px 20px rgb(225 29 72 / 0.28);
+  --glow-accent: 0 6px 20px oklch(0.800 0.190 122 / 0.38);
+  --glow-live: 0 6px 20px oklch(0.735 0.145 212 / 0.32);
+  --glow-danger: 0 6px 20px oklch(0.595 0.215 22 / 0.30);
 
   /* The stage — the voice viewport — is its own environment: darker than the
-     page in both themes, so a call feels like a place you entered. */
-  --stage-bg: #17122a;
-  --stage-surface: #221b3d;
-  --stage-surface-raised: #2c2450;
-  --stage-border: rgb(255 255 255 / 0.09);
-  --stage-text: #f3f0ff;
-  --stage-text-subtle: #a99fc8;
-  /* Two off-centre pools of colour behind the tiles. Cheap (no blur filter,
-     no extra element) and the one thing that stops a dark grid reading flat. */
+     page in both themes, so a call feels like a place you entered. Warm
+     espresso rather than black, per rule 2. */
+  --stage-bg: oklch(0.205 0.014 75);
+  --stage-surface: oklch(0.262 0.016 75);
+  --stage-surface-raised: oklch(0.310 0.018 75);
+  --stage-border: oklch(1 0 0 / 0.10);
+  --stage-text: oklch(0.970 0.008 85);
+  --stage-text-subtle: oklch(0.715 0.014 80);
+  /* Two off-centre pools of colour behind the tiles — lime warm-side, cyan
+     cold-side. Cheap (no blur filter, no extra element) and the one thing that
+     stops a dark grid reading flat. */
   --stage-aurora:
-    radial-gradient(80rem 40rem at 12% -10%, rgb(168 85 247 / 0.22), transparent 60%),
-    radial-gradient(60rem 36rem at 96% 108%, rgb(236 72 153 / 0.16), transparent 62%);
+    radial-gradient(80rem 40rem at 12% -10%, oklch(0.855 0.205 122 / 0.16), transparent 60%),
+    radial-gradient(60rem 36rem at 96% 108%, oklch(0.735 0.145 212 / 0.16), transparent 62%);
 
   /* Panels that float over content: controls pill, overlays on video. */
-  --glass-bg: rgb(23 18 42 / 0.72);
-  --glass-border: rgb(255 255 255 / 0.12);
+  --glass-bg: oklch(0.225 0.016 75 / 0.70);
+  --glass-border: oklch(1 0 0 / 0.14);
 
-  /* type */
+  /* ── type ────────────────────────────────────────────────────────────────
+     Body copy runs on the system UI stack so it never waits on a network font.
+     Titles run on a wider, more characterful grotesk — used for headings, the
+     brand mark and empty states, never for body copy or controls. */
   --font-sans:
     'Inter var', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
     Roboto, 'Helvetica Neue', Arial, sans-serif;
-  /* Wider and more geometric than the UI face — titles, empty states, the
-     brand mark. Never body copy. */
   --font-display:
-    'Space Grotesk', 'Inter var', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    'Bricolage Grotesque', 'Inter var', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* The small end is fixed — a 13px label that grows with the viewport is just
+     an inconsistent 13px label. The display end is fluid, because a headline
+     that works on a phone is timid on a 27" display. */
   --text-2xs: 0.6875rem;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 0.9375rem;
   --text-lg: 1.125rem;
-  --text-xl: 1.375rem;
-  --text-2xl: 1.75rem;
-  --text-3xl: 2.25rem;
+  --text-xl: clamp(1.3rem, 1.18rem + 0.45vw, 1.5rem);
+  --text-2xl: clamp(1.65rem, 1.42rem + 0.9vw, 2.05rem);
+  --text-3xl: clamp(2.1rem, 1.65rem + 1.8vw, 2.9rem);
+  --text-4xl: clamp(2.6rem, 1.85rem + 3vw, 4rem);
+
+  /* Tracking. The display face is wide, so titles tighten; the smallest labels
+     open up, because 11px set solid is a smudge. */
+  --tracking-tight: -0.022em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.08em;
 
   /* space — a 4px scale */
   --space-1: 0.25rem;
@@ -145,29 +221,34 @@
   --space-7: 2.5rem;
   --space-8: 3rem;
 
-  /* shape */
+  /* shape — rule 4. Controls take --radius-full, the slabs holding them take
+     lg/xl. Anything in between blurs the distinction, which is why the middle
+     of this scale is used for inputs and little else. */
   --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
   --radius-2xl: 1.5rem;
   --radius-full: 9999px;
   /* Alias. Both names are in use; keeping them equal is cheaper than a rename
      across every stylesheet. */
   --radius-pill: 9999px;
 
-  /* elevation */
-  --shadow-sm: 0 1px 2px rgb(24 16 43 / 0.07);
-  --shadow-md: 0 4px 14px rgb(24 16 43 / 0.09);
-  --shadow-lg: 0 14px 36px rgb(24 16 43 / 0.15);
-  --shadow-xl: 0 26px 60px rgb(24 16 43 / 0.2);
-  --shadow-2xl: 0 36px 80px rgb(24 16 43 / 0.26);
+  /* elevation — tinted warm rather than neutral black, so a shadow on bone
+     reads as shade and not as dirt. Pair with --edge-highlight. */
+  --shadow-sm: 0 1px 2px oklch(0.30 0.02 75 / 0.07);
+  --shadow-md: 0 2px 4px oklch(0.30 0.02 75 / 0.05), 0 6px 16px oklch(0.30 0.02 75 / 0.08);
+  --shadow-lg: 0 4px 8px oklch(0.30 0.02 75 / 0.06), 0 16px 36px oklch(0.30 0.02 75 / 0.12);
+  --shadow-xl: 0 8px 16px oklch(0.30 0.02 75 / 0.07), 0 28px 60px oklch(0.30 0.02 75 / 0.16);
+  --shadow-2xl: 0 12px 24px oklch(0.30 0.02 75 / 0.08), 0 40px 84px oklch(0.30 0.02 75 / 0.22);
 
   /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   /* Slight overshoot, for things that pop in: reaction chips, toasts. */
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Press physics — fast in, no overshoot, for the moment a control is held. */
+  --ease-press: cubic-bezier(0.2, 0, 0, 1);
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 320ms;
@@ -181,149 +262,201 @@
 /*
  * The dark palette.
  *
- * Defined once here as a reusable block and applied twice below — once for the
- * OS preference, once for an explicit choice — because a custom property can
- * only be redefined by a selector, not shared by one.
+ * Espresso, not black and not violet: the same hue-75 warmth as light mode,
+ * dropped in lightness. The lime does *not* darken with it — in dark mode it is
+ * the only light source on screen, which is what rule 3 buys us here.
+ *
+ * Defined once as a block and applied twice below — once for the OS preference,
+ * once for an explicit choice — because a custom property can only be redefined
+ * by a selector, not shared by one.
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --color-sunken: #0c0916;
-    --color-bg: #12101d;
-    --color-surface: #191527;
-    --color-surface-raised: #211c33;
-    --color-overlay: rgb(6 4 12 / 0.72);
-    --color-surface-hover: #1f1a30;
-    --color-surface-active: #272040;
-    --color-surface-muted: #1b1729;
+    --color-sunken: oklch(0.158 0.010 75);
+    --color-bg: oklch(0.196 0.012 75);
+    --color-surface: oklch(0.236 0.013 75);
+    --color-surface-raised: oklch(0.276 0.015 75);
+    --color-overlay: oklch(0.10 0.010 75 / 0.68);
+    --color-surface-hover: oklch(0.272 0.014 75);
+    --color-surface-active: oklch(0.315 0.016 75);
+    --color-surface-muted: oklch(0.252 0.012 75);
 
-    --color-hover: rgb(255 255 255 / 0.07);
-    --color-active: rgb(157 124 255 / 0.18);
+    --color-hover: oklch(1 0 0 / 0.07);
+    --color-active: oklch(0.855 0.180 122 / 0.16);
 
-    --color-text: #f3f0ff;
-    --color-text-muted: #c6bee0;
-    --color-text-subtle: #8d84a8;
-    --color-text-inverted: #12101d;
+    --color-text: oklch(0.962 0.010 85);
+    --color-text-muted: oklch(0.780 0.015 82);
+    --color-text-subtle: oklch(0.605 0.014 80);
+    --color-text-inverted: oklch(0.200 0.014 75);
 
-    --color-border: #241f38;
-    --color-border-strong: #3a3255;
-    --color-border-hover: #332b4d;
-    --color-border-subtle: #201b31;
+    --color-border: oklch(0.308 0.014 75);
+    --color-border-strong: oklch(0.420 0.016 75);
+    --color-border-hover: oklch(0.375 0.016 75);
+    --color-border-subtle: oklch(0.268 0.012 75);
 
-    --color-accent: #8b5cf6;
-    --color-accent-hover: #7c3aed;
-    --color-accent-active: #6d28d9;
-    --color-accent-subtle: rgb(139 92 246 / 0.18);
-    --color-accent-text: #b9a2ff;
-    --color-accent-ring: rgb(139 92 246 / 0.45);
-    --color-accent-contrast: #ffffff;
+    /* Brighter than light mode, not darker. On espresso the lime is the lamp. */
+    --color-accent: oklch(0.868 0.210 122);
+    --color-accent-hover: oklch(0.905 0.205 122);
+    --color-accent-active: oklch(0.825 0.200 122);
+    --color-accent-subtle: oklch(0.868 0.200 122 / 0.16);
+    --color-accent-text: oklch(0.868 0.190 122);
+    --color-accent-ring: oklch(0.868 0.200 122 / 0.48);
+    --color-accent-contrast: oklch(0.185 0.035 122);
 
-    --color-mint: #2fe6a7;
-    --color-mint-subtle: rgb(47 230 167 / 0.14);
+    --color-live: oklch(0.800 0.145 205);
+    --color-live-subtle: oklch(0.800 0.145 205 / 0.16);
 
-    --color-danger: #ff5d73;
-    --color-danger-subtle: rgb(255 93 115 / 0.16);
-    --color-success: #2fe6a7;
-    --color-warning: #ffb340;
+    --color-danger: oklch(0.680 0.200 22);
+    --color-danger-subtle: oklch(0.680 0.200 22 / 0.18);
+    --color-success: oklch(0.780 0.180 152);
+    --color-warning: oklch(0.820 0.150 72);
 
-    --color-online: #2fe6a7;
-    --color-idle: #ffb340;
-    --color-busy: #ff5d73;
-    --color-offline: #6f6789;
+    --color-online: oklch(0.855 0.200 133);
+    --color-idle: oklch(0.820 0.150 75);
+    --color-busy: oklch(0.680 0.200 22);
+    --color-offline: oklch(0.480 0.013 80);
 
-    --gradient-accent: linear-gradient(135deg, #c084fc 0%, #8b5cf6 48%, #f472b6 100%);
-    --gradient-live: linear-gradient(135deg, #2fe6a7 0%, #22d3ee 100%);
-    --gradient-danger: linear-gradient(135deg, #ff7a8a 0%, #ff5d73 100%);
+    /* On a dark ground a white inset edge is a scratch, not a highlight — it
+       drops to a whisper and does the same job. */
+    --edge-highlight: inset 0 1px 0 oklch(1 0 0 / 0.07);
+    --edge-highlight-strong: inset 0 1px 0 oklch(1 0 0 / 0.12);
 
-    --glow-accent: 0 6px 22px rgb(139 92 246 / 0.4);
-    --glow-live: 0 6px 22px rgb(47 230 167 / 0.32);
-    --glow-danger: 0 6px 22px rgb(255 93 115 / 0.34);
+    --gradient-accent: linear-gradient(
+      135deg,
+      oklch(0.900 0.190 140) 0%,
+      oklch(0.868 0.210 120) 52%,
+      oklch(0.840 0.190 96) 100%
+    );
+    /* On espresso the fill gradient is already the readable one. */
+    --gradient-accent-text: linear-gradient(
+      135deg,
+      oklch(0.900 0.190 140) 0%,
+      oklch(0.868 0.210 120) 52%,
+      oklch(0.840 0.190 96) 100%
+    );
+
+    /* On espresso the fill gradient is already the readable one. */
+  --gradient-accent-text: linear-gradient(
+    135deg,
+    oklch(0.900 0.190 140) 0%,
+    oklch(0.868 0.210 120) 52%,
+    oklch(0.840 0.190 96) 100%
+  );
+
+  --gradient-live: linear-gradient(135deg, oklch(0.845 0.140 192) 0%, oklch(0.770 0.150 228) 100%);
+    --gradient-danger: linear-gradient(135deg, oklch(0.735 0.190 32) 0%, oklch(0.665 0.205 18) 100%);
+
+    --glow-accent: 0 6px 24px oklch(0.868 0.200 122 / 0.34);
+    --glow-live: 0 6px 24px oklch(0.800 0.145 205 / 0.30);
+    --glow-danger: 0 6px 24px oklch(0.680 0.200 22 / 0.32);
 
     /* In dark the stage is only a shade away from the page, so the aurora and
        the border do the separating rather than a brightness step. */
-    --stage-bg: #0e0b19;
-    --stage-surface: #191430;
-    --stage-surface-raised: #221b3d;
-    --stage-border: rgb(255 255 255 / 0.08);
-    --stage-text: #f3f0ff;
-    --stage-text-subtle: #9c93bb;
+    --stage-bg: oklch(0.168 0.012 75);
+    --stage-surface: oklch(0.238 0.014 75);
+    --stage-surface-raised: oklch(0.285 0.016 75);
+    --stage-border: oklch(1 0 0 / 0.09);
+    --stage-text: oklch(0.968 0.010 85);
+    --stage-text-subtle: oklch(0.655 0.014 80);
+    --stage-aurora:
+      radial-gradient(80rem 40rem at 12% -10%, oklch(0.868 0.210 122 / 0.13), transparent 60%),
+      radial-gradient(60rem 36rem at 96% 108%, oklch(0.800 0.145 205 / 0.14), transparent 62%);
 
-    --glass-bg: rgb(14 11 25 / 0.78);
-    --glass-border: rgb(255 255 255 / 0.1);
+    --glass-bg: oklch(0.185 0.014 75 / 0.76);
+    --glass-border: oklch(1 0 0 / 0.11);
 
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
-    --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
-    --shadow-lg: 0 14px 36px rgb(0 0 0 / 0.55);
-    --shadow-xl: 0 26px 60px rgb(0 0 0 / 0.68);
-    --shadow-2xl: 0 36px 80px rgb(0 0 0 / 0.75);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.40);
+    --shadow-md: 0 2px 4px oklch(0 0 0 / 0.30), 0 6px 16px oklch(0 0 0 / 0.45);
+    --shadow-lg: 0 4px 8px oklch(0 0 0 / 0.35), 0 16px 36px oklch(0 0 0 / 0.55);
+    --shadow-xl: 0 8px 16px oklch(0 0 0 / 0.40), 0 28px 60px oklch(0 0 0 / 0.65);
+    --shadow-2xl: 0 12px 24px oklch(0 0 0 / 0.45), 0 40px 84px oklch(0 0 0 / 0.72);
   }
 }
 
-/* An explicit dark choice wins in both directions. */
+/* An explicit dark choice wins in both directions. Generated from the block
+   above — the two must stay byte-identical, so edit the media query and copy
+   down, never one of the two alone. */
 :root[data-theme='dark'] {
-  --color-sunken: #0c0916;
-  --color-bg: #12101d;
-  --color-surface: #191527;
-  --color-surface-raised: #211c33;
-  --color-overlay: rgb(6 4 12 / 0.72);
-  --color-surface-hover: #1f1a30;
-  --color-surface-active: #272040;
-  --color-surface-muted: #1b1729;
+  --color-sunken: oklch(0.158 0.010 75);
+  --color-bg: oklch(0.196 0.012 75);
+  --color-surface: oklch(0.236 0.013 75);
+  --color-surface-raised: oklch(0.276 0.015 75);
+  --color-overlay: oklch(0.10 0.010 75 / 0.68);
+  --color-surface-hover: oklch(0.272 0.014 75);
+  --color-surface-active: oklch(0.315 0.016 75);
+  --color-surface-muted: oklch(0.252 0.012 75);
 
-  --color-hover: rgb(255 255 255 / 0.07);
-  --color-active: rgb(157 124 255 / 0.18);
+  --color-hover: oklch(1 0 0 / 0.07);
+  --color-active: oklch(0.855 0.180 122 / 0.16);
 
-  --color-text: #f3f0ff;
-  --color-text-muted: #c6bee0;
-  --color-text-subtle: #8d84a8;
-  --color-text-inverted: #12101d;
+  --color-text: oklch(0.962 0.010 85);
+  --color-text-muted: oklch(0.780 0.015 82);
+  --color-text-subtle: oklch(0.605 0.014 80);
+  --color-text-inverted: oklch(0.200 0.014 75);
 
-  --color-border: #241f38;
-  --color-border-strong: #3a3255;
-  --color-border-hover: #332b4d;
-  --color-border-subtle: #201b31;
+  --color-border: oklch(0.308 0.014 75);
+  --color-border-strong: oklch(0.420 0.016 75);
+  --color-border-hover: oklch(0.375 0.016 75);
+  --color-border-subtle: oklch(0.268 0.012 75);
 
-  --color-accent: #8b5cf6;
-  --color-accent-hover: #7c3aed;
-  --color-accent-active: #6d28d9;
-  --color-accent-subtle: rgb(139 92 246 / 0.18);
-  --color-accent-text: #b9a2ff;
-  --color-accent-ring: rgb(139 92 246 / 0.45);
-  --color-accent-contrast: #ffffff;
+  /* Brighter than light mode, not darker. On espresso the lime is the lamp. */
+  --color-accent: oklch(0.868 0.210 122);
+  --color-accent-hover: oklch(0.905 0.205 122);
+  --color-accent-active: oklch(0.825 0.200 122);
+  --color-accent-subtle: oklch(0.868 0.200 122 / 0.16);
+  --color-accent-text: oklch(0.868 0.190 122);
+  --color-accent-ring: oklch(0.868 0.200 122 / 0.48);
+  --color-accent-contrast: oklch(0.185 0.035 122);
 
-  --color-mint: #2fe6a7;
-  --color-mint-subtle: rgb(47 230 167 / 0.14);
+  --color-live: oklch(0.800 0.145 205);
+  --color-live-subtle: oklch(0.800 0.145 205 / 0.16);
 
-  --color-danger: #ff5d73;
-  --color-danger-subtle: rgb(255 93 115 / 0.16);
-  --color-success: #2fe6a7;
-  --color-warning: #ffb340;
+  --color-danger: oklch(0.680 0.200 22);
+  --color-danger-subtle: oklch(0.680 0.200 22 / 0.18);
+  --color-success: oklch(0.780 0.180 152);
+  --color-warning: oklch(0.820 0.150 72);
 
-  --color-online: #2fe6a7;
-  --color-idle: #ffb340;
-  --color-busy: #ff5d73;
-  --color-offline: #6f6789;
+  --color-online: oklch(0.855 0.200 133);
+  --color-idle: oklch(0.820 0.150 75);
+  --color-busy: oklch(0.680 0.200 22);
+  --color-offline: oklch(0.480 0.013 80);
 
-  --gradient-accent: linear-gradient(135deg, #c084fc 0%, #8b5cf6 48%, #f472b6 100%);
-  --gradient-live: linear-gradient(135deg, #2fe6a7 0%, #22d3ee 100%);
-  --gradient-danger: linear-gradient(135deg, #ff7a8a 0%, #ff5d73 100%);
+  /* On a dark ground a white inset edge is a scratch, not a highlight — it
+     drops to a whisper and does the same job. */
+  --edge-highlight: inset 0 1px 0 oklch(1 0 0 / 0.07);
+  --edge-highlight-strong: inset 0 1px 0 oklch(1 0 0 / 0.12);
 
-  --glow-accent: 0 6px 22px rgb(139 92 246 / 0.4);
-  --glow-live: 0 6px 22px rgb(47 230 167 / 0.32);
-  --glow-danger: 0 6px 22px rgb(255 93 115 / 0.34);
+  --gradient-accent: linear-gradient(
+    135deg,
+    oklch(0.900 0.190 140) 0%,
+    oklch(0.868 0.210 120) 52%,
+    oklch(0.840 0.190 96) 100%
+  );
+  --gradient-live: linear-gradient(135deg, oklch(0.845 0.140 192) 0%, oklch(0.770 0.150 228) 100%);
+  --gradient-danger: linear-gradient(135deg, oklch(0.735 0.190 32) 0%, oklch(0.665 0.205 18) 100%);
 
-  --stage-bg: #0e0b19;
-  --stage-surface: #191430;
-  --stage-surface-raised: #221b3d;
-  --stage-border: rgb(255 255 255 / 0.08);
-  --stage-text: #f3f0ff;
-  --stage-text-subtle: #9c93bb;
+  --glow-accent: 0 6px 24px oklch(0.868 0.200 122 / 0.34);
+  --glow-live: 0 6px 24px oklch(0.800 0.145 205 / 0.30);
+  --glow-danger: 0 6px 24px oklch(0.680 0.200 22 / 0.32);
 
-  --glass-bg: rgb(14 11 25 / 0.78);
-  --glass-border: rgb(255 255 255 / 0.1);
+  /* In dark the stage is only a shade away from the page, so the aurora and
+     the border do the separating rather than a brightness step. */
+  --stage-bg: oklch(0.168 0.012 75);
+  --stage-surface: oklch(0.238 0.014 75);
+  --stage-surface-raised: oklch(0.285 0.016 75);
+  --stage-border: oklch(1 0 0 / 0.09);
+  --stage-text: oklch(0.968 0.010 85);
+  --stage-text-subtle: oklch(0.655 0.014 80);
+  --stage-aurora:
+    radial-gradient(80rem 40rem at 12% -10%, oklch(0.868 0.210 122 / 0.13), transparent 60%),
+    radial-gradient(60rem 36rem at 96% 108%, oklch(0.800 0.145 205 / 0.14), transparent 62%);
 
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
-  --shadow-md: 0 4px 14px rgb(0 0 0 / 0.45);
-  --shadow-lg: 0 14px 36px rgb(0 0 0 / 0.55);
-  --shadow-xl: 0 26px 60px rgb(0 0 0 / 0.68);
-  --shadow-2xl: 0 36px 80px rgb(0 0 0 / 0.75);
+  --glass-bg: oklch(0.185 0.014 75 / 0.76);
+  --glass-border: oklch(1 0 0 / 0.11);
+
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.40);
+  --shadow-md: 0 2px 4px oklch(0 0 0 / 0.30), 0 6px 16px oklch(0 0 0 / 0.45);
+  --shadow-lg: 0 4px 8px oklch(0 0 0 / 0.35), 0 16px 36px oklch(0 0 0 / 0.55);
+  --shadow-xl: 0 8px 16px oklch(0 0 0 / 0.40), 0 28px 60px oklch(0 0 0 / 0.65);
+  --shadow-2xl: 0 12px 24px oklch(0 0 0 / 0.45), 0 40px 84px oklch(0 0 0 / 0.72);
 }

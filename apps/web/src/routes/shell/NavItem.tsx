@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import type { ReactNode } from 'react'
 
+import { Collapsible } from '@/components/Collapsible'
 import { cx } from '@/lib/cx'
 
 import styles from './shell.module.css'
@@ -43,7 +44,15 @@ export function NavItem({
   )
 }
 
-/** A titled run of nav rows. Renders nothing when it would be empty. */
+/**
+ * A titled run of nav rows. Renders nothing when it would be empty.
+ *
+ * The heading is a disclosure trigger: a sidebar carrying three channel groups
+ * plus direct messages does not fit on a laptop once a community has more than
+ * a handful of rooms, and collapsing a group you are not using is the standard
+ * answer. Base UI measures the panel so the collapse animates to the real
+ * height of the rows rather than to a guessed max-height.
+ */
 export function NavGroup({
   heading,
   children,
@@ -56,10 +65,9 @@ export function NavGroup({
   if (hideWhenEmpty && !hasContent(children)) return null
 
   return (
-    <section className={styles.group}>
-      <h2 className={styles.groupHeading}>{heading}</h2>
+    <Collapsible section defaultOpen title={heading} className={styles.group}>
       {children}
-    </section>
+    </Collapsible>
   )
 }
 

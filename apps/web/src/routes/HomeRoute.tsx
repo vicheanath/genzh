@@ -23,9 +23,9 @@ import {
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
+import { Toggle, ToggleGroup } from '@/components/ToggleGroup'
 import { communities as communitiesApi, rooms as roomsApi, type Room } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { cx } from '@/lib/cx'
 import { useAsync } from '@/lib/useAsync'
 
 import type { ShellContext } from './AppShell'
@@ -44,6 +44,9 @@ const ROOM_TYPE_ICONS: Record<string, typeof HashIcon> = {
   confession: LockIcon,
   quick_chat: ZapIcon,
 }
+
+/** Stands in for "no filter" — a toggle group needs a value for every option. */
+const ALL_CATEGORIES = 'all'
 
 export function HomeRoute() {
   const { getToken } = useAuth()
@@ -133,21 +136,27 @@ export function HomeRoute() {
         </section>
 
         {/* Categories Bar */}
-        <div className={styles.categories}>
+        {/* A single-choice filter, so the group owns the value and the arrow
+            keys move through it. "All" is the sentinel for no filter: clearing
+            the pressed pill lands on the same state, which is why deselecting
+            is allowed to fall through to it rather than being blocked. */}
+        <ToggleGroup
+          variant="loose"
+          size="sm"
+          className={styles.categories}
+          aria-label="Filter moments by category"
+          value={[selectedCategory ?? ALL_CATEGORIES]}
+          onValueChange={(next) => {
+            const picked = next[0]
+            setSelectedCategory(picked && picked !== ALL_CATEGORIES ? String(picked) : null)
+          }}
+        >
           {categoryList.map(({ key, label }) => (
-            <button
-              key={label}
-              type="button"
-              className={cx(
-                styles.categoryPill,
-                selectedCategory === key && styles.categoryPillActive,
-              )}
-              onClick={() => setSelectedCategory(key)}
-            >
+            <Toggle key={label} value={key ?? ALL_CATEGORIES}>
               {label}
-            </button>
+            </Toggle>
           ))}
-        </div>
+        </ToggleGroup>
 
         {/* 🔥 Trending & Active Moments */}
         <section>

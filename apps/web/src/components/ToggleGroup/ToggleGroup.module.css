@@ -1,0 +1,76 @@
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* One lozenge holding the set — the segmented-control reading. */
+.contained {
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+}
+
+/*
+ * No container. Each toggle carries its own outline instead, because a filter
+ * row that scrolls has no edge for a container to draw.
+ *
+ * These are descendant selectors so they beat a consumer's own single-class
+ * rule on the same element without depending on stylesheet order.
+ */
+.loose { gap: var(--space-2); }
+
+.loose .toggle {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--text-xs);
+}
+
+.loose .toggle[data-pressed] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-press);
+}
+
+.sm .toggle { height: 1.75rem; padding-inline: var(--space-3); }
+.md .toggle { height: 2.125rem; padding-inline: var(--space-4); }
+
+.toggle:hover:not([data-disabled]) {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.toggle:active:not([data-disabled]) { transform: scale(0.96); }
+
+/* Ink on lime. A pressed toggle is a live state, so it gets the accent
+   treatment rather than a grey fill. */
+.toggle[data-pressed] {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  box-shadow: var(--edge-highlight-strong), var(--shadow-sm);
+}
+
+.toggle[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}

@@ -34,7 +34,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--edge-highlight), var(--shadow-xl);
   outline: none;
   transition:
     opacity var(--duration-base) var(--ease-out),
@@ -158,42 +158,24 @@
 
 .navStrip::-webkit-scrollbar { display: none; }
 
-.navButton {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+/* The list fills the nav column; the rail and pill variants in Tabs.module.css
+   supply the rest — the shape of a tab, and the marker that moves between them. */
+.navList {
+  flex: 1;
+  min-width: 0;
 }
 
-.navButton:hover { background: var(--color-hover); color: var(--color-text); }
-
-.navButtonActive {
-  background: var(--color-active);
-  color: var(--color-text);
-  font-weight: 600;
+.navStrip .navList {
+  flex: initial;
+  width: max-content;
 }
 
-.navStrip .navButton {
+.navTab {
   gap: var(--space-2);
-  width: auto;
-  flex-shrink: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-full);
   white-space: nowrap;
 }
+
+.navStrip .navTab { flex-shrink: 0; }
 
 /* ── the panel ──────────────────────────────────────────────────────────── */
 

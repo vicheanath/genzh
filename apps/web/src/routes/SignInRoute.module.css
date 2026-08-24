@@ -15,17 +15,28 @@
 
 /* ── the pitch ──────────────────────────────────────────────────────────── */
 
+/*
+ * The pitch pane is the identity at full-page scale: a field of the accent
+ * carrying ink, rather than the dark saturated gradient every auth screen in
+ * this category uses. It is the only place in the app that spends the accent
+ * on an area this large, which is precisely why it is memorable — see rule 1
+ * in tokens.css.
+ *
+ * Text on it is `--color-accent-contrast`, not white. White on lime is
+ * unreadable, and reaching for a dark overlay to make white work would undo
+ * the whole point.
+ */
 .pitch {
   display: none;
   flex-direction: column;
   justify-content: center;
   gap: var(--space-5);
   padding: var(--space-8);
-  color: #fff;
+  color: var(--color-accent-contrast);
   background:
-    radial-gradient(120% 90% at 15% 20%, oklch(0.65 0.2 285) 0%, transparent 60%),
-    radial-gradient(100% 100% at 85% 80%, oklch(0.62 0.16 200) 0%, transparent 55%),
-    oklch(0.34 0.13 285);
+    radial-gradient(130% 95% at 12% 18%, oklch(0.93 0.19 138) 0%, transparent 62%),
+    radial-gradient(110% 100% at 88% 92%, oklch(0.83 0.19 98) 0%, transparent 58%),
+    var(--color-accent);
 }
 
 @media (min-width: 60rem) {
@@ -33,15 +44,17 @@
 }
 
 .pitchBrand {
+  font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
 }
 
 .pitchTitle {
-  font-size: clamp(2rem, 4vw, 3rem);
-  line-height: 1.1;
-  max-width: 14ch;
+  font-size: var(--text-4xl);
+  font-weight: 800;
+  line-height: 1.02;
+  max-width: 13ch;
 }
 
 .pitchList {
@@ -59,11 +72,14 @@
   align-items: flex-start;
   gap: var(--space-3);
   font-size: var(--text-sm);
-  /* White at full strength on a saturated ground is harsh; 82% reads as body
-     text rather than as another heading. */
-  color: rgb(255 255 255 / 0.82);
+  /* Ink at full strength on lime is as heavy as the headline; backing off to
+     78% is what makes this read as body copy under a title. */
+  color: oklch(0.20 0.035 122 / 0.78);
 }
 
+/* The bullet marks are punched *out* of the lime rather than laid on top of
+   it — a darkened well with the ink glyph inside, so they sit in the surface
+   instead of floating over it. */
 .pitchMark {
   display: grid;
   place-items: center;
@@ -71,8 +87,8 @@
   height: 1.75rem;
   flex-shrink: 0;
   border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 0.15);
-  color: #fff;
+  background: oklch(0.20 0.035 122 / 0.12);
+  color: var(--color-accent-contrast);
 }
 
 /* ── the form ───────────────────────────────────────────────────────────── */
@@ -159,22 +175,7 @@
 }
 
 .divider {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
   margin: var(--space-2) 0;
-  color: var(--color-text-subtle);
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--color-border);
 }
 
 .prodInfo {

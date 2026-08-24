@@ -12,6 +12,7 @@ import { useToast } from '@/components/Toast'
 import { ApiError, communities as communitiesApi, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
+import { hueFor } from '@/lib/palette'
 
 import { AddCommunityDialog } from './AddCommunityDialog'
 import type { ShellContext } from './AppShell'
@@ -140,7 +141,7 @@ export function ExploreRoute() {
                 <div key={community.id} className={styles.card}>
                   <div
                     className={styles.cardBanner}
-                    style={{ '--banner-seed': hueFor(community.name) } as React.CSSProperties}
+                    style={{ '--seed': hueFor(community.name) } as React.CSSProperties}
                   />
                   <div className={styles.cardBody}>
                     <div className={styles.cardAvatarWrap}>
@@ -183,10 +184,3 @@ export function ExploreRoute() {
 }
 
 /** Consistent hue per community name, matching the Avatar's and CommunityRoute's scheme */
-function hueFor(name: string): string {
-  let hash = 0
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) | 0
-  }
-  return `${Math.abs(hash) % 360}`
-}

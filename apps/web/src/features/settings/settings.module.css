@@ -23,7 +23,7 @@
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--edge-highlight), var(--shadow-xl);
   display: flex;
   overflow: hidden;
   outline: none;
@@ -45,6 +45,60 @@
     border-radius: 0;
     flex-direction: column;
   }
+}
+
+/* Tabs.Root sits between the modal and its two columns now, so it is what
+   carries the row layout the modal used to own directly. */
+.tabsRoot {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  .tabsRoot { flex-direction: column; }
+}
+
+/* The tab list is the whole nav column; the groups inside it keep their own
+   stacking, so the list itself only needs to fill the sidebar. */
+.navList {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .navList {
+    flex-direction: row;
+    flex: initial;
+  }
+}
+
+/* Matches .navButton, which the sign-out action still uses. */
+.navTab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.navTab:hover { background: var(--color-hover); color: var(--color-text); }
+.navTab[data-selected] {
+  background: var(--color-active);
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 .sidebar {
@@ -103,12 +157,6 @@
 .navButton:hover {
   background: var(--color-hover);
   color: var(--color-text);
-}
-
-.navButtonActive {
-  background: var(--color-active);
-  color: var(--color-text);
-  font-weight: 600;
 }
 
 .dangerButton {
@@ -213,7 +261,7 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   margin-bottom: var(--space-5);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
 }
 
 .previewBanner {
@@ -469,65 +517,15 @@
   gap: var(--space-2);
 }
 
-.themeCards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
-}
-
 @media (max-width: 600px) {
   .themeCards {
     grid-template-columns: 1fr;
   }
 }
 
-.themeCard {
-  position: relative;
-  font: inherit;
-  text-align: center;
-  background: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
-  color: var(--color-text);
-}
-
-.themeCard:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-hover);
-}
-
-.themeCardActive {
-  border-color: var(--color-accent);
-  background: var(--color-active);
-}
-
-.voiceTestBar {
-  width: 100%;
-  height: 0.625rem;
-  background: var(--color-sunken);
-  border-radius: var(--radius-full);
-  overflow: hidden;
+.voiceTestMeter {
   margin-top: var(--space-3);
-  border: 1px solid var(--color-border);
 }
-
-.voiceTestFill {
-  height: 100%;
-  background: var(--color-border-strong);
-  border-radius: var(--radius-full);
-  transition: width 0.08s linear;
-}
-
-/* Only while a test is running: a coloured bar at rest reads as a live signal
-   from a microphone nobody is listening to. */
-.voiceTestFillLive { background: var(--gradient-live); }
 
 .blockedList {
   display: flex;
@@ -597,25 +595,6 @@
   background: #000;
   /* Mirrored, like every other self-view in the app. */
   transform: scaleX(-1);
-}
-
-/* ── appearance ─────────────────────────────────────────────────────────── */
-
-.themeName {
-  font-family: var(--font-display);
-  font-weight: 600;
-}
-
-.themeHint {
-  font-size: var(--text-xs);
-  color: var(--color-text-subtle);
-}
-
-.themeCheck {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  color: var(--color-accent);
 }
 
 /* ── anonymous persona ──────────────────────────────────────────────────── */

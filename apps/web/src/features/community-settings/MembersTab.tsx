@@ -21,6 +21,7 @@ import { useProfiles } from '@/lib/useProfiles'
 import { PanelList, PanelSkeleton } from './PanelList'
 import type { CommunityAbilities } from './tabs'
 import styles from './communitySettings.module.css'
+import { useConfirm } from '@/components/AlertDialog'
 
 export function MembersTab({
   community,
@@ -29,6 +30,7 @@ export function MembersTab({
   community: CommunityWithPermissions
   abilities: CommunityAbilities
 }) {
+  const confirm = useConfirm()
   const { getToken } = useAuth()
   const toast = useToast()
   const { isOnline } = usePresence()
@@ -73,7 +75,13 @@ export function MembersTab({
   }
 
   async function remove(userId: Uuid, name: string) {
-    if (!window.confirm(`Remove ${name} from ${community.name}?`)) return
+    const ok = await confirm({
+      title: `Remove ${name}?`,
+      description: `They lose access to ${community.name} and every channel in it. They can be invited back.`,
+      confirmLabel: 'Remove member',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await communitiesApi.leave(await getToken(), community.id, userId)
       members.reload()

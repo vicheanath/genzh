@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/auth'
 
 import type { CommunityAbilities } from './tabs'
 import styles from './communitySettings.module.css'
+import { useConfirm } from '@/components/AlertDialog'
 
 /**
  * Who the server is: name, icon, description, and the two irreversible things.
@@ -36,6 +37,7 @@ export function OverviewTab({
   onUpdated?: () => void
   onDeleted?: () => void
 }) {
+  const confirm = useConfirm()
   const { getToken } = useAuth()
   const toast = useToast()
 
@@ -67,11 +69,13 @@ export function OverviewTab({
   }
 
   async function remove() {
-    // `confirm` rather than a second dialog: this one is rare, and a modal
-    // inside a modal is a worse answer than the browser's own stop sign.
-    if (!window.confirm(`Delete ${community.name}? Every channel and message goes with it.`)) {
-      return
-    }
+    const ok = await confirm({
+      title: `Delete ${community.name}?`,
+      description: 'Every channel and every message in them goes with it. This cannot be undone.',
+      confirmLabel: 'Delete community',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await communitiesApi.delete(await getToken(), community.id)
       toast.success('Server deleted')

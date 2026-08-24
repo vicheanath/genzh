@@ -25,7 +25,21 @@
   width: 100%;
   height: 100%;
   background: var(--avatar-hue, var(--color-accent));
+  /*
+   * Initials that pick their own contrast.
+   *
+   * `--avatar-hue` is whatever colour the user chose, and the palette spans
+   * L 0.64 (cobalt) to L 0.86 (lime) — white works on the dark end and is
+   * illegible on the light end, and a custom hex can be anywhere at all. The
+   * relative-colour form reads the background's own lightness and flips: the
+   * clamp lands on 1 below L 0.62 and on 0 above it, so this is a hard switch
+   * between white and black rather than a gradient of grey.
+   *
+   * The flat white above it is the fallback for engines without relative
+   * colour syntax, which drop the second declaration as invalid.
+   */
   color: #fff;
+  color: oklch(from var(--avatar-hue, var(--color-accent)) clamp(0, (0.62 - l) * 100, 1) 0 0);
   font-weight: 650;
   letter-spacing: 0.01em;
 }

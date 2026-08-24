@@ -1,19 +1,33 @@
 import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip'
-import type { ReactElement, ReactNode } from 'react'
+import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react'
 
 import styles from './Tooltip.module.css'
 
-export interface TooltipProps {
+export interface TooltipProps
+  extends Omit<ComponentPropsWithoutRef<'button'>, 'content' | 'children'> {
   /** The element the tooltip describes. Rendered as the trigger itself. */
   children: ReactElement
   content: ReactNode
   side?: 'top' | 'right' | 'bottom' | 'left'
 }
 
-export function Tooltip({ children, content, side = 'top' }: TooltipProps) {
+/**
+ * A hover/focus label for a control.
+ *
+ * Anything else passed in is forwarded to the trigger, which is what lets a
+ * tooltipped element also be *another* component's trigger:
+ *
+ *   <Popover trigger={<Tooltip content="Notifications"><button …/></Tooltip>} />
+ *
+ * Popover renders its trigger with Base UI's `render`, which hands the element
+ * the props and ref that make it a trigger. Without the spread below those land
+ * on this component and stop — the button gets no `onClick`, and the popover it
+ * is supposed to open never opens.
+ */
+export function Tooltip({ children, content, side = 'top', ...triggerProps }: TooltipProps) {
   return (
     <BaseTooltip.Root>
-      <BaseTooltip.Trigger render={children} />
+      <BaseTooltip.Trigger {...triggerProps} render={children} />
       <BaseTooltip.Portal>
         <BaseTooltip.Positioner
           className={styles.positioner}

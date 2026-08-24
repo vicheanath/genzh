@@ -7,12 +7,16 @@
     <meta name="color-scheme" content="light dark" />
     <title>genzh</title>
     <!-- The display face (--font-display). Body copy stays on the system UI
-         stack, so a slow font never blocks the app from being readable. -->
+         stack, so a slow font never blocks the app from being readable.
+         Bricolage is variable on two axes: `wght` for weight and `opsz` for
+         optical size, which is what lets one file serve an 11px overline and a
+         4rem empty-state headline without either looking like the other
+         stretched. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&display=swap"
     />
     <script>
       // Apply the stored theme before first paint, so a dark-mode user never

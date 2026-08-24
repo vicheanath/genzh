@@ -1,4 +1,3 @@
-import { Popover } from '@base-ui/react/popover'
 import {
   useCallback,
   useEffect,
@@ -23,6 +22,12 @@ import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { Tooltip } from '@/components/Tooltip'
+import { Separator } from '@/components/Separator'
+import {
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from '@/components/ContextMenu'
 import {
   ApiError,
   messages as messagesApi,
@@ -48,8 +53,9 @@ import { ProfileDialog } from './ProfileDialog'
 import { useAppStore } from '@/lib/store'
 import { Composer } from '@/features/chat/Composer'
 import { MENTION } from '@/features/chat/mentions'
-import { EMOJI, QUICK_REACTIONS } from '@/features/chat/emoji'
+import { QUICK_REACTIONS } from '@/features/chat/emoji'
 import { mergeMessages, useMessageHistory } from '@/features/chat/useMessageHistory'
+import { EmojiPicker } from '@/features/chat/EmojiPicker'
 import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 import styles from './Chat.module.css'
 
@@ -641,207 +647,262 @@ function MessageRow({
     if (content && content !== message.content) onEdit(message.id, content)
   }
 
-  return (
-    <article className={cx(styles.message, grouped && styles.grouped)}>
-      {grouped ? (
-        // The timestamp takes the avatar's place in a grouped row, appearing on
-        // hover. It keeps the text column aligned without repeating the header.
-        <time className={styles.gutterTime} dateTime={message.created_at}>
-          {formatClock(message.created_at)}
-        </time>
-      ) : (
-        <div
-          style={{ cursor: isAnonymous ? 'default' : 'pointer' }}
-          onClick={() => {
-            if (!isAnonymous) onOpenProfile?.(message.author_id)
-          }}
-        >
-          <Avatar
-            name={name}
-            src={avatarUrl}
-            color={avatarColor}
-            size="md"
-            className={styles.messageAvatar}
-          />
-        </div>
-      )}
+  function copyText() {
+    void navigator.clipboard?.writeText(message.content)
+    toast.success('Copied to clipboard')
+  }
 
-      <div className={styles.messageBody}>
-        {!grouped && (
-          <div className={styles.messageHeader}>
-            <span
-              className={styles.author}
-              style={{ cursor: isAnonymous ? 'default' : 'pointer', color: avatarColor ?? undefined }}
-              onClick={() => {
-                if (!isAnonymous) onOpenProfile?.(message.author_id)
-              }}
-            >
-              {name}
-            </span>
-            {isOwn && <span className={styles.youTag}>you</span>}
-            <time
-              className={styles.time}
-              dateTime={message.created_at}
-              title={formatFull(message.created_at)}
-            >
-              {formatClock(message.created_at)}
-            </time>
+  function beginEdit() {
+    setDraft(message.content)
+    setEditing(true)
+  }
+
+  return (
+    /* The same actions on right-click as in the hover menu. The hover bar is
+       pointer-only — it appears on `:hover` — so without this there is no way
+       to reach delete or edit from a touchscreen except the overflow button,
+       and long-press is what people already try. */
+    <ContextMenu
+      items={messageActions({
+        Item: ContextMenuItem,
+        Separator: ContextMenuSeparator,
+        isOwn,
+        canDelete,
+        onCopy: copyText,
+        onEdit: beginEdit,
+        onDelete: () => onDelete(message.id),
+      })}
+    >
+      <article className={cx(styles.message, grouped && styles.grouped)}>
+        {grouped ? (
+          // The timestamp takes the avatar's place in a grouped row, appearing on
+          // hover. It keeps the text column aligned without repeating the header.
+          <time className={styles.gutterTime} dateTime={message.created_at}>
+            {formatClock(message.created_at)}
+          </time>
+        ) : (
+          <div
+            style={{ cursor: isAnonymous ? 'default' : 'pointer' }}
+            onClick={() => {
+              if (!isAnonymous) onOpenProfile?.(message.author_id)
+            }}
+          >
+            <Avatar
+              name={name}
+              src={avatarUrl}
+              color={avatarColor}
+              size="md"
+              className={styles.messageAvatar}
+            />
           </div>
         )}
 
-        {editing ? (
-          <div className={styles.editBox}>
-            <textarea
-              className={styles.editInput}
-              value={draft}
-              autoFocus
-              rows={2}
-              maxLength={4000}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault()
-                  commitEdit()
-                }
-                if (event.key === 'Escape') {
-                  setDraft(message.content)
-                  setEditing(false)
-                }
-              }}
-            />
-            <div className={styles.editActions}>
-              <Button
-                size="sm"
-                variant="ghost"
+        <div className={styles.messageBody}>
+          {!grouped && (
+            <div className={styles.messageHeader}>
+              <span
+                className={styles.author}
+                style={{ cursor: isAnonymous ? 'default' : 'pointer', color: avatarColor ?? undefined }}
                 onClick={() => {
-                  setDraft(message.content)
-                  setEditing(false)
+                  if (!isAnonymous) onOpenProfile?.(message.author_id)
                 }}
               >
-                Cancel
-              </Button>
-              <Button size="sm" onClick={commitEdit}>
-                Save
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className={styles.content}>
-            <Linkified text={message.content} />
-            {message.edited_at && (
-              <span className={styles.edited} title={formatFull(message.edited_at)}>
-                {' '}
-                (edited)
+                {name}
               </span>
-            )}
-          </p>
-        )}
+              {isOwn && <span className={styles.youTag}>you</span>}
+              <time
+                className={styles.time}
+                dateTime={message.created_at}
+                title={formatFull(message.created_at)}
+              >
+                {formatClock(message.created_at)}
+              </time>
+            </div>
+          )}
 
-        {message.reactions.length > 0 && (
-          <div className={styles.reactions}>
-            {message.reactions.map((reaction) => (
-              <ReactionChip
-                key={reaction.reaction}
-                reaction={reaction}
-                disabled={!canReact && !reaction.me}
-                onClick={() =>
-                  onToggleReaction(message.id, reaction.reaction, reaction.me)
-                }
+          {editing ? (
+            <div className={styles.editBox}>
+              <textarea
+                className={styles.editInput}
+                value={draft}
+                autoFocus
+                rows={2}
+                maxLength={4000}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    commitEdit()
+                  }
+                  if (event.key === 'Escape') {
+                    setDraft(message.content)
+                    setEditing(false)
+                  }
+                }}
               />
-            ))}
+              <div className={styles.editActions}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setDraft(message.content)
+                    setEditing(false)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={commitEdit}>
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className={styles.content}>
+              <Linkified text={message.content} />
+              {message.edited_at && (
+                <span className={styles.edited} title={formatFull(message.edited_at)}>
+                  {' '}
+                  (edited)
+                </span>
+              )}
+            </p>
+          )}
+
+          {message.reactions.length > 0 && (
+            <div className={styles.reactions}>
+              {message.reactions.map((reaction) => (
+                <ReactionChip
+                  key={reaction.reaction}
+                  reaction={reaction}
+                  disabled={!canReact && !reaction.me}
+                  onClick={() =>
+                    onToggleReaction(message.id, reaction.reaction, reaction.me)
+                  }
+                />
+              ))}
+              {canReact && (
+                <EmojiPicker
+                  title="Add a reaction"
+                  verb="React with"
+                  align="end"
+                  onPick={(emoji) => onToggleReaction(message.id, emoji, false)}
+                  trigger={
+                    <button type="button" className={styles.addReaction} aria-label="Add a reaction">
+                      <SmileIcon size={14} />
+                    </button>
+                  }
+                />
+              )}
+            </div>
+          )}
+        </div>
+
+        {!editing && (
+          <div className={styles.actions}>
+            {canReact &&
+              QUICK_REACTIONS.map((emoji) => (
+                <Tooltip key={emoji} content={`React ${emoji}`}>
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={() =>
+                      onToggleReaction(
+                        message.id,
+                        emoji,
+                        message.reactions.some((r) => r.reaction === emoji && r.me),
+                      )
+                    }
+                    aria-label={`React with ${emoji}`}
+                  >
+                    <span className={styles.actionEmoji}>{emoji}</span>
+                  </button>
+                </Tooltip>
+              ))}
+
             {canReact && (
               <EmojiPicker
+                title="Add a reaction"
+                verb="React with"
+                align="end"
                 onPick={(emoji) => onToggleReaction(message.id, emoji, false)}
                 trigger={
-                  <button type="button" className={styles.addReaction} aria-label="Add a reaction">
-                    <SmileIcon size={14} />
+                  <button type="button" className={styles.actionButton} aria-label="Add a reaction">
+                    <SmileIcon size={15} />
                   </button>
                 }
               />
             )}
-          </div>
-        )}
-      </div>
 
-      {!editing && (
-        <div className={styles.actions}>
-          {canReact &&
-            QUICK_REACTIONS.map((emoji) => (
-              <Tooltip key={emoji} content={`React ${emoji}`}>
-                <button
-                  type="button"
-                  className={styles.actionButton}
-                  onClick={() =>
-                    onToggleReaction(
-                      message.id,
-                      emoji,
-                      message.reactions.some((r) => r.reaction === emoji && r.me),
-                    )
-                  }
-                  aria-label={`React with ${emoji}`}
-                >
-                  <span className={styles.actionEmoji}>{emoji}</span>
-                </button>
-              </Tooltip>
-            ))}
-
-          {canReact && (
-            <EmojiPicker
-              onPick={(emoji) => onToggleReaction(message.id, emoji, false)}
+            <Menu
+              align="end"
               trigger={
-                <button type="button" className={styles.actionButton} aria-label="Add a reaction">
-                  <SmileIcon size={15} />
+                <button type="button" className={styles.actionButton} aria-label="More actions">
+                  <MoreIcon size={15} />
                 </button>
               }
-            />
-          )}
-
-          <Menu
-            align="end"
-            trigger={
-              <button type="button" className={styles.actionButton} aria-label="More actions">
-                <MoreIcon size={15} />
-              </button>
-            }
-          >
-            <MenuItem
-              icon={<CopyIcon size={15} />}
-              onClick={() => {
-                void navigator.clipboard?.writeText(message.content)
-                toast.success('Copied to clipboard')
-              }}
             >
-              Copy text
-            </MenuItem>
+              {messageActions({
+                Item: MenuItem,
+                Separator: MenuSeparator,
+                isOwn,
+                canDelete,
+                onCopy: copyText,
+                onEdit: beginEdit,
+                onDelete: () => onDelete(message.id),
+              })}
+            </Menu>
+          </div>
+        )}
+      </article>
+    </ContextMenu>
+  )
+}
 
-            {isOwn && (
-              <MenuItem
-                icon={<PencilIcon size={15} />}
-                onClick={() => {
-                  setDraft(message.content)
-                  setEditing(true)
-                }}
-              >
-                Edit
-              </MenuItem>
-            )}
+/**
+ * The actions a message offers, built once for both menus that show them.
+ *
+ * Parameterised by the item components rather than duplicated: `MenuItem` and
+ * `ContextMenuItem` take the same props, and writing the list twice is how the
+ * hover menu and the right-click menu end up offering different things.
+ */
+function messageActions({
+  Item,
+  Separator,
+  isOwn,
+  canDelete,
+  onCopy,
+  onEdit,
+  onDelete,
+}: {
+  Item: typeof MenuItem | typeof ContextMenuItem
+  Separator: typeof MenuSeparator | typeof ContextMenuSeparator
+  isOwn: boolean
+  canDelete: boolean
+  onCopy: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <>
+      <Item icon={<CopyIcon size={15} />} onClick={onCopy}>
+        Copy text
+      </Item>
 
-            {canDelete && (
-              <>
-                <MenuSeparator />
-                <MenuItem
-                  tone="danger"
-                  icon={<TrashIcon size={15} />}
-                  onClick={() => onDelete(message.id)}
-                >
-                  Delete
-                </MenuItem>
-              </>
-            )}
-          </Menu>
-        </div>
+      {isOwn && (
+        <Item icon={<PencilIcon size={15} />} onClick={onEdit}>
+          Edit
+        </Item>
       )}
-    </article>
+
+      {canDelete && (
+        <>
+          <Separator />
+          <Item tone="danger" icon={<TrashIcon size={15} />} onClick={onDelete}>
+            Delete
+          </Item>
+        </>
+      )}
+    </>
   )
 }
 
@@ -914,44 +975,9 @@ function ReactionChip({
   )
 }
 
-function EmojiPicker({
-  trigger,
-  onPick,
-}: {
-  trigger: React.ReactElement
-  onPick: (emoji: string) => void
-}) {
-  return (
-    <Popover.Root>
-      <Popover.Trigger render={trigger} />
-      <Popover.Portal>
-        <Popover.Positioner sideOffset={6} align="end" className={styles.pickerPositioner}>
-          <Popover.Popup className={styles.picker}>
-            <Popover.Title className={styles.pickerTitle}>Add a reaction</Popover.Title>
-            <div className={styles.pickerGrid}>
-              {EMOJI.map((emoji) => (
-                <Popover.Close
-                  key={emoji}
-                  className={styles.pickerButton}
-                  onClick={() => onPick(emoji)}
-                  aria-label={`React with ${emoji}`}
-                >
-                  {emoji}
-                </Popover.Close>
-              ))}
-            </div>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
-  )
-}
-
 function DayDivider({ iso }: { iso: string }) {
   return (
-    <div className={styles.divider}>
-      <span className={styles.dividerLabel}>{formatDayDivider(iso)}</span>
-    </div>
+    <Separator className={styles.divider} labelVariant="chip" label={formatDayDivider(iso)} />
   )
 }
 

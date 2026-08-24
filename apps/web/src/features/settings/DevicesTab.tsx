@@ -5,7 +5,7 @@ import { Callout } from '@/components/Callout'
 import { MicIcon, VideoIcon, VideoOffIcon } from '@/components/Icons'
 import { Select, type SelectOption } from '@/components/Select'
 import { Slider } from '@/components/Slider'
-import { cx } from '@/lib/cx'
+import { Meter } from '@/components/Meter'
 import {
   canChooseSpeaker,
   requestDeviceLabels,
@@ -93,19 +93,19 @@ export function DevicesTab() {
           </span>
         </div>
 
-        <div
-          className={styles.voiceTestBar}
-          role="meter"
+        {/* A meter rather than a progress bar, and the segmented variant
+            because a level that goes up and down reads as lamps lighting
+            rather than as a task filling. The hand-rolled version had the
+            right `role` but set the ARIA values on a div while the visible
+            fill was a second element with an inline width — two sources for
+            one number. */}
+        <Meter
+          value={micLevel}
+          variant="segments"
           aria-label="Microphone level"
-          aria-valuenow={micLevel}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div
-            className={cx(styles.voiceTestFill, testingMic && styles.voiceTestFillLive)}
-            style={{ width: `${micLevel}%` }}
-          />
-        </div>
+          tone={testingMic ? 'live' : 'muted'}
+          className={styles.voiceTestMeter}
+        />
       </div>
 
       <div className={styles.section}>

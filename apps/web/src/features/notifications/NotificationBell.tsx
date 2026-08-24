@@ -1,7 +1,7 @@
-import { Popover } from '@base-ui/react/popover'
 
 import { BellIcon } from '@/components/Icons'
 import { Tooltip } from '@/components/Tooltip'
+import { Popover } from '@/components/Popover'
 import { useNotifications } from '@/lib/useNotifications'
 
 import { NotificationBadge, NotificationPanel } from './NotificationPanel'
@@ -18,21 +18,20 @@ export function NotificationBell() {
   const { unread } = useNotifications()
 
   return (
-    <Popover.Root>
-      <Tooltip content="Notifications">
-        <Popover.Trigger className={styles.trigger} aria-label="Notifications">
-          <BellIcon size={16} />
-          <NotificationBadge count={unread} />
-        </Popover.Trigger>
-      </Tooltip>
-
-      <Popover.Portal>
-        <Popover.Positioner side="top" align="end" sideOffset={8}>
-          <Popover.Popup className={styles.popup}>
-            <NotificationPanel />
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+    <Popover
+      side="top"
+      align="end"
+      className={styles.popup}
+      trigger={
+        <Tooltip content="Notifications">
+          <button type="button" className={styles.trigger} aria-label="Notifications">
+            <BellIcon size={16} />
+            <NotificationBadge count={unread} />
+          </button>
+        </Tooltip>
+      }
+    >
+      <NotificationPanel />
+    </Popover>
   )
 }

@@ -6,6 +6,7 @@ import { Callout } from '@/components/Callout'
 import { DiscordIcon, GoogleIcon, HashIcon, MicIcon, UsersIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
+import { Separator } from '@/components/Separator'
 import { ApiError, auth as authApi } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 
@@ -129,9 +130,10 @@ export function SignInRoute() {
 
           {showPasswordForm && (
             <>
-              <div className={styles.divider}>
-                <span>or {mode === 'signin' ? 'with password' : 'with password (dev)'}</span>
-              </div>
+              <Separator
+                className={styles.divider}
+                label={`or ${mode === 'signin' ? 'with password' : 'with password (dev)'}`}
+              />
 
               <form className={styles.form} onSubmit={submit} noValidate>
                 <Input

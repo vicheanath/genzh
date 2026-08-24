@@ -7,21 +7,36 @@
 
 /* ── Hero Banner ────────────────────────────────────────────────────────── */
 
+/*
+ * The community's own colour, built the way the voice stage builds its aurora:
+ * two off-centre pools over a deep ground rather than a three-stop linear
+ * sweep. Same construction as `--stage-aurora`, so a community banner and a
+ * call look like the same product rendered two colours apart.
+ *
+ * `--seed` is a hue in degrees from `hueFor()`; lightness and chroma are fixed
+ * here so every community lands at the same weight no matter which hue it drew.
+ */
 .banner {
   height: 10rem;
-  background: linear-gradient(
-    135deg,
-    oklch(0.6 0.18 calc(var(--seed) * 1deg)),
-    oklch(0.5 0.15 calc((var(--seed) + 40) * 1deg)),
-    oklch(0.35 0.12 calc((var(--seed) + 80) * 1deg))
-  );
   position: relative;
+  background:
+    radial-gradient(
+      120% 105% at 10% -5%,
+      oklch(0.72 0.20 calc(var(--seed) * 1deg)) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      100% 100% at 94% 105%,
+      oklch(0.60 0.18 calc((var(--seed) + 55) * 1deg)) 0%,
+      transparent 58%
+    ),
+    oklch(0.40 0.13 calc((var(--seed) + 25) * 1deg));
 }
 
 .bannerOverlay {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.15) 0%, transparent 60%);
+  background: radial-gradient(circle at 80% 20%, oklch(1 0 0 / 0.15) 0%, transparent 60%);
 }
 
 .page {
@@ -44,7 +59,7 @@
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--edge-highlight), var(--shadow-md);
   position: relative;
   z-index: 2;
 }
@@ -275,7 +290,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
 }
 
 .formHeader {

@@ -11,7 +11,7 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
   color: var(--color-text);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--edge-highlight), var(--shadow-lg);
   outline: none;
 
   /* Scaling from the corner nearest the trigger is what makes the popup read
@@ -46,8 +46,8 @@
 /* Base UI drives highlight with data-highlighted, which follows the keyboard as
    well as the pointer — styling :hover alone would leave arrow keys silent. */
 .item[data-highlighted] {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: var(--color-active);
+  color: var(--color-text);
 }
 
 .item[data-disabled] {
@@ -56,7 +56,10 @@
 }
 
 .danger { color: var(--color-danger); }
-.danger[data-highlighted] { background: var(--color-danger); color: #fff; }
+.danger[data-highlighted] {
+  background: color-mix(in oklab, var(--color-danger) 16%, transparent);
+  color: var(--color-danger);
+}
 
 .itemIcon {
   display: grid;

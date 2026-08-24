@@ -25,7 +25,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--edge-highlight), var(--shadow-lg);
   transition:
     opacity var(--duration-base) var(--ease-out),
     scale var(--duration-base) var(--ease-out);

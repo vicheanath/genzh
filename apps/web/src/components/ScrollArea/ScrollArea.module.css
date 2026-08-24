@@ -1,0 +1,89 @@
+.root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewport {
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.content {
+  min-width: 0;
+}
+
+.scrollbar {
+  display: flex;
+  justify-content: center;
+  width: 0.5rem;
+  padding: 2px;
+  margin: 2px;
+  border-radius: var(--radius-full);
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.scrollbar[data-orientation='horizontal'] {
+  flex-direction: column;
+  width: auto;
+  height: 0.5rem;
+}
+
+/* Visible while scrolling, while hovered, and while dragged — the macOS
+   behaviour, which is the one people expect from an overlay scrollbar. */
+.scrollbar[data-scrolling],
+.scrollbar[data-hovering],
+.root:hover .scrollbar {
+  opacity: 1;
+}
+
+.thumb {
+  width: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.thumb:hover,
+.scrollbar[data-scrolling] .thumb {
+  background: var(--color-text-subtle);
+}
+
+/*
+ * Edge fades.
+ *
+ * `--scroll-area-overflow-y-start/end` are 0 or 1 depending on whether there is
+ * content past that edge, so the fade only appears when something is actually
+ * cut off — no permanent grey smudge at the top of a short list.
+ *
+ * The fade has to be the colour of whatever the list sits *on*, which is not
+ * always the page: in a popover it is the raised surface. `--scroll-fade-color`
+ * is how a container says so.
+ */
+.fade::before,
+.fade::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--space-6);
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.fade::before {
+  top: 0;
+  opacity: var(--scroll-area-overflow-y-start, 0);
+  background: linear-gradient(to bottom, var(--scroll-fade-color, var(--color-bg)), transparent);
+}
+
+.fade::after {
+  bottom: 0;
+  opacity: var(--scroll-area-overflow-y-end, 0);
+  background: linear-gradient(to top, var(--scroll-fade-color, var(--color-bg)), transparent);
+}

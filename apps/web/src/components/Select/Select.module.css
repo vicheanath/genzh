@@ -9,7 +9,7 @@
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
   font-size: var(--text-sm);
   cursor: pointer;
   transition: border-color var(--duration-fast) var(--ease-out);
@@ -39,7 +39,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--edge-highlight), var(--shadow-lg);
   transform-origin: var(--transform-origin);
   transition:
     opacity var(--duration-base) var(--ease-out),
@@ -76,9 +76,12 @@
 
 /* `data-highlighted` follows the keyboard/pointer cursor; it is not :hover,
    which is why arrow-key navigation highlights correctly. */
+/* The wash rather than a full accent fill, matching Menu: these are the same
+   pattern — a highlighted row in a popup list — and `--color-text-inverted` on
+   the accent was white-on-lime in light mode. */
 .item[data-highlighted] {
-  background: var(--color-accent);
-  color: var(--color-text-inverted);
+  background: var(--color-active);
+  color: var(--color-text);
 }
 
 .item[data-disabled] { opacity: 0.5; cursor: not-allowed; }

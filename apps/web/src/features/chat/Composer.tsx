@@ -1,4 +1,3 @@
-import { Popover } from '@base-ui/react/popover'
 import {
   useId,
   useLayoutEffect,
@@ -13,7 +12,6 @@ import { Tooltip } from '@/components/Tooltip'
 import type { RoomWithPermissions } from '@/lib/api'
 import { cx } from '@/lib/cx'
 
-import { EMOJI } from './emoji'
 import { contentProblem, MAX_LENGTH } from './limits'
 import { MentionSuggestions } from './MentionSuggestions'
 import {
@@ -24,6 +22,7 @@ import {
 } from './mentions'
 import { useMentionCandidates } from './useMentionCandidates'
 import styles from './Composer.module.css'
+import { EmojiPicker } from './EmojiPicker'
 
 /** The counter is noise until the ceiling is actually in sight. */
 const COUNTER_FROM = 200
@@ -331,33 +330,13 @@ export function Composer({
 /** Emoji into the draft, at the caret rather than at the end. */
 function EmojiButton({ onPick }: { onPick: (emoji: string) => void }) {
   return (
-    <Popover.Root>
-      <Popover.Trigger
-        render={
-          <button type="button" className={styles.tool} aria-label="Add an emoji">
-            <SmileIcon size={16} />
-          </button>
-        }
-      />
-      <Popover.Portal>
-        <Popover.Positioner sideOffset={8} align="start" className={styles.pickerPositioner}>
-          <Popover.Popup className={styles.picker}>
-            <Popover.Title className={styles.pickerTitle}>Emoji</Popover.Title>
-            <div className={styles.pickerGrid}>
-              {EMOJI.map((emoji) => (
-                <Popover.Close
-                  key={emoji}
-                  className={styles.pickerButton}
-                  onClick={() => onPick(emoji)}
-                  aria-label={`Insert ${emoji}`}
-                >
-                  {emoji}
-                </Popover.Close>
-              ))}
-            </div>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+    <EmojiPicker
+      onPick={onPick}
+      trigger={
+        <button type="button" className={styles.tool} aria-label="Add an emoji">
+          <SmileIcon size={16} />
+        </button>
+      }
+    />
   )
 }

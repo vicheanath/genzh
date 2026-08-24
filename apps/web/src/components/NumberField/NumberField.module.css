@@ -1,0 +1,85 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Dragging here scrubs the value. `cursor` advertises it; the pointer is locked
+   by Base UI during the drag, which is why the cursor element below exists. */
+.scrubArea {
+  cursor: ew-resize;
+  user-select: none;
+  width: fit-content;
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.scrubCursor { filter: drop-shadow(0 1px 1px oklch(0 0 0 / 0.3)); }
+
+.group {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  box-shadow: var(--edge-highlight);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.group:focus-within { border-color: var(--color-accent); }
+
+.step {
+  display: grid;
+  place-items: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.step:hover:not([data-disabled]) {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.step[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.input {
+  width: 3.5rem;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: center;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.suffix {
+  padding-inline-end: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  white-space: nowrap;
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

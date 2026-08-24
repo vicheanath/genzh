@@ -8,7 +8,7 @@ import type { CurrentUser } from '@/lib/api'
 import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 
-import { PRESET_COLORS } from './tabs'
+import { DEFAULT_ACCENT, PRESET_COLORS } from './tabs'
 import styles from './settings.module.css'
 
 const RANDOM_ALIASES = [
@@ -170,7 +170,7 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
               label="Custom hex"
               value={accent}
               onChange={(event) => setAccent(event.target.value)}
-              placeholder="#a855f7"
+              placeholder={DEFAULT_ACCENT}
             />
           </div>
         </div>

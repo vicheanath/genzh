@@ -30,7 +30,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
@@ -170,60 +170,6 @@
 
 .counterFull { color: var(--color-danger); font-weight: 700; }
 
-/* ── the emoji picker ───────────────────────────────────────────────────── */
-
-.pickerPositioner { z-index: 50; outline: none; }
-
-.picker {
-  width: 15rem;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-raised);
-  box-shadow: var(--shadow-lg);
-  outline: none;
-  transform-origin: var(--transform-origin);
-  transition:
-    opacity var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.picker[data-starting-style],
-.picker[data-ending-style] { opacity: 0; transform: scale(0.96); }
-
-.pickerTitle {
-  margin-bottom: var(--space-2);
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-subtle);
-}
-
-.pickerGrid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
-}
-
-.pickerButton {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-spring);
-}
-
-.pickerButton:hover { background: var(--color-hover); transform: scale(1.2); }
-
 /* ── hint ───────────────────────────────────────────────────────────────── */
 
 .hint {
@@ -259,7 +205,7 @@
 
 .fieldProblem:focus-within {
   border-color: var(--color-warning);
-  box-shadow: 0 0 0 3px rgb(217 119 6 / 0.25);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-warning) 28%, transparent);
 }
 
 .problem {

@@ -59,7 +59,7 @@
 
 .modeTabActive {
   background: var(--color-accent);
-  color: white;
+  color: var(--color-accent-contrast);
   border-color: var(--color-accent);
 }
 
@@ -72,7 +72,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  box-shadow: 0 8px 24px rgba(88, 101, 242, 0.15);
+  box-shadow: var(--edge-highlight), var(--shadow-md);
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -113,7 +113,7 @@
 
 .builderTabActive {
   background: var(--color-accent);
-  color: white;
+  color: var(--color-accent-contrast);
   border-color: var(--color-accent);
 }
 
@@ -164,7 +164,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--edge-highlight), var(--shadow-md);
 }
 
 /* Trivia */
@@ -207,22 +207,22 @@
 }
 
 .streakBadge {
-  background: rgba(249, 115, 22, 0.15);
-  color: #f97316;
+  background: color-mix(in oklab, var(--color-warning) 16%, transparent);
+  color: var(--color-warning);
 }
 
 .scoreBadge {
-  background: rgba(168, 85, 247, 0.15);
-  color: #a855f7;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
 }
 
 .timerBadge {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: color-mix(in oklab, var(--color-live) 16%, transparent);
+  color: var(--color-live);
 }
 
 .timerWarning {
-  background: rgba(239, 68, 68, 0.2);
+  background: color-mix(in oklab, var(--color-danger) 20%, transparent);
   color: var(--color-danger);
   animation: pulse 1s infinite;
 }
@@ -291,13 +291,13 @@
 }
 
 .triviaOptionCorrect {
-  background: rgba(16, 185, 129, 0.15) !important;
+  background: color-mix(in oklab, var(--color-success) 16%, transparent) !important;
   border-color: var(--color-success) !important;
   color: var(--color-success);
 }
 
 .triviaOptionWrong {
-  background: rgba(239, 68, 68, 0.15) !important;
+  background: color-mix(in oklab, var(--color-danger) 16%, transparent) !important;
   border-color: var(--color-danger) !important;
 }
 
@@ -389,12 +389,12 @@
 
 .wyrCardA {
   border-left-width: 6px;
-  border-left-color: #3b82f6;
+  border-left-color: var(--color-live);
 }
 
 .wyrCardB {
   border-left-width: 6px;
-  border-left-color: #ec4899;
+  border-left-color: var(--color-accent);
 }
 
 .wyrCardSelected {
@@ -446,7 +446,7 @@
 }
 
 .todPromptCard {
-  background: linear-gradient(135deg, rgba(88, 101, 242, 0.1), rgba(235, 69, 158, 0.1));
+  background: linear-gradient(135deg, color-mix(in oklab, var(--color-accent) 12%, transparent), color-mix(in oklab, var(--color-live) 12%, transparent));
   border: 1px dashed var(--color-accent);
   border-radius: var(--radius-xl);
   padding: var(--space-6) var(--space-4);

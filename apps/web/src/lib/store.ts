@@ -1,3 +1,4 @@
+import { DEFAULT_ACCENT } from './palette'
 import { create } from 'zustand'
 
 import type { Uuid } from './api'
@@ -155,7 +156,7 @@ export const useAppStore = create<AppState>((set) => ({
     }),
 
   anonymousAlias: initialAnon?.alias ?? 'Anonymous Phantom',
-  anonymousAccent: initialAnon?.accent ?? '#a855f7',
+  anonymousAccent: initialAnon?.accent ?? DEFAULT_ACCENT,
   anonymousAvatarSeed: initialAnon?.avatarSeed ?? '🎭',
   isAnonymousByDefault: initialAnon?.isAnonymousByDefault ?? false,
 

@@ -1,0 +1,5 @@
+/* The trigger is a wrapper around content that already has its own layout, so
+   it must not introduce a box of its own. */
+.trigger {
+  display: contents;
+}

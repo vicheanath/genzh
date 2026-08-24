@@ -1,0 +1,95 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.trigger {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.trigger:hover { background: var(--color-hover); }
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--color-text-subtle);
+  transition: rotate var(--duration-base) var(--ease-out);
+}
+
+/* Closed points right, open points down. Rotating the same glyph rather than
+   swapping two icons means the turn is animatable. */
+.trigger[data-panel-open] .chevron { rotate: 0deg; }
+.trigger:not([data-panel-open]) .chevron { rotate: -90deg; }
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adornment {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--color-text-subtle);
+}
+
+/* A channel-list section heading: small caps, quiet until hovered. */
+.sectionTrigger {
+  padding-block: var(--space-1);
+  font-family: var(--font-display);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.sectionTrigger:hover {
+  background: none;
+  color: var(--color-text);
+}
+
+/*
+ * The panel.
+ *
+ * `--collapsible-panel-height` is published by Base UI from a measurement of
+ * the content, so this animates to the real height of whatever is inside and
+ * needs no max-height guess.
+ */
+.panel {
+  overflow: hidden;
+  height: var(--collapsible-panel-height);
+  transition: height var(--duration-base) var(--ease-out);
+}
+
+.panel[data-starting-style],
+.panel[data-ending-style] {
+  height: 0;
+}
+
+.panelInner {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}

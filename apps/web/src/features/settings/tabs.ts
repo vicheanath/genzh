@@ -54,20 +54,9 @@ export const SETTINGS_GROUPS: ReadonlyArray<{
 /**
  * The swatch palette, shared by the profile and persona pickers.
  *
- * Drawn from the app's own accent range rather than a generic rainbow, so a
- * custom accent still looks like it belongs to this product.
+ * Re-exported rather than defined here: the same swatches are offered for
+ * community roles too, so the list lives in `lib/palette` and this module just
+ * points at it. Kept as a named re-export so the existing call sites in
+ * ProfileTab and AnonymousTab did not all have to change import paths.
  */
-export const DEFAULT_ACCENT = '#8b5cf6'
-
-export const PRESET_COLORS = [
-  DEFAULT_ACCENT, // Violet — the app accent
-  '#ec4899', // Pink
-  '#f43f5e', // Rose
-  '#f97316', // Orange
-  '#eab308', // Amber
-  '#2fe6a7', // Mint
-  '#06b6d4', // Cyan
-  '#3b82f6', // Blue
-  '#a855f7', // Purple
-  '#94a3b8', // Slate
-]
+export { ACCENT_COLORS as PRESET_COLORS, DEFAULT_ACCENT } from '@/lib/palette'

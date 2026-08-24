@@ -4,9 +4,12 @@
   justify-content: center;
   gap: var(--space-2);
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  /* Pills, per rule 4 in tokens.css: controls are round, the slabs holding
+     them are soft squares. The shape is what says "press me" before any
+     colour does. */
+  border-radius: var(--radius-full);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 650;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -19,9 +22,18 @@
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-/* A press that moves is a press that registers, on a touchscreen where there is
-   no hover state to confirm the target. */
-.button:active:not([data-disabled]) { transform: scale(0.97); }
+/*
+ * Press physics.
+ *
+ * A press that moves is a press that registers, on a touchscreen where there is
+ * no hover state to confirm the target. The lit top edge collapses at the same
+ * time — the button stops being lit from above because it is no longer raised
+ * — which is the whole of rule 3 doing one small job.
+ */
+.button:active:not([data-disabled]) {
+  transform: scale(0.96);
+  transition-timing-function: var(--ease-press);
+}
 
 /* Base UI sets data-disabled on the root; styling the attribute rather than
    :disabled means it also works when `focusableWhenDisabled` keeps the element
@@ -46,19 +58,31 @@
 .round { border-radius: var(--radius-full); }
 
 /* ── variants ── */
+/*
+ * Ink on lime — rule 1, and the single most recognisable thing on screen.
+ *
+ * `--color-accent-contrast` is a near-black, not white. If a primary button
+ * ever looks wrong here, the fix is not to lighten the text.
+ */
 .primary {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
+  box-shadow: var(--edge-highlight-strong), var(--shadow-sm);
+}
+.primary:hover:not([data-disabled]) {
+  background: var(--color-accent-hover);
+  box-shadow: var(--edge-highlight-strong), var(--glow-accent);
+}
+.primary:active:not([data-disabled]) {
+  background: var(--color-accent-active);
   box-shadow: var(--shadow-sm);
 }
-.primary:hover:not([data-disabled])  { background: var(--color-accent-hover); }
-.primary:active:not([data-disabled]) { background: var(--color-accent-active); }
 
 .secondary {
   background: var(--color-surface);
   border-color: var(--color-border-strong);
   color: var(--color-text);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
 }
 .secondary:hover:not([data-disabled]) {
   background: var(--color-hover);
@@ -85,6 +109,9 @@
 .danger {
   background: var(--color-danger);
   color: #fff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
 }
-.danger:hover:not([data-disabled]) { filter: brightness(1.08); }
+.danger:hover:not([data-disabled]) {
+  filter: brightness(1.08);
+  box-shadow: var(--edge-highlight), var(--glow-danger);
+}

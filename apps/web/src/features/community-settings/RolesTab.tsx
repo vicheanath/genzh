@@ -16,6 +16,7 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useAsync } from '@/lib/useAsync'
+import { DEFAULT_ACCENT } from '@/lib/palette'
 
 import {
   ALL_PERMISSIONS,
@@ -27,7 +28,7 @@ import { PanelList, PanelSkeleton } from './PanelList'
 import styles from './communitySettings.module.css'
 
 /** The colour a new role gets before anyone picks one. */
-const DEFAULT_ROLE_COLOR = '#7c3aed'
+const DEFAULT_ROLE_COLOR = DEFAULT_ACCENT
 
 export function RolesTab({
   community,

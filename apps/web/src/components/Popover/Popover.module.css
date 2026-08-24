@@ -1,0 +1,52 @@
+.positioner {
+  outline: none;
+  z-index: 50;
+}
+
+.popup {
+  position: relative;
+  /*
+   * Read from a custom property rather than set flat, so a consumer can change
+   * it without a competing `.popup { padding }` rule of its own. Two class
+   * selectors of equal specificity on the same element are settled by whichever
+   * CSS module the bundler emitted last, which is not something a component
+   * should make its consumers reason about.
+   */
+  padding: var(--popover-padding, var(--space-4));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--edge-highlight), var(--shadow-lg);
+  outline: none;
+
+  /* Scaling from the corner nearest the trigger is what makes the popup read
+     as coming *out of* the control rather than appearing beside it. */
+  transform-origin: var(--transform-origin);
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    opacity var(--duration-base) var(--ease-out);
+}
+
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  margin-bottom: var(--space-3);
+}
+
+/* Base UI rotates the arrow to whichever side it settled on. */
+.arrow[data-side='bottom'] { top: -10px; rotate: 180deg; }
+.arrow[data-side='top'] { bottom: -10px; }
+.arrow[data-side='left'] { right: -13px; rotate: 90deg; }
+.arrow[data-side='right'] { left: -13px; rotate: -90deg; }
+
+.arrowFill { fill: var(--color-surface-raised); }
+.arrowStroke { stroke: var(--color-border); }

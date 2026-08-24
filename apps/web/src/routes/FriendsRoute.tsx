@@ -40,6 +40,7 @@ import { useProfiles } from '@/lib/useProfiles'
 
 import { ProfileDialog } from './ProfileDialog'
 import styles from './FriendsRoute.module.css'
+import { useConfirm } from '@/components/AlertDialog'
 
 export type FriendTab = 'online' | 'all' | 'pending' | 'blocked' | 'add'
 
@@ -48,6 +49,7 @@ interface AddFriendFormValues {
 }
 
 export function FriendsRoute() {
+  const confirm = useConfirm()
   const { getToken, user } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
@@ -133,7 +135,13 @@ export function FriendsRoute() {
   }
 
   async function removeFriend(friendId: Uuid) {
-    if (!window.confirm('Are you sure you want to remove this friend?')) return
+    const ok = await confirm({
+      title: 'Remove this friend?',
+      description: 'You will both drop off each other\u2019s friend list. Either of you can send a new request later.',
+      confirmLabel: 'Remove friend',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await friendsApi.remove(await getToken(), friendId)
       toast.success('Friend removed')

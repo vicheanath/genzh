@@ -54,7 +54,7 @@
   border-radius: var(--radius-full);
   background: var(--color-surface-raised);
   border: 2px solid var(--color-accent);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
   transition: box-shadow var(--duration-fast) var(--ease-out);
 }
 

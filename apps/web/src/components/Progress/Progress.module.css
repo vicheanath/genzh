@@ -1,0 +1,56 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.value {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.track {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-active);
+}
+
+.sm { height: 0.375rem; }
+.md { height: 0.625rem; }
+
+.indicator {
+  height: 100%;
+  border-radius: inherit;
+  transition: width var(--duration-slow) var(--ease-out);
+}
+
+.accent { background: var(--gradient-accent); }
+.live { background: var(--gradient-live); }
+
+/* Indeterminate: Base UI drops the width, so the bar becomes a short segment
+   travelling the track. Nothing about the position claims progress. */
+.indicator[data-indeterminate] {
+  width: 35%;
+  animation: travel 1.4s var(--ease-out) infinite;
+}
+
+@keyframes travel {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(285%); }
+}

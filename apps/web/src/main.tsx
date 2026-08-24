@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
+import { ConfirmProvider } from '@/components/AlertDialog'
 import { ToastProvider } from '@/components/Toast'
 import { TooltipProvider } from '@/components/Tooltip'
 
@@ -17,7 +18,9 @@ createRoot(container).render(
   <StrictMode>
     <TooltipProvider>
       <ToastProvider>
-        <App />
+        <ConfirmProvider>
+          <App />
+        </ConfirmProvider>
       </ToastProvider>
     </TooltipProvider>
   </StrictMode>,

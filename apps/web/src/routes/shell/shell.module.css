@@ -76,7 +76,7 @@
   height: 100%;
   border-radius: inherit;
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
   transition:
     background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
@@ -220,17 +220,8 @@
 
 .group { margin-top: var(--space-3); }
 
-/* Sentence case and wide tracking rather than shouty caps — the headings are
-   dividers, not labels you are meant to read every time. */
-.groupHeading {
-  padding: var(--space-1) var(--space-2);
-  font-family: var(--font-display);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--color-text-subtle);
-}
+/* The heading is Collapsible's own `section` trigger — small caps, quiet until
+   hovered, tracking from --tracking-caps. Nothing to add here. */
 
 /*
  * A channel row. The selected one is marked twice — a tinted ground *and* a
@@ -460,7 +451,7 @@
 /* The wordmark. The only place in the shell that paints text with the
    gradient — used once, it reads as a logo; used twice, as decoration. */
 .sidebarBrand {
-  background: var(--gradient-accent);
+  background: var(--gradient-accent-text);
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;

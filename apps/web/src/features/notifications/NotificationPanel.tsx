@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { AtSignIcon, BellIcon, MessageSquareIcon, UserPlusIcon } from '@/components/Icons'
+import { ScrollArea } from '@/components/ScrollArea'
 import { Spinner } from '@/components/Spinner'
 import type { AppNotification, NotificationKind } from '@/lib/api'
 import { cx } from '@/lib/cx'
@@ -90,7 +91,7 @@ export function NotificationPanel({ showHeader = true }: { showHeader?: boolean 
         </header>
       )}
 
-      <div className={styles.list}>
+      <ScrollArea className={styles.list} fade>
         {loading && items.length === 0 && (
           <div className={styles.empty}>
             <Spinner />
@@ -143,7 +144,7 @@ export function NotificationPanel({ showHeader = true }: { showHeader?: boolean 
             </button>
           )
         })}
-      </div>
+      </ScrollArea>
     </>
   )
 }

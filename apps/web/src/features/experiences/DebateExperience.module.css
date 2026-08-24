@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--edge-highlight), var(--shadow-md);
 }
 
 .meterHeader {
@@ -112,23 +112,23 @@
 }
 
 .proBtn {
-  background: rgba(16, 185, 129, 0.12);
+  background: color-mix(in oklab, var(--color-success) 14%, transparent);
   color: var(--color-success);
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: color-mix(in oklab, var(--color-success) 35%, transparent);
 }
 
 .proBtn:hover {
-  background: rgba(16, 185, 129, 0.22);
+  background: color-mix(in oklab, var(--color-success) 24%, transparent);
 }
 
 .conBtn {
-  background: rgba(239, 68, 68, 0.12);
+  background: color-mix(in oklab, var(--color-danger) 14%, transparent);
   color: var(--color-danger);
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: color-mix(in oklab, var(--color-danger) 35%, transparent);
 }
 
 .conBtn:hover {
-  background: rgba(239, 68, 68, 0.22);
+  background: color-mix(in oklab, var(--color-danger) 24%, transparent);
 }
 
 .voteBtnActive {
@@ -238,13 +238,13 @@
 }
 
 .sidePickActivePro {
-  background: rgba(16, 185, 129, 0.15);
+  background: color-mix(in oklab, var(--color-success) 16%, transparent);
   color: var(--color-success);
   border-color: var(--color-success);
 }
 
 .sidePickActiveCon {
-  background: rgba(239, 68, 68, 0.15);
+  background: color-mix(in oklab, var(--color-danger) 16%, transparent);
   color: var(--color-danger);
   border-color: var(--color-danger);
 }
