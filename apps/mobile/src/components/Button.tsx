@@ -1,27 +1,58 @@
-import React from 'react';
+import React, { cloneElement, isValidElement } from 'react';
 import {
-  Pressable,
-  Text,
   ActivityIndicator,
+  Pressable,
   StyleSheet,
-  ViewStyle,
-  TextStyle,
+  Text,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
 } from 'react-native';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
-import { Colors, Radius } from '../theme/tokens';
+import { SPRING_CONTROL } from '../theme/motion';
+import { Colors, Elevation, Radius } from '../theme/tokens';
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'subtle' | 'danger';
+export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps {
-  title: string;
+  /** Omit for a button whose whole content is one icon — see `iconOnly`. */
+  title?: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'subtle' | 'danger' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   loading?: boolean;
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  /**
+   * Square, for a button whose entire content is one icon. Inferred when there
+   * is an icon and no title, so the common case does not have to say it twice.
+   */
+  iconOnly?: boolean;
   icon?: React.ReactNode;
+  /** Required in practice for an icon-only button, which has no text to read. */
+  accessibilityLabel?: string;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
 
+/**
+ * The button, matching `apps/web/src/components/Button`.
+ *
+ * Same five variants, same three sizes, same rule 1 (ink on lime) and rule 4
+ * (controls are pills). What the web gets from CSS transitions and `:hover`,
+ * this gets from one shared value per button: a phone has no hover, so the
+ * hover colour is spent on the *press* instead, crossfaded rather than cut.
+ *
+ * Variants are looked up in a table rather than switched on, because a table is
+ * one place to read what "danger" means — fill, ink, press colour and elevation
+ * together — instead of three switch arms that have to be kept in step.
+ */
 export function Button({
   title,
   onPress,
@@ -29,158 +60,189 @@ export function Button({
   size = 'md',
   loading = false,
   disabled = false,
+  iconOnly,
+  icon,
+  accessibilityLabel,
   style,
   textStyle,
-  icon,
 }: ButtonProps) {
-  const getVariantStyle = () => {
-    switch (variant) {
-      case 'primary':
-        return styles.btnPrimary;
-      case 'secondary':
-        return styles.btnSecondary;
-      case 'subtle':
-        return styles.btnSubtle;
-      case 'danger':
-        return styles.btnDanger;
-      case 'ghost':
-        return styles.btnGhost;
-    }
-  };
+  const press = useSharedValue(0);
+  const inert = disabled || loading;
 
-  const getTextStyle = () => {
-    switch (variant) {
-      case 'primary':
-        return styles.textPrimary;
-      case 'secondary':
-        return styles.textSecondary;
-      case 'subtle':
-        return styles.textSubtle;
-      case 'danger':
-        return styles.textDanger;
-      case 'ghost':
-        return styles.textGhost;
-    }
-  };
+  const tone = VARIANTS[variant];
+  const metrics = SIZES[size];
+  const square = iconOnly ?? (!!icon && !title);
 
-  const getSizeStyle = () => {
-    switch (size) {
-      case 'sm':
-        return styles.sizeSm;
-      case 'md':
-        return styles.sizeMd;
-      case 'lg':
-        return styles.sizeLg;
-    }
-  };
+  const surfaceStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      press.value,
+      [0, 1],
+      [tone.background, tone.backgroundPressed],
+    ),
+    borderColor: interpolateColor(
+      press.value,
+      [0, 1],
+      [tone.border, tone.borderPressed],
+    ),
+    transform: [{ scale: 1 - press.value * 0.04 }],
+  }));
+
+  const labelStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(press.value, [0, 1], [tone.foreground, tone.foregroundPressed]),
+  }));
 
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
-      accessibilityLabel={title || undefined}
-      accessibilityState={{ disabled: disabled || loading }}
+      accessibilityLabel={accessibilityLabel ?? title ?? undefined}
+      accessibilityState={{ disabled: inert }}
       onPress={onPress}
-      disabled={disabled || loading}
-      style={({ pressed }) => [
+      disabled={inert}
+      // The smallest button is 32pt tall; the slop makes the tap target the
+      // 44pt one a thumb actually needs without inflating the shape.
+      hitSlop={8}
+      onPressIn={() => {
+        press.value = withSpring(1, SPRING_CONTROL);
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, SPRING_CONTROL);
+      }}
+      style={[
         styles.base,
-        getVariantStyle(),
-        getSizeStyle(),
-        (disabled || loading) && styles.disabled,
-        pressed && !disabled && !loading && styles.pressed,
+        tone.elevation,
+        { height: metrics.height },
+        square
+          ? { width: metrics.height, paddingHorizontal: 0 }
+          : { paddingHorizontal: metrics.paddingHorizontal },
+        surfaceStyle,
+        inert && styles.disabled,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          color={variant === 'primary' ? Colors.accentContrast : Colors.accent}
-          size="small"
-        />
+        <ActivityIndicator color={tone.foreground} size="small" />
       ) : (
         <>
-          {icon}
+          {/* The icon takes the variant's ink unless the caller named a colour,
+              which is as close as RN gets to the web's `currentColor`. */}
+          {tintIcon(icon, tone.foreground)}
           {title ? (
-            <Text
-              style={[
-                styles.textBase,
-                getTextStyle(),
-                icon ? { marginLeft: 8 } : null,
-                textStyle,
-              ]}
+            <Animated.Text
+              numberOfLines={1}
+              style={[styles.label, { fontSize: metrics.fontSize }, labelStyle, textStyle]}
             >
               {title}
-            </Text>
+            </Animated.Text>
           ) : null}
         </>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/**
+ * `currentColor`, by hand.
+ *
+ * An icon inside a button should be the same ink as the label — on the web that
+ * is automatic, here the colour is a prop. Only fills it in when the caller left
+ * it out, so a deliberately off-colour glyph (a live cyan phone, say) survives.
+ */
+function tintIcon(icon: React.ReactNode, color: string): React.ReactNode {
+  if (!isValidElement<{ color?: string }>(icon)) return icon;
+  if (icon.props.color) return icon;
+  return cloneElement(icon, { color });
+}
+
+interface Tone {
+  background: string;
+  backgroundPressed: string;
+  border: string;
+  borderPressed: string;
+  foreground: string;
+  foregroundPressed: string;
+  elevation?: ViewStyle;
+}
+
+const TRANSPARENT = 'transparent';
+/* Interpolating *from* `transparent` walks through transparent black, which
+   muddies a light wash on the way in. The zero-alpha white keeps the hue fixed
+   and moves only the alpha, which is what the web's `background-color`
+   transition does. */
+const CLEAR_WHITE = 'rgba(255, 255, 255, 0)';
+
+const VARIANTS: Record<ButtonVariant, Tone> = {
+  /* Ink on lime — rule 1, and the single most recognisable thing on screen.
+     `accentContrast` is a near-black. If this ever looks wrong, the fix is not
+     to lighten the text. */
+  primary: {
+    background: Colors.accent,
+    backgroundPressed: Colors.accentActive,
+    border: Colors.accent,
+    borderPressed: Colors.accentActive,
+    foreground: Colors.accentContrast,
+    foregroundPressed: Colors.accentContrast,
+    elevation: Elevation.sm,
+  },
+  secondary: {
+    background: Colors.surface,
+    backgroundPressed: Colors.surfaceHover,
+    border: Colors.borderStrong,
+    borderPressed: Colors.textSubtle,
+    foreground: Colors.text,
+    foregroundPressed: Colors.text,
+    elevation: Elevation.sm,
+  },
+  ghost: {
+    background: CLEAR_WHITE,
+    backgroundPressed: Colors.hover,
+    border: TRANSPARENT,
+    borderPressed: TRANSPARENT,
+    foreground: Colors.textMuted,
+    foregroundPressed: Colors.text,
+  },
+  subtle: {
+    background: Colors.accentSubtle,
+    backgroundPressed: Colors.accentSubtleHover,
+    border: TRANSPARENT,
+    borderPressed: TRANSPARENT,
+    foreground: Colors.accentText,
+    foregroundPressed: Colors.accentText,
+  },
+  /* Solid, as on the web: a destructive action is not a quiet one. */
+  danger: {
+    background: Colors.danger,
+    backgroundPressed: Colors.dangerActive,
+    border: Colors.danger,
+    borderPressed: Colors.dangerActive,
+    foreground: '#fff',
+    foregroundPressed: '#fff',
+    elevation: Elevation.sm,
+  },
+};
+
+/** Heights are the web's, converted at 16px/rem: 2 / 2.375 / 2.75rem. */
+const SIZES: Record<ButtonSize, { height: number; paddingHorizontal: number; fontSize: number }> = {
+  sm: { height: 32, paddingHorizontal: 12, fontSize: 14 },
+  md: { height: 38, paddingHorizontal: 16, fontSize: 14 },
+  lg: { height: 44, paddingHorizontal: 24, fontSize: 15 },
+};
 
 const styles = StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: 'transparent',
   },
-  btnPrimary: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
-  },
-  btnSecondary: {
-    backgroundColor: Colors.surface,
-    borderColor: Colors.borderStrong,
-  },
-  btnSubtle: {
-    backgroundColor: Colors.accentSubtle,
-    borderColor: 'rgba(186, 227, 16, 0.25)',
-  },
-  btnDanger: {
-    backgroundColor: Colors.dangerSubtle,
-    borderColor: 'rgba(255, 77, 79, 0.3)',
-  },
-  btnGhost: {
-    backgroundColor: 'transparent',
-  },
-  sizeSm: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-  },
-  sizeMd: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-  },
-  sizeLg: {
-    paddingVertical: 15,
-    paddingHorizontal: 26,
-  },
-  textBase: {
+  label: {
     fontWeight: '700',
-    fontSize: 14,
     letterSpacing: 0.2,
-  },
-  textPrimary: {
-    color: Colors.accentContrast,
-  },
-  textSecondary: {
-    color: Colors.text,
-  },
-  textSubtle: {
-    color: Colors.accentText,
-  },
-  textDanger: {
-    color: Colors.danger,
-  },
-  textGhost: {
-    color: Colors.textMuted,
   },
   disabled: {
     opacity: 0.45,
-  },
-  pressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
   },
 });

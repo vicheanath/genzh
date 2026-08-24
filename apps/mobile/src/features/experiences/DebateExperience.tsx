@@ -163,12 +163,9 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
             variant={userVote === 'pro' ? 'primary' : 'secondary'}
             style={exp.grow}
             onPress={() => vote('pro')}
-            icon={
-              <Vote
-                size={14}
-                color={userVote === 'pro' ? Colors.accentContrast : Colors.text}
-              />
-            }
+            // No colour: the button tints its own icon, so the glyph follows
+            // whichever variant the vote put it in.
+            icon={<Vote size={14} />}
           />
           <Button
             title={`Vote CON (${conVotes})`}
@@ -176,9 +173,7 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
             variant={userVote === 'con' ? 'danger' : 'secondary'}
             style={exp.grow}
             onPress={() => vote('con')}
-            icon={
-              <Vote size={14} color={userVote === 'con' ? Colors.danger : Colors.text} />
-            }
+            icon={<Vote size={14} />}
           />
         </View>
 

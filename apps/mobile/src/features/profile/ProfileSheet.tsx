@@ -170,7 +170,7 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
               variant="danger"
               disabled={busy}
               onPress={() => void handleBlock()}
-              icon={<Shield size={15} color={Colors.danger} />}
+              icon={<Shield size={15} />}
             />
           </View>
         </View>

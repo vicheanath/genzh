@@ -1,9 +1,8 @@
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
 
 import { LoadingPanel } from '../components/Spinner';
@@ -27,41 +26,18 @@ import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { VoiceOverlay } from '../components/VoiceOverlay';
 import { Colors } from '../theme/tokens';
 
+import { TabBar } from './TabBar';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs() {
   const { unread } = useNotifications();
-  const insets = useSafeAreaInsets();
-
-  // Safely pad above Android system navigation buttons and iOS home indicator
-  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 16);
-  const tabHeight = 56 + bottomInset;
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
-          borderTopWidth: 1,
-          height: tabHeight,
-          paddingBottom: bottomInset - 4,
-          paddingTop: 8,
-        },
-        tabBarActiveTintColor: Colors.accent,
-        tabBarInactiveTintColor: Colors.textDim,
-        tabBarLabelStyle: {
-          fontSize: 11.5,
-          fontWeight: '700',
-          marginTop: 2,
-        },
-        tabBarIconStyle: {
-          marginTop: 2,
-        },
-      }}
-    >
+    // The bar renders itself — colours, the active wash and the badge all live
+    // in TabBar, so a screen only has to say which glyph and which word it is.
+    <Tab.Navigator tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tab.Screen
         name="HomeTab"
         component={HomeScreen}
@@ -92,12 +68,8 @@ function MainTabs() {
         options={{
           tabBarLabel: 'Activity',
           tabBarBadge: unread > 0 ? unread : undefined,
-          tabBarBadgeStyle: {
-            backgroundColor: Colors.accent,
-            color: Colors.accentContrast,
-            fontSize: 10,
-            fontWeight: '800',
-          },
+          tabBarAccessibilityLabel:
+            unread > 0 ? `Activity, ${unread} unread` : 'Activity',
           tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
         }}
       />

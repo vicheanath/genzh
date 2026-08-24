@@ -80,7 +80,7 @@ export function SettingsScreen() {
           title="Sign out"
           variant="danger"
           onPress={() => void handleSignOut()}
-          icon={<LogOut size={16} color={Colors.danger} />}
+          icon={<LogOut size={16} />}
         />
       </View>
     </SafeAreaView>

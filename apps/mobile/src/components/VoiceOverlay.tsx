@@ -1,7 +1,6 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   SlideInDown,
   SlideOutDown,
@@ -20,6 +19,7 @@ import {
 
 import { useVoice } from '../context/VoiceContext';
 import { VOICE_UNAVAILABLE_REASON } from '../lib/voiceSupport';
+import { useTabBarHeight } from '../theme/layout';
 import { Colors, Radius, Spacing } from '../theme/tokens';
 
 /**
@@ -44,8 +44,9 @@ export function VoiceOverlay() {
     leaveRoom,
   } = useVoice();
 
-  const insets = useSafeAreaInsets();
-  const bottomOffset = 64 + Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 16);
+  // Floats a hair above the tab bar, and derives that from the bar itself so
+  // the two cannot drift apart when its height changes.
+  const bottomOffset = useTabBarHeight() + Spacing.sm;
 
   const navigation = useNavigation<any>();
 

@@ -205,7 +205,7 @@ function ReportForm() {
         variant="danger"
         onPress={submit}
         disabled={!details.trim()}
-        icon={<Shield size={15} color={Colors.danger} />}
+        icon={<Shield size={15} />}
       />
     </View>
   );

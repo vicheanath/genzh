@@ -14,7 +14,6 @@ import { Input } from '../../components/Input';
 import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/useConfirm';
 import { useAuth } from '../../context/AuthContext';
-import { Colors } from '../../theme/tokens';
 
 import type { CommunityAbilities } from './tabs';
 import { panel } from './styles';
@@ -168,7 +167,7 @@ export function OverviewTab({
             title="Delete server"
             variant="danger"
             onPress={() => void remove()}
-            icon={<Trash2 size={15} color={Colors.danger} />}
+            icon={<Trash2 size={15} />}
           />
         </View>
       ) : null}

@@ -317,7 +317,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                     size="sm"
                     variant="danger"
                     onPress={() => void voice.leaveRoom()}
-                    icon={<PhoneOff size={16} color={Colors.danger} />}
+                    icon={<PhoneOff size={16} />}
                   />
                 </>
               ) : (
