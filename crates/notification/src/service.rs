@@ -96,3 +96,34 @@ impl NotificationService {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use genzh_domain::notification::NotificationKind;
+
+    #[test]
+    fn default_and_max_limits_are_sane() {
+        assert!(DEFAULT_LIMIT > 0);
+        assert!(MAX_LIMIT >= DEFAULT_LIMIT);
+        let clamped = None.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+        assert_eq!(clamped, DEFAULT_LIMIT);
+
+        let over = Some(500).unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+        assert_eq!(over, MAX_LIMIT);
+
+        let zero = Some(0).unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+        assert_eq!(zero, 1);
+    }
+
+    #[test]
+    fn new_notification_self_actor_check() {
+        let user = UserId::new();
+        let self_notification = NewNotification::from_actor(user, NotificationKind::Mention, user);
+        assert_eq!(self_notification.actor_id, Some(self_notification.user_id));
+
+        let other = UserId::new();
+        let other_notification = NewNotification::from_actor(user, NotificationKind::Mention, other);
+        assert_ne!(other_notification.actor_id, Some(other_notification.user_id));
+    }
+}
+

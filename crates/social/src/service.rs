@@ -176,3 +176,38 @@ impl SocialService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cannot_friend_or_block_oneself() {
+        let user = UserId::new();
+        assert!(social::ensure_distinct_users(user, user).is_err());
+    }
+
+    #[test]
+    fn distinct_users_pass_validation() {
+        let u1 = UserId::new();
+        let u2 = UserId::new();
+        assert!(social::ensure_distinct_users(u1, u2).is_ok());
+    }
+
+    #[test]
+    fn friendship_counterpart_identifies_the_other_party() {
+        let u1 = UserId::new();
+        let u2 = UserId::new();
+        let f = Friendship {
+            requester_id: u1,
+            addressee_id: u2,
+            status: FriendshipStatus::Accepted,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        assert_eq!(f.counterpart(u1), Some(u2));
+        assert_eq!(f.counterpart(u2), Some(u1));
+        assert_eq!(f.counterpart(UserId::new()), None);
+    }
+}
