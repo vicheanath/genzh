@@ -16,6 +16,7 @@ members = [
     "crates/media-signaling",
     "crates/infrastructure",
     "crates/cron",
+    "crates/recommend",
 ]
 
 [workspace.package]
@@ -40,6 +41,7 @@ genzh-media-room = { path = "crates/media-room" }
 genzh-media-signaling = { path = "crates/media-signaling" }
 genzh-infrastructure = { path = "crates/infrastructure" }
 genzh-cron = { path = "crates/cron" }
+genzh-recommend = { path = "crates/recommend" }
 
 # ---- async / runtime ----
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }

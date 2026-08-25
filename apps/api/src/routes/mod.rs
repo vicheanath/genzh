@@ -15,6 +15,7 @@ pub mod messages;
 pub mod notifications;
 pub mod oauth;
 pub mod presence;
+pub mod recommendations;
 pub mod rooms;
 pub mod social;
 pub mod users;

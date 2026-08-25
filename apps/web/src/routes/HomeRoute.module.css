@@ -304,3 +304,41 @@
   .heroActions { width: 100%; }
   .randomButton { width: 100%; justify-content: center; }
 }
+
+/* ── recommendations ────────────────────────────────────────────────────
+   The line under a recommended card saying why it is there. Muted and small
+   on purpose: it is a justification, not a headline, and a feed where every
+   card shouts its reasoning is harder to scan than one that does not. */
+.reason {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 0.25rem);
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  color: var(--color-text-muted);
+}
+
+.reasonMark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--color-accent, var(--color-text-muted));
+}
+
+.reasonText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Distinguishes a personalised card from a merely popular one without adding
+   a badge to every single card. */
+.forYouCard {
+  border-color: var(--color-accent-subtle, var(--border-strong, var(--border-subtle)));
+}
+
+.sectionNote {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

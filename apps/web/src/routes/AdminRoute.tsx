@@ -12,10 +12,18 @@ import {
   LockIcon,
   RadioIcon,
   ShieldIcon,
+  SparkleIcon,
   UsersIcon,
 } from '@/components/Icons'
 import { LoadingPanel } from '@/components/Spinner'
-import { useAdminStats, useIsPlatformAdmin, useIsStaff, useSupportQueue } from '@/features/api'
+import {
+  useAdminStats,
+  useConsoleLiveUpdates,
+  useIsPlatformAdmin,
+  useIsStaff,
+  useOpenTicketCount,
+  useSupportQueue,
+} from '@/features/api'
 import { useAuth } from '@/lib/auth'
 
 import styles from './AdminRoute.module.css'
@@ -33,6 +41,12 @@ export function AdminRoute() {
   const isStaff = useIsStaff()
   const isAdmin = useIsPlatformAdmin()
   const stats = useAdminStats()
+
+  // Mounted here rather than per panel: one subscription for the whole console,
+  // torn down when it is left. Subscribing inside each panel would mean a
+  // signal only reached whichever panel happened to be open, which is the one
+  // that needed it least.
+  useConsoleLiveUpdates(isStaff)
 
   // The role arrives with `/me`, so waiting avoids bouncing a real staff
   // member off their own console during the first render of a reload.
@@ -196,6 +210,14 @@ export function AdminRoute() {
                 <ActivityIcon size={15} /> System Health
               </NavLink>
               <NavLink
+                to="/admin/recommendations"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                }
+              >
+                <SparkleIcon size={15} /> Recommendations
+              </NavLink>
+              <NavLink
                 to="/admin/audit"
                 className={({ isActive }) =>
                   `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
@@ -218,7 +240,7 @@ export function AdminRoute() {
 /** How many tickets are waiting — every one, not just the page on screen. */
 function QueueBadge() {
   const queue = useSupportQueue({ status: 'open' })
-  const open = queue.data?.open_count ?? 0
+  const open = useOpenTicketCount(queue)
   if (open === 0) return null
   return (
     <Badge tone="danger" dot>

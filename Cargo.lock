@@ -87,6 +87,7 @@ dependencies = [
  "genzh-media-core",
  "genzh-messaging",
  "genzh-notification",
+ "genzh-recommend",
  "genzh-room",
  "http",
  "http-body-util",
@@ -1321,6 +1322,21 @@ dependencies = [
  "genzh-infrastructure",
  "serde",
  "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "genzh-recommend"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genzh-domain",
+ "genzh-infrastructure",
+ "parking_lot",
+ "serde",
+ "sqlx",
+ "tokio",
  "tracing",
  "uuid",
 ]

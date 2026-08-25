@@ -381,6 +381,11 @@ pub async fn join(
     Path(room_id): Path<RoomId>,
 ) -> ApiResult<Json<JoinRoomResponse>> {
     let (room, _) = state.rooms.join(room_id, caller.user_id).await?;
+
+    // This room is now somewhere they already are, and its category has moved
+    // their affinity. Leaving the old list up would keep offering them the
+    // room they are currently standing in.
+    state.recommend.forget(caller.user_id.into());
     let access = state.rooms.visible_access(room_id, caller.user_id).await?;
     let anonymous_identity = state
         .rooms

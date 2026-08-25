@@ -25,9 +25,15 @@ import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { Toggle, ToggleGroup } from '@/components/ToggleGroup'
 import type { Room } from '@/lib/api'
-import { useCommunitiesList, useDiscoveryRooms, useRandomRoomMutation } from '@/features/api'
+import {
+  useCommunitiesList,
+  useDiscoveryRooms,
+  useRandomRoomMutation,
+  useRecommendedRooms,
+} from '@/features/api'
 
 import { CreatePlaygroundRoomDialog } from './CreatePlaygroundRoomDialog'
+import { RecommendationReason } from './RecommendationReason'
 import styles from './HomeRoute.module.css'
 
 const ROOM_TYPE_ICONS: Record<string, typeof HashIcon> = {
@@ -55,6 +61,7 @@ export function HomeRoute() {
 
   const communities = useCommunitiesList()
   const discovery = useDiscoveryRooms(selectedCategory || undefined)
+  const suggested = useRecommendedRooms(selectedCategory || undefined, 6)
   const findRandomRoom = useRandomRoomMutation()
   const matching = findRandomRoom.isPending
 
@@ -144,6 +151,12 @@ export function HomeRoute() {
             </Toggle>
           ))}
         </ToggleGroup>
+
+        {/* ✨ Ranked for this account, when there is anything to rank.
+            Additive rather than a replacement for trending below: the feed has
+            to work signed-out and for an account that has already seen
+            everything, and both of those fall through to the generic list. */}
+        <ForYouSection query={suggested} />
 
         {/* 🔥 Trending & Active Moments */}
         <section>
@@ -309,5 +322,88 @@ export function HomeRoute() {
         onClose={() => setCreateRoomOpen(false)}
       />
     </div>
+  )
+}
+
+/**
+ * "For you" — moments ranked for the signed-in account.
+ *
+ * Renders nothing at all when there is nothing to show. That is the common
+ * case rather than an edge one: a viewer who has already joined every live room
+ * has no recommendations, and an empty section with an apology in it would be a
+ * worse answer than simply falling through to Trending below.
+ */
+function ForYouSection({
+  query,
+}: {
+  query: ReturnType<typeof useRecommendedRooms>
+}) {
+  const items = query.data?.items ?? []
+
+  // Nothing while loading, either. A skeleton here would push Trending down the
+  // page on every navigation only to collapse again when the list comes back
+  // empty, which is the layout shift users notice most.
+  if (query.isLoading || items.length === 0) return null
+
+  const personalized = query.data?.personalized ?? false
+
+  return (
+    <section>
+      <div className={styles.sectionHeader}>
+        <h2 className={styles.sectionTitle}>
+          {/* Honest about which one this is. Calling a popularity ranking "for
+              you" is the thing that makes a recommender feel broken — the user
+              can tell, and then stops trusting the label when it is earned. */}
+          <span>{personalized ? '✨ For you' : '✨ Popular right now'}</span>
+          <Badge>{items.length}</Badge>
+        </h2>
+      </div>
+
+      {!personalized && (
+        <p className={styles.sectionNote}>
+          Join a moment or two and this starts matching what you actually like.
+        </p>
+      )}
+
+      <div className={styles.roomsGrid}>
+        {items.map((room) => {
+          const Icon = ROOM_TYPE_ICONS[room.room_type] ?? HashIcon
+          return (
+            <Link
+              key={room.id}
+              to={room.community_id ? `/c/${room.community_id}/r/${room.id}` : `/rooms/${room.id}`}
+              className={`${styles.roomCard} ${styles.forYouCard}`}
+            >
+              <div className={styles.roomCardHead}>
+                <span className={styles.roomTypeTag}>
+                  <Icon size={14} />
+                  {room.room_type.replace('_', ' ')}
+                </span>
+                <span className={styles.participantCount}>
+                  <UsersIcon size={12} />
+                  {room.current_participants || 1}
+                </span>
+              </div>
+
+              <h3 className={styles.roomName}>{room.name}</h3>
+              <p className={styles.roomTopic}>
+                {room.topic || `Join this ${room.category} session and chat anonymously.`}
+              </p>
+
+              <RecommendationReason reasons={room.reasons} />
+
+              <div className={styles.roomCardFooter}>
+                <span className={styles.anonPill}>
+                  {room.is_anonymous ? 'Anonymous' : 'Public'}
+                </span>
+                <Button size="sm" variant="ghost">
+                  Enter →
+                </Button>
+              </div>
+            </Link>
+          )
+        })}
+      </div>
+    </section>
   )
 }

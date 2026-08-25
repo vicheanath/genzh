@@ -120,6 +120,19 @@ pub enum ChatServerEvent {
         display_name: String,
         is_typing: bool,
     },
+    /// Something the platform console shows has changed.
+    ///
+    /// Carries a topic and nothing else — deliberately no payload. The console
+    /// reacts by refetching the affected list through the ordinary REST
+    /// endpoint, which re-checks staff authority against the database on that
+    /// request. Pushing ticket contents or account details down this channel
+    /// would instead make the socket a second, weaker copy of that check, and
+    /// the two would have to be kept agreeing forever.
+    ///
+    /// Staff-scoped: see [`Self::requires_staff`].
+    ConsoleChanged {
+        topic: ConsoleTopic,
+    },
     /// Pong heartbeat.
     Pong,
     /// Error notification.
@@ -144,6 +157,19 @@ impl ChatServerEvent {
         }
     }
 
+    /// Does this event reach staff only?
+    ///
+    /// The third scope, and the reason it exists: [`Session::accepts`] passes
+    /// an event that is neither room-scoped nor user-scoped to *every*
+    /// connection, authenticated or not. That is right for presence and wrong
+    /// for anything about the console, so a console event has to say so rather
+    /// than rely on being addressed to somebody.
+    ///
+    /// [`Session::accepts`]: super::session::Session::accepts
+    pub fn requires_staff(&self) -> bool {
+        matches!(self, Self::ConsoleChanged { .. })
+    }
+
     /// The one user this event is addressed to, if it is user-scoped.
     ///
     /// Every connection reads the same broadcast channel, so an event that is
@@ -158,6 +184,27 @@ impl ChatServerEvent {
             _ => None,
         }
     }
+}
+
+/// Which part of the console a [`ChatServerEvent::ConsoleChanged`] refers to.
+///
+/// Coarse on purpose — one topic per list the console renders, not one per row.
+/// A finer signal would have to describe *what* changed, which is the payload
+/// this event exists to avoid carrying, and the console's answer to any of
+/// these is the same either way: refetch that list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsoleTopic {
+    /// A ticket was opened, replied to, assigned, or changed status.
+    SupportQueue,
+    /// A live media session started or was terminated.
+    LiveMedia,
+    /// A platform broadcast was published or dismissed.
+    Broadcasts,
+    /// An account was suspended, reinstated, or had its role changed.
+    Users,
+    /// An entry was appended to the audit log.
+    AuditLog,
 }
 
 /// Why a ringing call stopped.

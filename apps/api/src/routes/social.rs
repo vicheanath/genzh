@@ -96,6 +96,11 @@ pub async fn respond(
         .respond_to_request(caller.user_id, requester_id, body.accept)
         .await?;
 
+    // A new friendship changes both feeds: each becomes a mutual friend for the
+    // other's suggestions, and neither should still be suggested to the other.
+    state.recommend.forget(caller.user_id.into());
+    state.recommend.forget(requester_id.into());
+
     // Only an acceptance is worth telling someone about. A decline that
     // notified would make declining quietly impossible.
     if body.accept {
@@ -128,6 +133,11 @@ pub async fn remove(
 ) -> ApiResult<StatusCode> {
     state.social.remove_friend(caller.user_id, other_id).await?;
 
+    // Each becomes a candidate for the other again, so neither list is right
+    // any more.
+    state.recommend.forget(caller.user_id.into());
+    state.recommend.forget(other_id.into());
+
     state.audit.record_best_effort(
         genzh_admin::AuditRecord::new(
             Some(caller.user_id),
@@ -156,6 +166,13 @@ pub async fn block(
 ) -> ApiResult<StatusCode> {
     state.social.block(caller.user_id, other_id).await?;
 
+    // Both sides, and immediately. The exclusion is symmetric, so a stale
+    // cached list on either account could still surface the other — and "I
+    // blocked them and they are still being suggested to me" is the block
+    // visibly not working, not a caching nuance anyone will forgive.
+    state.recommend.forget(caller.user_id.into());
+    state.recommend.forget(other_id.into());
+
     state.audit.record_best_effort(
         genzh_admin::AuditRecord::new(
             Some(caller.user_id),
@@ -175,6 +192,11 @@ pub async fn unblock(
     Path(other_id): Path<UserId>,
 ) -> ApiResult<StatusCode> {
     state.social.unblock(caller.user_id, other_id).await?;
+
+    // Symmetric for the same reason as blocking, in reverse: until this is
+    // dropped, neither account can be suggested to the other.
+    state.recommend.forget(caller.user_id.into());
+    state.recommend.forget(other_id.into());
 
     state.audit.record_best_effort(
         genzh_admin::AuditRecord::new(

@@ -35,6 +35,8 @@ import {
   usePendingFriendRequests,
   useRemoveFriendMutation,
   useRespondFriendRequestMutation,
+  explain,
+  useRecommendedPeople,
   useSendFriendRequestMutation,
   useSentFriendRequests,
   useUnblockUserMutation,
@@ -284,6 +286,11 @@ export function FriendsRoute() {
             />
           </div>
         )}
+
+        {/* Suggestions sit above the friend list on the two tabs that are
+            about having friends, and nowhere else — a "people you may know"
+            block next to the blocked-users list would be tone deaf. */}
+        {(tab === 'all' || tab === 'online') && <PeopleYouMayKnow />}
 
         {/* ALL & ONLINE FRIENDS */}
         {(tab === 'all' || tab === 'online') && (
@@ -602,5 +609,83 @@ export function FriendsRoute() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * People this account might know.
+ *
+ * The friend graph here is thin, and an empty friends list is self-reinforcing:
+ * nobody to see means no reason to come back means nobody to see. This is the
+ * only screen positioned to break that, which is why it sits above the list
+ * rather than behind a tab.
+ *
+ * Never ranked by follower count — see the server's `PeopleRecommender`. Every
+ * suggestion here has a real shared edge behind it, which is also why each one
+ * can say what that edge is.
+ */
+function PeopleYouMayKnow() {
+  const toast = useToast()
+  const suggestions = useRecommendedPeople(6)
+  const sendRequest = useSendFriendRequestMutation()
+
+  // Locally hidden after acting, so a sent request does not sit there inviting
+  // a second one. The server drops them from the next fetch anyway; this is
+  // just not making the user wait for it.
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set())
+
+  const people = (suggestions.data?.items ?? []).filter((p) => !dismissed.has(p.user_id))
+
+  // Nothing to suggest is a normal outcome — a new account with no shared
+  // communities has no edges to draw on — and an empty block with an
+  // explanation in it would be noise on every visit.
+  if (suggestions.isLoading || people.length === 0) return null
+
+  const hide = (userId: string) =>
+    setDismissed((current) => new Set(current).add(userId))
+
+  return (
+    <section className={styles.section}>
+      <div className={styles.sectionTitle}>People you may know — {people.length}</div>
+
+      <div className={styles.list}>
+        {people.map((person) => (
+          <UserRow
+            key={person.user_id}
+            name={person.display_name ?? person.handle}
+            avatarUrl={person.avatar_url ?? undefined}
+            secondary={explain(person.reasons) ?? `@${person.handle}`}
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  disabled={sendRequest.isPending}
+                  onClick={async () => {
+                    try {
+                      await sendRequest.mutateAsync(person.user_id)
+                      toast.success(`Request sent to @${person.handle}`)
+                      hide(person.user_id)
+                    } catch (error) {
+                      toast.error(errorText(error, 'Could not send the request'))
+                    }
+                  }}
+                >
+                  <UserPlusIcon size={15} />
+                  Add
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Dismiss ${person.handle}`}
+                  onClick={() => hide(person.user_id)}
+                >
+                  <XIcon size={15} />
+                </Button>
+              </>
+            }
+          />
+        ))}
+      </div>
+    </section>
   )
 }

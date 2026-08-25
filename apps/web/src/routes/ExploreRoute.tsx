@@ -5,12 +5,17 @@ import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { CompassIcon, PlusIcon, SearchIcon } from '@/components/Icons'
+import { CompassIcon, PlusIcon, SearchIcon, SparkleIcon } from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { ApiError, type Uuid } from '@/lib/api'
-import { useCommunitiesList, useJoinCommunityMutation } from '@/features/api'
+import {
+  explain,
+  useCommunitiesList,
+  useJoinCommunityMutation,
+  useRecommendedCommunities,
+} from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { hueFor } from '@/lib/palette'
 
@@ -89,6 +94,11 @@ export function ExploreRoute() {
             Create Server
           </Button>
         </div>
+
+        {/* Suggestions above the full list: this screen is reached by someone
+            who has decided to look for something, and the ranked answer is
+            more useful to them than the alphabetical one. */}
+        <SuggestedCommunities onJoin={handleJoin} joiningId={joiningId} />
 
         <section>
           <div className={styles.sectionTitle}>
@@ -175,3 +185,81 @@ export function ExploreRoute() {
 }
 
 /** Consistent hue per community name, matching the Avatar's and CommunityRoute's scheme */
+
+/**
+ * Communities ranked for this account.
+ *
+ * Item-to-item collaborative filtering: the communities that the people in
+ * *your* communities also belong to. Size is a term too, unlike the people
+ * surface — joining is low-risk and an empty community is a bad experience
+ * regardless of fit, so a popularity prior is doing honest work here.
+ */
+function SuggestedCommunities({
+  onJoin,
+  joiningId,
+}: {
+  onJoin: (id: Uuid) => void | Promise<void>
+  joiningId: Uuid | null | undefined
+}) {
+  const suggestions = useRecommendedCommunities(6)
+  const items = suggestions.data?.items ?? []
+
+  // Silent when there is nothing to say. An account already in every community
+  // has no suggestions, and that is a success rather than something to explain.
+  if (suggestions.isLoading || items.length === 0) return null
+
+  return (
+    <section>
+      <div className={styles.sectionTitle}>
+        <span>{suggestions.data?.personalized ? 'Suggested for you' : 'Popular communities'}</span>
+        <Badge>{items.length}</Badge>
+      </div>
+
+      <div className={styles.grid}>
+        {items.map((community) => {
+          const reason = explain(community.reasons)
+          return (
+            <div key={community.community_id} className={styles.card}>
+              <div
+                className={styles.cardBanner}
+                style={{ '--seed': hueFor(community.name) } as React.CSSProperties}
+              />
+              <div className={styles.cardBody}>
+                <div className={styles.cardAvatarWrap}>
+                  <Avatar name={community.name} src={community.icon_url ?? undefined} size="lg" />
+                </div>
+                <h3 className={styles.cardName}>{community.name}</h3>
+                <p className={styles.cardDescription}>
+                  {community.description || 'Welcome to this community! Join to hang out and chat.'}
+                </p>
+
+                {reason && (
+                  <p className={styles.reason}>
+                    <SparkleIcon size={11} aria-hidden />
+                    <span className={styles.reasonText} title={reason}>
+                      {reason}
+                    </span>
+                  </p>
+                )}
+
+                <div className={styles.cardFooter}>
+                  <span className={styles.cardTag}>
+                    {community.member_count} member{community.member_count === 1 ? '' : 's'}
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => void onJoin(community.community_id)}
+                    disabled={joiningId === community.community_id}
+                  >
+                    {joiningId === community.community_id && <Spinner />}
+                    Join
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}

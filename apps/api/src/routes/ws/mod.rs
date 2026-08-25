@@ -41,7 +41,9 @@ use tokio::time::interval;
 
 use crate::state::AppState;
 
-pub use protocol::{CallEndReason, ChatClientCommand, ChatServerEvent, WsAuthQuery};
+pub use protocol::{
+    CallEndReason, ChatClientCommand, ChatServerEvent, ConsoleTopic, WsAuthQuery,
+};
 
 use session::{Outbound, Session};
 

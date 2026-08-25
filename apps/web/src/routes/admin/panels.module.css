@@ -365,3 +365,105 @@
   color: var(--color-text);
   font-family: var(--font-mono, monospace);
 }
+
+/* ── paging ─────────────────────────────────────────────────────────────
+   A button rather than a scroll sentinel. These lists are worked, not
+   browsed: somebody reading an audit trail wants to control when the page
+   moves, and auto-loading under a cursor makes "where was I" unanswerable. */
+.pager {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 var(--space-2);
+}
+
+.pagerCount {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── bulk selection ─────────────────────────────────────────────────────
+   Pinned to the bottom of the viewport, because the selection is made by
+   scrolling a long list and the action must stay reachable without
+   scrolling back to wherever the toolbar started. */
+.bulkBar {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-strong, var(--border-subtle));
+  border-radius: var(--radius-lg, 0.75rem);
+  background: var(--color-surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.bulkCount {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.bulkSpacer {
+  flex: 1 1 auto;
+}
+
+.bulkReason {
+  flex: 1 1 14rem;
+  min-width: 10rem;
+}
+
+.selectRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.selectRow > :last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ── background jobs ────────────────────────────────────────────────── */
+.jobRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 0.5rem);
+  background: var(--color-surface);
+}
+
+.jobFailing {
+  border-color: var(--color-danger, #dc2626);
+  background: var(--color-danger-subtle, rgba(220, 38, 38, 0.06));
+}
+
+.jobName {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.jobMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.jobError {
+  flex: 1 1 100%;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  color: var(--color-danger, #dc2626);
+  overflow-wrap: anywhere;
+}

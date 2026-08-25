@@ -1,5 +1,6 @@
 //! Platform staff: who they are, and what they may do to an account.
 
+use genzh_domain::DomainError;
 use genzh_domain::audit::AuditAction;
 use genzh_domain::ids::UserId;
 use genzh_domain::platform::PlatformRole;
@@ -58,6 +59,49 @@ pub struct StaffUserView {
     pub suspended_at: Option<chrono::DateTime<chrono::Utc>>,
     pub suspension_reason: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// The most accounts one bulk request may name.
+///
+/// A cap rather than no cap: each target is a row update plus an audit write,
+/// so an unbounded list is a request that holds a connection for as long as the
+/// caller cares to make it. A hundred is more than a moderator selects by hand
+/// and far less than a denial of service.
+pub const MAX_BULK_TARGETS: usize = 100;
+
+/// What a bulk pass did to one account.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkOutcome {
+    pub user_id: UserId,
+    /// The account's handle, so the console can report the failure by name
+    /// rather than by UUID. `None` when the account could not be read at all.
+    pub handle: Option<String>,
+    pub succeeded: bool,
+    /// Why it did not, when it did not.
+    pub error: Option<String>,
+}
+
+/// The result of a bulk pass, in full.
+///
+/// Every outcome is returned, not just the failures: the console shows what it
+/// asked for against what happened, and a caller that only learned about
+/// failures could not tell a skipped duplicate from a silent success.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkReport {
+    pub succeeded: usize,
+    pub failed: usize,
+    pub outcomes: Vec<BulkOutcome>,
+}
+
+impl BulkReport {
+    fn from_outcomes(outcomes: Vec<BulkOutcome>) -> Self {
+        let succeeded = outcomes.iter().filter(|o| o.succeeded).count();
+        Self {
+            succeeded,
+            failed: outcomes.len() - succeeded,
+            outcomes,
+        }
+    }
 }
 
 /// Reads and writes the staff tier, and enforcement against accounts.
@@ -248,6 +292,101 @@ impl StaffService {
             .await;
 
         self.find_user(target).await
+    }
+
+    /// Suspend several accounts in one pass.
+    ///
+    /// Per-account rather than all-or-nothing, and deliberately so. A moderator
+    /// selecting forty accounts off a spam wave will have picked up one that
+    /// cannot be suspended — themselves, a colleague, an account deleted since
+    /// the list was drawn. Failing the whole batch would leave all forty
+    /// untouched and give them no way to proceed except to find the bad one by
+    /// hand; the report says which ones did not go through instead.
+    ///
+    /// Each account goes through [`Self::suspend`], so every guard still applies
+    /// and every account gets its own audit entry naming it. A single entry
+    /// saying "suspended 40 accounts" would be the one shape the log must never
+    /// take: unanswerable when somebody asks why *their* account was.
+    pub async fn suspend_many(
+        &self,
+        actor: UserId,
+        actor_handle: &str,
+        targets: &[UserId],
+        reason: &str,
+    ) -> ServiceResult<BulkReport> {
+        self.each(targets, |target| {
+            self.suspend(actor, actor_handle, target, reason)
+        })
+        .await
+    }
+
+    /// Lift suspensions on several accounts in one pass.
+    ///
+    /// Same per-account semantics as [`Self::suspend_many`].
+    pub async fn reinstate_many(
+        &self,
+        actor: UserId,
+        actor_handle: &str,
+        targets: &[UserId],
+    ) -> ServiceResult<BulkReport> {
+        self.each(targets, |target| {
+            self.reinstate(actor, actor_handle, target)
+        })
+        .await
+    }
+
+    /// Apply `action` to each target, collecting outcomes rather than stopping.
+    ///
+    /// Sequential on purpose: these write to `users` and to the audit log, and
+    /// running them concurrently would buy a little latency in exchange for
+    /// unordered audit entries and a burst of pool contention on a path nobody
+    /// is waiting on interactively.
+    async fn each<F, Fut>(&self, targets: &[UserId], action: F) -> ServiceResult<BulkReport>
+    where
+        F: Fn(UserId) -> Fut,
+        Fut: std::future::Future<Output = ServiceResult<StaffUserView>>,
+    {
+        if targets.is_empty() {
+            return Err(ServiceError::Domain(DomainError::Invalid {
+                field: "targets",
+                reason: "select at least one account".to_owned(),
+            }));
+        }
+
+        if targets.len() > MAX_BULK_TARGETS {
+            return Err(ServiceError::Domain(DomainError::Invalid {
+                field: "targets",
+                reason: format!("at most {MAX_BULK_TARGETS} accounts at a time"),
+            }));
+        }
+
+        // Duplicates would suspend the same account twice and write two audit
+        // entries for one decision.
+        let mut seen = std::collections::HashSet::with_capacity(targets.len());
+        let mut outcomes = Vec::with_capacity(targets.len());
+
+        for &target in targets {
+            if !seen.insert(target) {
+                continue;
+            }
+
+            outcomes.push(match action(target).await {
+                Ok(user) => BulkOutcome {
+                    user_id: target,
+                    handle: Some(user.handle),
+                    succeeded: true,
+                    error: None,
+                },
+                Err(error) => BulkOutcome {
+                    user_id: target,
+                    handle: None,
+                    succeeded: false,
+                    error: Some(error.to_string()),
+                },
+            });
+        }
+
+        Ok(BulkReport::from_outcomes(outcomes))
     }
 
     /// Grant or revoke platform authority.

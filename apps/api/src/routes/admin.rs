@@ -21,6 +21,7 @@ use uuid::Uuid;
 use crate::error::{ApiError, ApiResult};
 use crate::extract::ApiJson;
 use crate::middleware::{AdminUser, CurrentUser, StaffUser};
+use crate::routes::ws::ConsoleTopic;
 use crate::state::AppState;
 
 // ────────────────────────────── audit log ─────────────────────────────
@@ -182,12 +183,15 @@ pub async fn suspend_user(
     }
 
     let handle = state.staff.find_user(admin.user_id).await?.handle;
-    Ok(Json(
-        state
-            .staff
-            .suspend(admin.user_id, &handle, user_id, reason)
-            .await?,
-    ))
+    let view = state
+        .staff
+        .suspend(admin.user_id, &handle, user_id, reason)
+        .await?;
+
+    state
+        .console_changed(&[ConsoleTopic::Users, ConsoleTopic::AuditLog])
+        .await;
+    Ok(Json(view))
 }
 
 /// `POST /api/v1/admin/users/{id}/reinstate`
@@ -197,9 +201,12 @@ pub async fn reinstate_user(
     Path(user_id): Path<UserId>,
 ) -> ApiResult<Json<genzh_admin::StaffUserView>> {
     let handle = state.staff.find_user(admin.user_id).await?.handle;
-    Ok(Json(
-        state.staff.reinstate(admin.user_id, &handle, user_id).await?,
-    ))
+    let view = state.staff.reinstate(admin.user_id, &handle, user_id).await?;
+
+    state
+        .console_changed(&[ConsoleTopic::Users, ConsoleTopic::AuditLog])
+        .await;
+    Ok(Json(view))
 }
 
 /// `PUT /api/v1/admin/users/{id}/platform-role` body.
@@ -216,12 +223,75 @@ pub async fn set_platform_role(
     ApiJson(body): ApiJson<PlatformRoleRequest>,
 ) -> ApiResult<Json<genzh_admin::StaffUserView>> {
     let handle = state.staff.find_user(admin.user_id).await?.handle;
-    Ok(Json(
-        state
-            .staff
-            .set_platform_role(admin.user_id, &handle, user_id, body.role)
-            .await?,
-    ))
+    let view = state
+        .staff
+        .set_platform_role(admin.user_id, &handle, user_id, body.role)
+        .await?;
+
+    state
+        .console_changed(&[ConsoleTopic::Users, ConsoleTopic::AuditLog])
+        .await;
+    Ok(Json(view))
+}
+
+/// `POST /api/v1/admin/users/bulk/suspend` body.
+#[derive(Debug, Deserialize)]
+pub struct BulkSuspendRequest {
+    /// Accounts to act on. At most [`genzh_admin::MAX_BULK_TARGETS`].
+    pub user_ids: Vec<UserId>,
+    pub reason: String,
+}
+
+/// `POST /api/v1/admin/users/bulk/suspend`
+///
+/// Suspend several accounts, reporting per-account outcomes.
+///
+/// Always 200 when the request was well-formed, even if every account failed:
+/// the operation is a batch, and a status code has one slot for an answer this
+/// request genuinely has several of. What happened to each account is in the
+/// body, which is the only place it can be said accurately.
+pub async fn bulk_suspend_users(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    ApiJson(body): ApiJson<BulkSuspendRequest>,
+) -> ApiResult<Json<genzh_admin::BulkReport>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    let report = state
+        .staff
+        .suspend_many(admin.user_id, &handle, &body.user_ids, &body.reason)
+        .await?;
+
+    state
+        .console_changed(&[ConsoleTopic::Users, ConsoleTopic::AuditLog])
+        .await;
+    Ok(Json(report))
+}
+
+/// `POST /api/v1/admin/users/bulk/reinstate` body.
+#[derive(Debug, Deserialize)]
+pub struct BulkReinstateRequest {
+    pub user_ids: Vec<UserId>,
+}
+
+/// `POST /api/v1/admin/users/bulk/reinstate`
+///
+/// Lift suspensions on several accounts. Same per-account reporting as
+/// [`bulk_suspend_users`].
+pub async fn bulk_reinstate_users(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    ApiJson(body): ApiJson<BulkReinstateRequest>,
+) -> ApiResult<Json<genzh_admin::BulkReport>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    let report = state
+        .staff
+        .reinstate_many(admin.user_id, &handle, &body.user_ids)
+        .await?;
+
+    state
+        .console_changed(&[ConsoleTopic::Users, ConsoleTopic::AuditLog])
+        .await;
+    Ok(Json(report))
 }
 
 // ─────────────────────────────── tickets ──────────────────────────────
@@ -341,6 +411,7 @@ pub async fn reply_to_ticket(
         .about("ticket", ticket_id),
     ).await;
 
+    state.console_changed(&[ConsoleTopic::SupportQueue]).await;
     Ok(Json(msg))
 }
 
@@ -385,6 +456,7 @@ pub async fn update_ticket(
         }
     };
 
+    state.console_changed(&[ConsoleTopic::SupportQueue]).await;
     Ok(Json(ticket))
 }
 
@@ -450,6 +522,9 @@ pub async fn open_ticket(
         .about("ticket", ticket.id),
     ).await;
 
+    // A reporter opening a ticket is the one console signal an ordinary
+    // account causes. It still only reaches staff sockets.
+    state.console_changed(&[ConsoleTopic::SupportQueue]).await;
     Ok(Json(ticket))
 }
 
@@ -536,12 +611,13 @@ pub async fn assign_ticket(
     ApiJson(body): ApiJson<AssignTicketRequest>,
 ) -> ApiResult<Json<Ticket>> {
     let handle = state.staff.find_user(staff.user_id).await?.handle;
-    Ok(Json(
-        state
-            .support
-            .assign(staff.user_id, &handle, ticket_id, body.assignee_id)
-            .await?,
-    ))
+    let ticket = state
+        .support
+        .assign(staff.user_id, &handle, ticket_id, body.assignee_id)
+        .await?;
+
+    state.console_changed(&[ConsoleTopic::SupportQueue]).await;
+    Ok(Json(ticket))
 }
 
 // ──────────────────────────── communities ─────────────────────────────
@@ -645,6 +721,10 @@ pub async fn terminate_live_media(
         .live_media
         .terminate_session(admin.user_id, &handle, room_id)
         .await?;
+
+    state
+        .console_changed(&[ConsoleTopic::LiveMedia, ConsoleTopic::AuditLog])
+        .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -672,12 +752,15 @@ pub async fn create_broadcast(
     ApiJson(body): ApiJson<genzh_admin::NewBroadcast>,
 ) -> ApiResult<Json<genzh_admin::SystemBroadcast>> {
     let handle = state.staff.find_user(admin.user_id).await?.handle;
-    Ok(Json(
-        state
-            .broadcasts
-            .create(admin.user_id, &handle, body)
-            .await?,
-    ))
+    let created = state
+        .broadcasts
+        .create(admin.user_id, &handle, body)
+        .await?;
+
+    state
+        .console_changed(&[ConsoleTopic::Broadcasts, ConsoleTopic::AuditLog])
+        .await;
+    Ok(Json(created))
 }
 
 /// `DELETE /api/v1/admin/broadcasts/{id}`
@@ -691,6 +774,10 @@ pub async fn dismiss_broadcast(
         .broadcasts
         .dismiss(admin.user_id, &handle, broadcast_id)
         .await?;
+
+    state
+        .console_changed(&[ConsoleTopic::Broadcasts, ConsoleTopic::AuditLog])
+        .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -991,6 +1078,95 @@ pub async fn run_system_job(
         .ok_or(ApiError::Domain(DomainError::NotFound("job")))?;
 
     Ok(Json(JobReport::new(&name, stats)))
+}
+
+// ─────────────────────── recommendation engine ────────────────────────
+
+/// `GET /api/v1/admin/recommendations/coverage`
+///
+/// What the engine has to work with, platform-wide.
+///
+/// The numbers that separate "the ranking is wrong" from "there is nothing to
+/// rank" — which look identical from a thin feed, and have entirely different
+/// fixes. A high cold-account share means the *product* has an onboarding
+/// problem; a low eligible-room count means the feed is thin because almost
+/// nothing is live, not because the scorer is misbehaving.
+pub async fn recommendation_coverage(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<genzh_recommend::CoverageReport>> {
+    Ok(Json(state.recommend.coverage().await?))
+}
+
+/// `GET /api/v1/admin/recommendations/explain` query string.
+#[derive(Debug, Deserialize)]
+pub struct ExplainQuery {
+    /// Whose feed to inspect.
+    pub user_id: UserId,
+    /// `rooms`, `people`, or `communities`. Defaults to rooms.
+    #[serde(default)]
+    pub surface: Option<String>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+/// What one account would be shown, and why.
+#[derive(Debug, Serialize)]
+pub struct ExplainResponse {
+    pub user_id: UserId,
+    pub surface: String,
+    /// Whether this account has anything to personalise on.
+    pub personalized: bool,
+    /// The signals behind the ranking, as counts.
+    pub friends: usize,
+    pub communities: usize,
+    pub known_rooms: usize,
+    /// The ranked list, each entry carrying its score and reasons.
+    pub items: serde_json::Value,
+}
+
+/// `GET /api/v1/admin/recommendations/explain`
+///
+/// Run the engine for a named account and return the ranking with its reasons.
+///
+/// **Admin, not staff.** This is the one endpoint that shows one person's feed
+/// to somebody else, and a feed is derived from who they know — so it exposes
+/// the shape of their social graph. It is genuinely needed to tune the
+/// weights, and it is audited nowhere, so it is held to the narrower tier and
+/// returns only what the ranking used.
+pub async fn explain_recommendations(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Query(query): Query<ExplainQuery>,
+) -> ApiResult<Json<ExplainResponse>> {
+    let surface = query.surface.as_deref().unwrap_or("rooms").to_owned();
+    let signals = state.recommend.signals(query.user_id).await?;
+
+    let items = match surface.as_str() {
+        "people" => serde_json::to_value(state.recommend.people(query.user_id, query.limit).await?),
+        "communities" => {
+            serde_json::to_value(state.recommend.communities(query.user_id, query.limit).await?)
+        }
+        "rooms" => {
+            serde_json::to_value(state.recommend.rooms(query.user_id, None, query.limit).await?)
+        }
+        other => {
+            return Err(ApiError::BadRequest(format!(
+                "unknown surface '{other}': expected rooms, people or communities"
+            )));
+        }
+    }
+    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+
+    Ok(Json(ExplainResponse {
+        user_id: query.user_id,
+        surface,
+        personalized: !signals.is_cold(),
+        friends: signals.friends.len(),
+        communities: signals.communities.len(),
+        known_rooms: signals.known_rooms.len(),
+        items,
+    }))
 }
 
 // ────────────────────── user session moderation ───────────────────────

@@ -7,6 +7,7 @@ import type {
   AuthResponse,
   AutomodRule,
   BlockedEmailDomain,
+  BulkReport,
   IpBan,
   LiveMediaSessionView,
   NewAutomodRuleInput,
@@ -37,12 +38,20 @@ import type {
   RoomWithPermissions,
   MeOverviewResponse,
   CommunityOverviewResponse,
+  CommunityRecommendation,
+  JobReport,
   RoomSessionResponse,
   SocialOverviewResponse,
   TokenPair,
   NotificationPage,
   OpenTicketInput,
+  Page,
+  PersonRecommendation,
   PlatformRole,
+  RecommendationCoverage,
+  RecommendationExplain,
+  Recommendations,
+  RoomRecommendation,
   StaffUserView,
   SupportMessage,
   SupportQueue,
@@ -664,6 +673,42 @@ export const support = {
     }),
 }
 
+// ── recommendations ───────────────────────────────────────────────────────
+
+/**
+ * Suggestions for the signed-in account.
+ *
+ * There is deliberately no `user_id` parameter on any of these: the viewer is
+ * taken from the token server-side. A recommendation is derived from who you
+ * know and what you have blocked, so letting a caller name somebody else would
+ * be a way to read their social graph one suggestion at a time.
+ */
+export const recommendations = {
+  /** Moments to join, ranked for this viewer. */
+  rooms: (
+    token: string | null,
+    params: { category?: string; limit?: number } = {},
+  ) =>
+    request<Recommendations<RoomRecommendation>>('/api/v1/recommendations/rooms', {
+      token,
+      params,
+    }),
+
+  /** People this viewer might know. */
+  people: (token: string | null, params: { limit?: number } = {}) =>
+    request<Recommendations<PersonRecommendation>>('/api/v1/recommendations/people', {
+      token,
+      params,
+    }),
+
+  /** Communities to explore. */
+  communities: (token: string | null, params: { limit?: number } = {}) =>
+    request<Recommendations<CommunityRecommendation>>(
+      '/api/v1/recommendations/communities',
+      { token, params },
+    ),
+}
+
 // ── the platform console ──────────────────────────────────────────────────
 
 /**
@@ -684,10 +729,18 @@ export const admin = {
       category?: string
       q?: string
       subject_id?: Uuid
+      /** Keyset cursor: entries strictly older than this. */
       before?: Timestamp
+      /**
+       * Tie-breaker for `before`, from the previous page's `next_cursor_id`.
+       * Send it whenever you send `before` — without it, a page boundary
+       * inside a group of entries sharing a timestamp skips the rest of them,
+       * and every bulk action writes such a group.
+       */
+      before_id?: Uuid
       limit?: number
     } = {},
-  ) => request<AuditEntry[]>('/api/v1/admin/audit', { token, params }),
+  ) => request<Page<AuditEntry>>('/api/v1/admin/audit', { token, params }),
 
   /** The actions the server actually writes, for the filter list. */
   auditActions: (token: string | null) =>
@@ -697,11 +750,41 @@ export const admin = {
   searchUsers: (
     token: string | null,
     q: string = '',
-    params: { role?: PlatformRole; is_active?: boolean; limit?: number } = {},
+    params: {
+      role?: PlatformRole
+      is_active?: boolean
+      /** Keyset cursor: accounts created strictly before this. */
+      before?: Timestamp
+      /** Tie-breaker for `before`, from the previous page's `next_cursor_id`. */
+      before_id?: Uuid
+      limit?: number
+    } = {},
   ) =>
-    request<StaffUserView[]>('/api/v1/admin/users', {
+    request<Page<StaffUserView>>('/api/v1/admin/users', {
       token,
       params: { q, ...params },
+    }),
+
+  /**
+   * Suspend several accounts at once.
+   *
+   * Resolves even when some accounts failed — read {@link BulkReport.outcomes}
+   * rather than treating a resolved promise as "all done". Each account that
+   * succeeded gets its own audit entry naming it.
+   */
+  bulkSuspendUsers: (token: string | null, userIds: Uuid[], reason: string) =>
+    request<BulkReport>('/api/v1/admin/users/bulk/suspend', {
+      method: 'POST',
+      body: { user_ids: userIds, reason },
+      token,
+    }),
+
+  /** Lift suspensions on several accounts. Same per-account reporting. */
+  bulkReinstateUsers: (token: string | null, userIds: Uuid[]) =>
+    request<BulkReport>('/api/v1/admin/users/bulk/reinstate', {
+      method: 'POST',
+      body: { user_ids: userIds },
+      token,
     }),
 
   getUser: (token: string | null, id: Uuid) =>
@@ -740,6 +823,13 @@ export const admin = {
       kind?: string
       assignee_id?: Uuid
       q?: string
+      /**
+       * Keyset cursor: tickets raised strictly *after* this. Forwards, because
+       * the queue is oldest-first — the longest wait belongs on top.
+       */
+      after?: Timestamp
+      /** Tie-breaker for `after`, from the previous page's `next_cursor_id`. */
+      after_id?: Uuid
       limit?: number
     } = {},
   ) => request<SupportQueue>('/api/v1/admin/tickets', { token, params }),
@@ -894,9 +984,46 @@ export const admin = {
       token,
     }),
 
+  /** What the recommendation engine has to work with, platform-wide. */
+  recommendationCoverage: (token: string | null) =>
+    request<RecommendationCoverage>('/api/v1/admin/recommendations/coverage', { token }),
+
+  /**
+   * Run the engine for one account and return the ranking with its reasons.
+   *
+   * Admin only: it shows one person's feed to somebody else, which exposes the
+   * shape of their social graph.
+   */
+  explainRecommendations: (
+    token: string | null,
+    params: { user_id: Uuid; surface?: string; limit?: number },
+  ) => request<RecommendationExplain>('/api/v1/admin/recommendations/explain', { token, params }),
+
   /** Operational telemetry & health. */
   telemetry: (token: string | null) =>
     request<SystemHealthTelemetry>('/api/v1/admin/system/health', { token }),
+
+  /**
+   * What the background scheduler has been doing, failing jobs first.
+   *
+   * Per-process counters: they describe the API instance that answered, and
+   * reset when it restarts.
+   */
+  jobs: (token: string | null) => request<JobReport[]>('/api/v1/admin/system/jobs', { token }),
+
+  /**
+   * Run one background job now rather than waiting for its next tick.
+   *
+   * Admin only, and audited. Resolves with the job's updated report even when
+   * the run itself failed — check `healthy` and `last_error`, not just that the
+   * promise resolved.
+   */
+  runJob: (token: string | null, name: string) =>
+    request<JobReport>(`/api/v1/admin/system/jobs/${encodeURIComponent(name)}/run`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
 
   /** User session and profile moderation. */
   revokeUserSessions: (token: string | null, userId: Uuid) =>

@@ -446,6 +446,29 @@ export interface SocialOverviewResponse {
 export type PlatformRole = 'user' | 'support' | 'admin'
 
 /** An account as staff see it. Deliberately no credentials of any kind. */
+/**
+ * One page of a console list, and the cursor for the next.
+ *
+ * The cursor has two halves because every one of these lists is ordered by
+ * `(created_at, id)` and the cursor has to match that exactly. A cursor of the
+ * timestamp alone cannot: entries written by one bulk action all carry the
+ * identical `now()`, so a page boundary landing inside that group would skip
+ * the rest of it. Send both halves back, or neither.
+ *
+ * `next_cursor === null` means there is no further page.
+ */
+export interface Page<T> {
+  items: T[]
+  next_cursor: Timestamp | null
+  next_cursor_id: Uuid | null
+}
+
+/** Cursor parameters for requesting the page after a {@link Page}. */
+export interface PageCursor {
+  before?: Timestamp
+  before_id?: Uuid
+}
+
 export interface StaffUserView {
   id: Uuid
   handle: string
@@ -512,8 +535,7 @@ export interface SupportTicketDetail {
   messages: SupportMessage[]
 }
 
-export interface SupportQueue {
-  tickets: SupportTicket[]
+export interface SupportQueue extends Page<SupportTicket> {
   /** Every waiting ticket, not just the page returned — it drives the badge. */
   open_count: number
 }
@@ -632,3 +654,140 @@ export interface SystemHealthTelemetry {
   server_timestamp: Timestamp
 }
 
+
+/** One background job, as the console renders it. */
+export interface JobReport {
+  /** Registered name, e.g. `rooms.prune_stale_participants`. */
+  name: string
+  /** Executions since this process started — the counters reset on restart. */
+  total_runs: number
+  successes: number
+  failures: number
+  last_run_at: Timestamp | null
+  last_duration_ms: number | null
+  last_error: string | null
+  /**
+   * Whether the *most recent* run succeeded — not "has never failed". A job
+   * that failed once overnight and has been fine since is not an alert.
+   */
+  healthy: boolean
+}
+
+/** What a bulk enforcement pass did to one account. */
+export interface BulkOutcome {
+  user_id: Uuid
+  /** `null` when the account could not be read at all. */
+  handle: string | null
+  succeeded: boolean
+  error: string | null
+}
+
+/**
+ * The result of a bulk pass.
+ *
+ * Per-account rather than all-or-nothing: a selection of forty accounts will
+ * contain one that cannot be acted on, and failing the batch would leave all
+ * forty untouched.
+ */
+export interface BulkReport {
+  succeeded: number
+  failed: number
+  outcomes: BulkOutcome[]
+}
+
+/** Which console list a `console_changed` socket signal refers to. */
+export type ConsoleTopic =
+  | 'support_queue'
+  | 'live_media'
+  | 'broadcasts'
+  | 'users'
+  | 'audit_log'
+
+// ── recommendations ───────────────────────────────────────────────────────
+
+/** Why something was recommended. */
+export type ReasonKind =
+  | 'shared_community'
+  | 'friend_activity'
+  | 'mutual_friends'
+  | 'category_affinity'
+  | 'activity'
+  | 'popularity'
+  | 'freshness'
+
+/**
+ * One contribution to a recommendation's score.
+ *
+ * `detail` is a ready-made sentence fragment from the server, so the client
+ * does not have to reimplement pluralisation and phrasing for seven kinds.
+ * `magnitude` is the underlying count, for a client that wants to render it
+ * differently.
+ */
+export interface Reason {
+  kind: ReasonKind
+  magnitude: number
+  contribution: number
+  detail: string
+}
+
+/** A recommended room, with the room's own fields flattened in. */
+export type RoomRecommendation = Room & {
+  score: number
+  reasons: Reason[]
+}
+
+export interface PersonRecommendation {
+  user_id: Uuid
+  handle: string
+  display_name: string | null
+  avatar_url: string | null
+  score: number
+  reasons: Reason[]
+}
+
+export interface CommunityRecommendation {
+  community_id: Uuid
+  name: string
+  description: string | null
+  icon_url: string | null
+  member_count: number
+  score: number
+  reasons: Reason[]
+}
+
+/** A ranked list, plus whether it was personalised at all. */
+export interface Recommendations<T> {
+  items: T[]
+  /**
+   * False when the viewer has no friends, communities or history, so the list
+   * is ranked on popularity alone. Say "popular right now" rather than "for
+   * you" — the difference between a feed that reads as generic and one that
+   * reads as broken.
+   */
+  personalized: boolean
+}
+
+/** What the recommendation engine has to work with, platform-wide. */
+export interface RecommendationCoverage {
+  cold_accounts: number
+  total_accounts: number
+  /**
+   * Rooms that could be recommended to anybody. When this is small, a thin feed
+   * is a content problem rather than a ranking one.
+   */
+  eligible_rooms: number
+  eligible_communities: number
+  cached_entries: number
+}
+
+/** One account's feed, with the signals behind it. Admin only. */
+export interface RecommendationExplain {
+  user_id: Uuid
+  surface: string
+  personalized: boolean
+  friends: number
+  communities: number
+  known_rooms: number
+  /** Shape depends on `surface`; each entry carries `score` and `reasons`. */
+  items: Array<Record<string, unknown>>
+}

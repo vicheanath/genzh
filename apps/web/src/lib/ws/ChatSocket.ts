@@ -14,6 +14,14 @@ import type {
 } from '@/lib/api'
 import { config } from '@/lib/config'
 
+/** Which console list a `console_changed` frame refers to. */
+export type ConsoleTopic =
+  | 'support_queue'
+  | 'live_media'
+  | 'broadcasts'
+  | 'users'
+  | 'audit_log'
+
 export type ChatServerEvent =
   | {
       type: 'authenticated'
@@ -88,6 +96,17 @@ export type ChatServerEvent =
       user_id: Uuid
       display_name: string
       is_typing: boolean
+    }
+  | {
+      /**
+       * A list the platform console shows has changed.
+       *
+       * Only reaches staff sockets, and deliberately carries no payload: the
+       * console reacts by refetching over REST, where staff authority is
+       * re-checked per request. See `ConsoleTopic` in the API.
+       */
+      type: 'console_changed'
+      topic: ConsoleTopic
     }
   | {
       type: 'pong'

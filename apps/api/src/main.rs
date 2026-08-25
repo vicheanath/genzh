@@ -61,8 +61,9 @@ async fn run() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
-    // After the server has drained, so a job cannot start against a pool that
-    // is on its way out.
+    // After the server has drained, and blocking until the scheduler has
+    // genuinely stopped — `CronScheduler::shutdown` waits for in-flight jobs
+    // rather than only signalling, so the pool is not closed underneath one.
     scheduler.shutdown().await?;
     tracing::info!("api stopped");
     Ok(())

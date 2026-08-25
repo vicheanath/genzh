@@ -27,7 +27,7 @@ use genzh_room::{
 };
 
 use crate::config::Config;
-use crate::routes::ws::ChatServerEvent;
+use crate::routes::ws::{ChatServerEvent, ConsoleTopic};
 
 /// Events a WebSocket subscriber may fall behind by before it starts losing
 /// them.
@@ -108,6 +108,12 @@ pub struct AppState {
     pub events: Arc<dyn EventBus<ChatServerEvent>>,
     /// Who is currently connected, derived from live WebSockets.
     pub presence: Arc<dyn PresenceStore>,
+    /// Suggests moments, people and communities.
+    ///
+    /// Read-only over the tables the rest of the state already writes — it
+    /// derives everything from membership, messages and the social graph, so
+    /// there is no recommendation data to keep in sync with anything.
+    pub recommend: Arc<genzh_recommend::RecommendationService>,
     /// Runs the recurring maintenance in [`crate::jobs`].
     ///
     /// Held here rather than in `main` so the admin telemetry routes can read
@@ -220,6 +226,7 @@ impl AppState {
         // constructor's business is wiring services together, not deciding what
         // runs on a timer.
         let scheduler = Arc::new(CronScheduler::new().await?);
+        let pool_for_recommend = pool.clone();
 
         // ── volatile state ──────────────────────────────────────────────────
         // The only place in the process that names a concrete implementation of
@@ -256,6 +263,7 @@ impl AppState {
             events: InMemoryEventBus::new(EVENT_BUFFER),
             presence: InMemoryPresenceStore::new(),
             scheduler,
+            recommend: genzh_recommend::RecommendationService::new(pool_for_recommend),
             config: Arc::new(config),
         })
     }
@@ -283,6 +291,22 @@ impl AppState {
     pub async fn broadcast(&self, event: ChatServerEvent) {
         if let Err(error) = self.events.publish(event).await {
             tracing::warn!(%error, "could not publish a real-time event");
+        }
+    }
+
+    /// Tell any staff console that one of its lists is out of date.
+    ///
+    /// A signal, not the data: see [`ChatServerEvent::ConsoleChanged`]. Called
+    /// on the success path of whatever changed, so the console never refetches
+    /// on the strength of something that did not happen.
+    ///
+    /// Takes a slice because one action often moves two lists at once — a
+    /// suspension changes both the account list and the audit log — and one
+    /// call site is easier to keep honest than two.
+    pub async fn console_changed(&self, topics: &[ConsoleTopic]) {
+        for &topic in topics {
+            self.broadcast(ChatServerEvent::ConsoleChanged { topic })
+                .await;
         }
     }
 }

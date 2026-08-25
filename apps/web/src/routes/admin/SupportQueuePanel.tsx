@@ -13,6 +13,7 @@ import {
   useStaffList,
   useStaffReplyMutation,
   useSupportQueue,
+  useQueuedTickets,
   useSupportTicket,
   useUpdateTicketMutation,
   type StaffUserView,
@@ -23,6 +24,7 @@ import { useAuth } from '@/lib/auth'
 import { errorText } from '@/lib/errors'
 import { formatFull } from '@/lib/time'
 
+import { Pager } from './Pager'
 import styles from './panels.module.css'
 
 const STATUSES = [
@@ -57,7 +59,7 @@ export function SupportQueuePanel() {
     kind: kind === 'all' ? undefined : kind,
     q: ticketSearch.trim() || undefined,
   })
-  const tickets = queue.data?.tickets ?? []
+  const tickets = useQueuedTickets(queue)
 
   return (
     <div className={styles.split}>
@@ -115,6 +117,17 @@ export function SupportQueuePanel() {
             onSelect={() => setSelected(ticket.id)}
           />
         ))}
+
+        {/* "Older" here means further down the backlog: the queue is
+            oldest-first, so the longest wait is already on top. */}
+        <Pager
+          loaded={tickets.length}
+          hasMore={Boolean(queue.hasNextPage)}
+          isLoading={queue.isFetchingNextPage}
+          onLoadMore={() => queue.fetchNextPage()}
+          label="Load more tickets"
+          noun="tickets"
+        />
       </div>
 
       <div className={styles.detail}>

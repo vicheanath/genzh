@@ -7,10 +7,16 @@ import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
 import { Skeleton } from '@/components/Skeleton'
 import { useToast } from '@/components/Toast'
-import { useAuditActions, useAuditLog, type AuditEntry } from '@/features/api'
+import {
+  useAuditActions,
+  useAuditEntries,
+  useAuditLog,
+  type AuditEntry,
+} from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { formatFull } from '@/lib/time'
 
+import { Pager } from './Pager'
 import styles from './panels.module.css'
 
 const CATEGORIES = [
@@ -76,7 +82,7 @@ export function AuditLogPanel() {
       .map((key) => ({ value: key, label: key })),
   ]
 
-  const entries = log.data ?? []
+  const entries = useAuditEntries(log)
 
   function toggleMeta(id: string) {
     setOpenMetaIds((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -244,6 +250,20 @@ export function AuditLogPanel() {
           </article>
         )
       })}
+
+      {/* Export writes whatever is loaded, which is what the operator can see.
+          Exporting "everything matching the filter" would mean paging the whole
+          table server-side into the browser, and an audit table is the one
+          place that is genuinely large. */}
+      <Pager
+        loaded={entries.length}
+        hasMore={Boolean(log.hasNextPage)}
+        isLoading={log.isFetchingNextPage}
+        onLoadMore={() => log.fetchNextPage()}
+        label="Load older entries"
+        noun="entries"
+      />
+
     </div>
   )
 }

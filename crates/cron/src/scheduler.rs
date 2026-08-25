@@ -18,7 +18,8 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use parking_lot::RwLock;
 use tokio_cron_scheduler::{Job, JobScheduler, JobSchedulerError};
@@ -45,11 +46,38 @@ pub enum CronSchedulerError {
 /// Result alias for scheduling operations.
 pub type CronSchedulerResult<T> = Result<T, CronSchedulerError>;
 
+/// How long [`CronScheduler::shutdown`] waits for work already running.
+///
+/// Bounded rather than unlimited: a job wedged on a hung connection must not
+/// hold the process open forever. Exceeding it is logged and shutdown proceeds,
+/// which is the honest trade — a warning an operator can see beats a service
+/// that will not stop.
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Whether the schedule is still running, and how much work is in flight.
+///
+/// Exists because [`JobScheduler::shutdown`] does neither of the things its
+/// name suggests: it sets a flag and returns, without stopping the ticker
+/// synchronously or waiting for jobs already dispatched. A job can therefore
+/// still start — and finish — after `shutdown().await` has returned, which for
+/// a job holding a database handle means running against a pool the process is
+/// busy closing. It is not theoretical; it is what made the shutdown test here
+/// fail under load.
+///
+/// This turns the claim into a real barrier: `stopped` refuses new scheduled
+/// runs, and `in_flight` is what [`CronScheduler::shutdown`] waits on.
+#[derive(Debug, Default)]
+struct RunState {
+    stopped: AtomicBool,
+    in_flight: AtomicUsize,
+}
+
 /// Runs [`CronJob`]s on their schedules and records how they went.
 pub struct CronScheduler {
     inner: JobScheduler,
     jobs: RwLock<HashMap<&'static str, Arc<dyn CronJob>>>,
     metrics: Arc<CronMetrics>,
+    state: Arc<RunState>,
 }
 
 impl std::fmt::Debug for CronScheduler {
@@ -67,6 +95,7 @@ impl CronScheduler {
             inner: JobScheduler::new().await?,
             jobs: RwLock::new(HashMap::new()),
             metrics: Arc::new(CronMetrics::new()),
+            state: Arc::new(RunState::default()),
         })
     }
 
@@ -83,14 +112,16 @@ impl CronScheduler {
         let schedule = job.schedule();
         let metrics = Arc::clone(&self.metrics);
         let runner = Arc::clone(&job);
+        let state = Arc::clone(&self.state);
 
         // Rebuilt per tick rather than captured once, because the scheduler
         // hands the closure out repeatedly and each run needs its own future.
         let tick = move |_id, _scheduler| {
             let job = Arc::clone(&runner);
             let metrics = Arc::clone(&metrics);
+            let state = Arc::clone(&state);
             Box::pin(async move {
-                execute(job, metrics).await;
+                execute(job, metrics, state).await;
             }) as crate::job::BoxFuture<'static, ()>
         };
 
@@ -129,16 +160,65 @@ impl CronScheduler {
         Ok(())
     }
 
-    /// Stop ticking and let in-flight jobs finish.
+    /// Stop ticking and wait for in-flight jobs to finish.
+    ///
+    /// Once this returns, no scheduled job is running or will start — which is
+    /// what makes it safe to close the database pool afterwards. See
+    /// [`RunState`] for why that needs enforcing here rather than being
+    /// inherited from the scheduler underneath.
     ///
     /// Takes `&self` rather than `self` because the scheduler is shared through
     /// an `Arc` for the lifetime of the process; shutdown is the one thing that
     /// happens to it from outside that shared ownership.
     pub async fn shutdown(&self) -> CronSchedulerResult<()> {
+        // Ordered deliberately: refuse new runs *before* asking the scheduler
+        // to stop. The reverse leaves a window where the ticker has not yet
+        // seen its own flag and this one is not set either, and that is exactly
+        // the dispatch that outlives shutdown.
+        self.state.stopped.store(true, Ordering::SeqCst);
+
         let mut inner = self.inner.clone();
         inner.shutdown().await?;
-        tracing::info!("cron scheduler stopped");
+
+        if self.drain().await {
+            tracing::info!("cron scheduler stopped");
+        } else {
+            tracing::warn!(
+                in_flight = self.state.in_flight.load(Ordering::SeqCst),
+                timeout = ?DRAIN_TIMEOUT,
+                "cron scheduler stopped with jobs still running"
+            );
+        }
+
         Ok(())
+    }
+
+    /// Wait for in-flight jobs, up to [`DRAIN_TIMEOUT`]. `false` on timeout.
+    ///
+    /// Polled rather than notified: the count is the only shared state, and a
+    /// `Notify` would have to be woken from every job's exit path — more
+    /// machinery to get wrong for a wait that happens once per process.
+    async fn drain(&self) -> bool {
+        let deadline = Instant::now() + DRAIN_TIMEOUT;
+
+        while self.state.in_flight.load(Ordering::SeqCst) > 0 {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        true
+    }
+
+    /// Whether the schedule has been stopped.
+    pub fn is_stopped(&self) -> bool {
+        self.state.stopped.load(Ordering::SeqCst)
+    }
+
+    /// How many job runs are executing right now.
+    pub fn in_flight(&self) -> usize {
+        self.state.in_flight.load(Ordering::SeqCst)
     }
 
     /// Run one job right now, outside its schedule, and report what it returned.
@@ -148,6 +228,11 @@ impl CronScheduler {
     /// console shows up in the same place.
     pub async fn run_now(&self, name: &str) -> Option<CronResult<()>> {
         let job = self.jobs.read().get(name).map(Arc::clone)?;
+
+        // Counted, but not gated on `stopped`: a run somebody explicitly asked
+        // for should finish, and shutdown should wait for it. It is the
+        // *schedule* that stops, not an outstanding request.
+        let _guard = InFlight::enter(Arc::clone(&self.state));
         Some(run_recorded(job, &self.metrics).await)
     }
 
@@ -169,10 +254,49 @@ impl CronScheduler {
     }
 }
 
+/// Keeps the in-flight count correct across early returns and panics.
+///
+/// A bare increment/decrement pair would leak the count if a job panicked
+/// between them, and a leaked count makes every later shutdown wait out the
+/// full timeout.
+struct InFlight(Arc<RunState>);
+
+impl InFlight {
+    fn enter(state: Arc<RunState>) -> Self {
+        state.in_flight.fetch_add(1, Ordering::SeqCst);
+        Self(state)
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        self.0.in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// Run a job, record the outcome, and log it. Never propagates the failure:
 /// one bad pass must not take the ticker down with it.
-async fn execute(job: Arc<dyn CronJob>, metrics: Arc<CronMetrics>) {
+async fn execute(job: Arc<dyn CronJob>, metrics: Arc<CronMetrics>, state: Arc<RunState>) {
     let name = job.name();
+
+    if state.stopped.load(Ordering::SeqCst) {
+        tracing::debug!(job = name, "cron job skipped: scheduler is stopping");
+        return;
+    }
+
+    let guard = InFlight::enter(Arc::clone(&state));
+
+    // Re-checked after claiming the slot. Without this there is a window —
+    // flag reads false, then shutdown sets it and reads a zero count, then this
+    // increments — where shutdown believes it drained and the job runs anyway.
+    // Claiming first and re-reading closes it: either shutdown sees the count,
+    // or this sees the flag.
+    if state.stopped.load(Ordering::SeqCst) {
+        drop(guard);
+        tracing::debug!(job = name, "cron job skipped: scheduler stopped mid-dispatch");
+        return;
+    }
+
     tracing::debug!(job = name, "cron job starting");
 
     match run_recorded(job, &metrics).await {
@@ -294,6 +418,23 @@ mod tests {
         assert_eq!(scheduler.job_names(), vec!["counting"]);
     }
 
+    /// Wait for `condition`, or give up after `limit`.
+    ///
+    /// Polled rather than slept-through. A fixed sleep has to be long enough
+    /// for the slowest machine that will ever run it, which makes the suite
+    /// slow everywhere and *still* flaky on a loaded CI box — this test failed
+    /// exactly that way, passing alone and failing under a full parallel run.
+    async fn within(limit: Duration, condition: impl Fn() -> bool) -> bool {
+        let deadline = std::time::Instant::now() + limit;
+        while std::time::Instant::now() < deadline {
+            if condition() {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        condition()
+    }
+
     #[tokio::test]
     async fn a_registered_job_ticks_until_shutdown() {
         let scheduler = CronScheduler::new().await.expect("scheduler");
@@ -316,17 +457,70 @@ mod tests {
             .expect("register");
 
         scheduler.start().await.expect("start");
-        tokio::time::sleep(Duration::from_millis(900)).await;
+
+        // Generous, because the assertion is "it ticks at all", not "it ticks
+        // within 900ms" — the scheduler underneath wakes on its own cadence and
+        // pinning that would be testing somebody else's implementation.
+        assert!(
+            within(Duration::from_secs(10), || runs.load(Ordering::SeqCst) > 0).await,
+            "the job never ran"
+        );
+
         scheduler.shutdown().await.expect("shutdown");
 
-        let after_shutdown = runs.load(Ordering::SeqCst);
-        assert!(after_shutdown >= 1, "job never ran");
+        // No settling period, deliberately. The guarantee under test is that
+        // *once shutdown returns* nothing more runs — which is what makes it
+        // safe to close the database pool on the next line of `main`. Sleeping
+        // first would test a weaker claim and hide the very race this had.
+        let baseline = runs.load(Ordering::SeqCst);
+        assert_eq!(scheduler.in_flight(), 0, "shutdown returned with work running");
+        assert!(scheduler.is_stopped());
 
-        tokio::time::sleep(Duration::from_millis(400)).await;
+        // Many tick intervals. The job fires every 100ms, so a ticker still
+        // running would be caught several times over.
+        tokio::time::sleep(Duration::from_millis(800)).await;
         assert_eq!(
             runs.load(Ordering::SeqCst),
-            after_shutdown,
-            "job kept running after shutdown"
+            baseline,
+            "a job ran after shutdown returned"
         );
+    }
+
+    #[tokio::test]
+    async fn shutdown_waits_for_a_job_that_is_already_running() {
+        // The other half of the guarantee: a job mid-flight is not abandoned,
+        // it is waited for. Otherwise "nothing is running" would be true only
+        // because the run was cut off partway through whatever it was writing.
+        let scheduler = CronScheduler::new().await.expect("scheduler");
+        let finished = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&finished);
+
+        scheduler
+            .register_fn("slow", Schedule::Every(Duration::from_millis(100)), move || {
+                let counter = Arc::clone(&counter);
+                async move {
+                    tokio::time::sleep(Duration::from_millis(400)).await;
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            })
+            .await
+            .expect("register");
+
+        scheduler.start().await.expect("start");
+
+        assert!(
+            within(Duration::from_secs(10), || scheduler.in_flight() > 0).await,
+            "the job never started"
+        );
+
+        scheduler.shutdown().await.expect("shutdown");
+
+        assert_eq!(
+            finished.load(Ordering::SeqCst),
+            1,
+            "shutdown returned before the running job finished"
+        );
+        assert_eq!(scheduler.in_flight(), 0);
     }
 }

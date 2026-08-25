@@ -84,8 +84,8 @@ async fn run() -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
-    // Before the rooms are torn down below, so a sweep cannot race the
-    // shutdown and try to destroy a room that is already being closed.
+    // Before the rooms are torn down below, and it genuinely waits: a sweep
+    // still running would be walking the registry the next line drains.
     scheduler.shutdown().await?;
 
     // Close every peer connection rather than letting the process exit with

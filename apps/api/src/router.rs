@@ -34,6 +34,22 @@ pub fn build(state: AppState) -> Router {
             "/me",
             get(routes::auth::me).patch(routes::auth::update_profile),
         )
+        // ---- recommendations ----
+        //
+        // Scoped to the caller by construction: the viewer comes from
+        // `CurrentUser`, never from a parameter.
+        .route(
+            "/recommendations/rooms",
+            get(routes::recommendations::rooms),
+        )
+        .route(
+            "/recommendations/people",
+            get(routes::recommendations::people),
+        )
+        .route(
+            "/recommendations/communities",
+            get(routes::recommendations::communities),
+        )
         // Composite views: one round-trip for a whole screen (see routes::bff).
         .route("/me/overview", get(routes::bff::me_overview))
         .route("/me/social", get(routes::bff::social_overview))
@@ -132,6 +148,14 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/admin/automod/{id}",
             delete(routes::admin::delete_automod_rule),
+        )
+        .route(
+            "/admin/recommendations/coverage",
+            get(routes::admin::recommendation_coverage),
+        )
+        .route(
+            "/admin/recommendations/explain",
+            get(routes::admin::explain_recommendations),
         )
         .route("/admin/system/health", get(routes::admin::system_health_telemetry))
         .route("/admin/system/jobs", get(routes::admin::system_jobs))

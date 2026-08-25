@@ -1,13 +1,24 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 
 import { admin, broadcasts, support } from '@/lib/api'
 import { useAuth, useIsSignedIn } from '@/lib/auth'
+import { chatSocket, type ChatServerEvent, type ConsoleTopic } from '@/lib/ws/ChatSocket'
 
 import type {
+  AuditEntry,
   NewAutomodRuleInput,
   NewBroadcastInput,
   OpenTicketInput,
+  Page,
   PlatformRole,
+  StaffUserView,
+  SupportTicket,
   TicketStatus,
   Timestamp,
   Uuid,
@@ -31,6 +42,10 @@ export const adminKeys = {
   emailDomains: () => [...adminKeys.all, 'email-domains'] as const,
   automod: () => [...adminKeys.all, 'automod'] as const,
   telemetry: () => [...adminKeys.all, 'telemetry'] as const,
+  jobs: () => [...adminKeys.all, 'jobs'] as const,
+  recommendationCoverage: () => [...adminKeys.all, 'recommendations', 'coverage'] as const,
+  recommendationExplain: (userId: Uuid, surface: string) =>
+    [...adminKeys.all, 'recommendations', 'explain', userId, surface] as const,
 }
 
 export const broadcastKeys = {
@@ -80,6 +95,27 @@ export function useAdminStats() {
   })
 }
 
+/**
+ * Pull the `(created_at, id)` cursor off a page, or `undefined` when it is the
+ * last one.
+ *
+ * Both halves or neither: React Query treats `undefined` as "no more pages", so
+ * returning a half-cursor would silently page with a timestamp alone and skip
+ * every row sharing a boundary timestamp.
+ */
+function nextPageCursor<T>(page: Page<T>) {
+  return page.next_cursor && page.next_cursor_id
+    ? { cursor: page.next_cursor, cursorId: page.next_cursor_id }
+    : undefined
+}
+
+/**
+ * The audit log, newest first, one page at a time.
+ *
+ * Infinite rather than a single fetch: the log is the console's deepest
+ * history, and before this the console could only ever show the newest page of
+ * it — there was no way to reach anything older.
+ */
 export function useAuditLog(
   filter: {
     action?: string
@@ -90,11 +126,23 @@ export function useAuditLog(
   } = {},
 ) {
   const isAdmin = useIsPlatformAdmin()
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: adminKeys.audit(JSON.stringify(filter)),
-    queryFn: () => admin.audit(null, { limit: 100, ...filter }),
+    queryFn: ({ pageParam }) =>
+      admin.audit(null, {
+        limit: 100,
+        ...filter,
+        ...(pageParam ? { before: pageParam.cursor, before_id: pageParam.cursorId } : {}),
+      }),
+    initialPageParam: undefined as { cursor: Timestamp; cursorId: Uuid } | undefined,
+    getNextPageParam: nextPageCursor,
     enabled: isAdmin,
   })
+}
+
+/** Every audit entry loaded so far, flattened across pages. */
+export function useAuditEntries(query: ReturnType<typeof useAuditLog>): AuditEntry[] {
+  return query.data?.pages.flatMap((page) => page.items) ?? []
 }
 
 export function useAuditActions() {
@@ -116,11 +164,24 @@ export function useUserSearch(
 ) {
   const isStaff = useIsStaff()
   const trimmed = query.trim()
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: adminKeys.users(`${trimmed}:${JSON.stringify(options)}`),
-    queryFn: () => admin.searchUsers(null, trimmed, options),
+    queryFn: ({ pageParam }) =>
+      admin.searchUsers(null, trimmed, {
+        ...options,
+        ...(pageParam ? { before: pageParam.cursor, before_id: pageParam.cursorId } : {}),
+      }),
+    initialPageParam: undefined as { cursor: Timestamp; cursorId: Uuid } | undefined,
+    getNextPageParam: nextPageCursor,
     enabled: isStaff,
   })
+}
+
+/** Every account loaded so far, flattened across pages. */
+export function useSearchedAccounts(
+  query: ReturnType<typeof useUserSearch>,
+): StaffUserView[] {
+  return query.data?.pages.flatMap((page) => page.items) ?? []
 }
 
 export function useStaffList() {
@@ -132,6 +193,18 @@ export function useStaffList() {
   })
 }
 
+/**
+ * The support queue, oldest first, one page at a time.
+ *
+ * Pages *forwards*: the longest wait belongs at the top, so the next page is
+ * further down the backlog rather than further back in time.
+ *
+ * No `refetchInterval`. The queue is worked by several people at once and a
+ * stale one sends two agents to the same ticket — but a socket signal now says
+ * when it changed, which beats a timer that is wrong in both directions: too
+ * slow the moment it matters, and refetching all night when nothing is
+ * happening. See {@link useConsoleLiveUpdates}.
+ */
 export function useSupportQueue(
   filter: {
     status?: TicketStatus
@@ -142,14 +215,34 @@ export function useSupportQueue(
   } = {},
 ) {
   const isStaff = useIsStaff()
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: adminKeys.tickets(JSON.stringify(filter)),
-    queryFn: () => admin.tickets(null, filter),
+    queryFn: ({ pageParam }) =>
+      admin.tickets(null, {
+        ...filter,
+        ...(pageParam ? { after: pageParam.cursor, after_id: pageParam.cursorId } : {}),
+      }),
+    initialPageParam: undefined as { cursor: Timestamp; cursorId: Uuid } | undefined,
+    getNextPageParam: nextPageCursor,
     enabled: isStaff,
-    // The queue is worked by several people at once; a stale one sends two
-    // agents to the same ticket.
-    refetchInterval: 30_000,
   })
+}
+
+/** Every ticket loaded so far, flattened across pages. */
+export function useQueuedTickets(
+  query: ReturnType<typeof useSupportQueue>,
+): SupportTicket[] {
+  return query.data?.pages.flatMap((page) => page.items) ?? []
+}
+
+/**
+ * How many tickets are still open — every one of them, not just the pages
+ * loaded. Read off the first page, which is where the server puts the count.
+ */
+export function useOpenTicketCount(
+  query: ReturnType<typeof useSupportQueue>,
+): number {
+  return query.data?.pages[0]?.open_count ?? 0
 }
 
 export function useSupportTicket(id: Uuid | null) {
@@ -450,6 +543,154 @@ export function useDeleteAutomodRuleMutation() {
     mutationFn: (id: Uuid) => admin.deleteAutomodRule(null, id),
     onSuccess: invalidate,
   })
+}
+
+// ── background jobs ───────────────────────────────────────────────────────
+
+/**
+ * What the background scheduler has been doing, failing jobs first.
+ *
+ * Polled rather than pushed: a job that fails at 03:00 emits no socket frame,
+ * and a console left open overnight should still show it by morning. Sixty
+ * seconds is well inside the shortest schedule any job runs on.
+ *
+ * The counters are per-process and reset on restart, which is the honest scope
+ * for an in-process scheduler — they describe the instance that answered.
+ */
+export function useBackgroundJobs() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.jobs(),
+    queryFn: () => admin.jobs(null),
+    enabled: isStaff,
+    refetchInterval: 60_000,
+  })
+}
+
+/**
+ * Run one job now rather than waiting for its next tick. Admin only, audited.
+ *
+ * Succeeds as a *request* even when the run itself failed — read `healthy` and
+ * `last_error` off the returned report rather than treating settled as fine.
+ */
+export function useRunJobMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => admin.runJob(null, name),
+    onSuccess: () => {
+      // The job just deleted rows somewhere; the audit log gained an entry for
+      // the trigger, and whatever the job touched is now stale.
+      queryClient.invalidateQueries({ queryKey: adminKeys.all })
+    },
+  })
+}
+
+// ── bulk enforcement ──────────────────────────────────────────────────────
+
+/**
+ * Suspend several accounts at once.
+ *
+ * Resolves with a per-account report even when some accounts failed. The caller
+ * must read {@link BulkReport.outcomes}: treating a settled mutation as "all
+ * forty done" is exactly the mistake this shape exists to prevent.
+ */
+export function useBulkSuspendMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: ({ userIds, reason }: { userIds: Uuid[]; reason: string }) =>
+      admin.bulkSuspendUsers(null, userIds, reason),
+    onSuccess: invalidate,
+  })
+}
+
+/** Lift suspensions on several accounts. Same per-account reporting. */
+export function useBulkReinstateMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (userIds: Uuid[]) => admin.bulkReinstateUsers(null, userIds),
+    onSuccess: invalidate,
+  })
+}
+
+// ── recommendation engine ─────────────────────────────────────────────────
+
+/**
+ * What the recommendation engine has to work with, platform-wide.
+ *
+ * The numbers that separate "the ranking is wrong" from "there is nothing to
+ * rank" — which look identical from a thin feed and have completely different
+ * fixes.
+ */
+export function useRecommendationCoverage() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.recommendationCoverage(),
+    queryFn: () => admin.recommendationCoverage(null),
+    enabled: isStaff,
+    refetchInterval: 60_000,
+  })
+}
+
+/**
+ * One account's feed, with the reasons behind each entry. Admin only.
+ *
+ * `enabled` on a supplied id, so the panel does not fire a query for nobody
+ * before an account has been chosen.
+ */
+export function useRecommendationExplain(userId: Uuid | null, surface: string) {
+  const isAdmin = useIsPlatformAdmin()
+  return useQuery({
+    queryKey: adminKeys.recommendationExplain(userId ?? ('none' as Uuid), surface),
+    queryFn: () => admin.explainRecommendations(null, { user_id: userId!, surface, limit: 10 }),
+    enabled: isAdmin && Boolean(userId),
+  })
+}
+
+// ── live updates ──────────────────────────────────────────────────────────
+
+/** Which console queries a topic makes stale. */
+const TOPIC_KEYS: Record<ConsoleTopic, readonly (readonly unknown[])[]> = {
+  // Prefixes, not exact keys: every filter the panel offers produces its own
+  // query key, and a signal has no idea which filters are on screen. React
+  // Query matches by prefix, so invalidating `['admin','tickets']` catches all
+  // of them.
+  support_queue: [[...adminKeys.all, 'tickets'], adminKeys.stats()],
+  live_media: [adminKeys.liveMedia()],
+  broadcasts: [adminKeys.broadcasts(), broadcastKeys.active()],
+  users: [[...adminKeys.all, 'users'], adminKeys.staff(), adminKeys.stats()],
+  audit_log: [[...adminKeys.all, 'audit']],
+}
+
+/**
+ * Refetch console lists when the server says they changed.
+ *
+ * Invalidation, not a cache write — which is why this is here rather than in
+ * `useQueryCacheSync`. The frame carries no data by design: it says *that* the
+ * queue moved, and React Query refetches it over REST, where staff authority is
+ * re-checked on that request. A payload would make the socket a second, weaker
+ * copy of that check.
+ *
+ * Mount it once, in the console shell. Off the console there is nothing to
+ * invalidate, and staying subscribed would refetch lists nobody is looking at.
+ */
+export function useConsoleLiveUpdates(enabled = true): void {
+  const queryClient = useQueryClient()
+  const isStaff = useIsStaff()
+
+  useEffect(() => {
+    if (!enabled || !isStaff) return
+
+    return chatSocket.on<ChatServerEvent>('console_changed', (event) => {
+      if (event.type !== 'console_changed') return
+
+      // An unknown topic from a newer server invalidates nothing rather than
+      // throwing: the console should degrade to its old polling behaviour, not
+      // break on a field it does not recognise yet.
+      for (const queryKey of TOPIC_KEYS[event.topic] ?? []) {
+        queryClient.invalidateQueries({ queryKey })
+      }
+    })
+  }, [queryClient, enabled, isStaff])
 }
 
 // ── system health & telemetry ──────────────────────────────────────────────

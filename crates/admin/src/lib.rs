@@ -25,6 +25,8 @@ pub use live::{LiveMediaService, LiveMediaSessionView};
 pub use page::Page;
 pub use security::{BlockedEmailDomain, IpBan, SecurityService};
 pub use settings::{SettingsService, SystemSetting};
-pub use staff::{AdminStats, StaffService, StaffUserView, UserSearch};
+pub use staff::{
+    AdminStats, BulkOutcome, BulkReport, MAX_BULK_TARGETS, StaffService, StaffUserView, UserSearch,
+};
 pub use support::{NewTicket, SupportService, TicketQuery};
 pub use system::{SystemHealthTelemetry, SystemTelemetryService};

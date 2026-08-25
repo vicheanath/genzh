@@ -21,6 +21,7 @@ import { LiveMediaPanel } from './routes/admin/LiveMediaPanel'
 import { SecurityPanel } from './routes/admin/SecurityPanel'
 import { StaffUsersPanel } from './routes/admin/StaffUsersPanel'
 import { SupportQueuePanel } from './routes/admin/SupportQueuePanel'
+import { RecommendationsPanel } from './routes/admin/RecommendationsPanel'
 import { SystemHealthPanel } from './routes/admin/SystemHealthPanel'
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
@@ -143,6 +144,7 @@ function Router() {
           <Route path="automod" element={<AutoModPanel />} />
           <Route path="security" element={<SecurityPanel />} />
           <Route path="health" element={<SystemHealthPanel />} />
+          <Route path="recommendations" element={<RecommendationsPanel />} />
           <Route path="audit" element={<AuditLogPanel />} />
         </Route>
         <Route path="/c/:communityId" element={<CommunityRoute />} />

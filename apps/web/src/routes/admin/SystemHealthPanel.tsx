@@ -11,7 +11,15 @@ import {
 } from '@/components/Icons'
 import { Meter } from '@/components/Meter'
 import { Skeleton } from '@/components/Skeleton'
-import { useAdminStats, useLiveMediaSessions, useSystemTelemetry } from '@/features/api'
+import { useToast } from '@/components/Toast'
+import {
+  useAdminStats,
+  useBackgroundJobs,
+  useIsPlatformAdmin,
+  useLiveMediaSessions,
+  useRunJobMutation,
+  useSystemTelemetry,
+} from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { formatFull } from '@/lib/time'
 
@@ -207,6 +215,96 @@ export function SystemHealthPanel() {
           </article>
         </>
       )}
+
+      <BackgroundJobs />
     </div>
+  )
+}
+
+/**
+ * What the background scheduler has been doing.
+ *
+ * Before this the jobs were invisible: a nightly prune could fail every night
+ * for a month and the only trace was a log line nobody was reading. Failing
+ * jobs sort to the top, and the failure carries the message rather than just a
+ * red dot — "which job is unhealthy" is not a useful answer on its own.
+ */
+function BackgroundJobs() {
+  const isAdmin = useIsPlatformAdmin()
+  const jobs = useBackgroundJobs()
+  const run = useRunJobMutation()
+  const toast = useToast()
+
+  const rows = jobs.data ?? []
+
+  return (
+    <section className={styles.section}>
+      <h2 className={styles.sectionTitle}>Background jobs</h2>
+
+      {jobs.isLoading && <Skeleton height="4rem" />}
+      {jobs.error && (
+        <Callout tone="danger">{errorText(jobs.error, 'Could not read job status')}</Callout>
+      )}
+      {!jobs.isLoading && rows.length === 0 && (
+        <p className={styles.empty}>No background jobs are registered on this instance.</p>
+      )}
+
+      {rows.map((job) => (
+        <div
+          key={job.name}
+          className={`${styles.jobRow} ${job.healthy ? '' : styles.jobFailing}`}
+        >
+          <span className={styles.jobName}>{job.name}</span>
+          <Badge tone={job.healthy ? 'success' : 'danger'}>
+            {job.healthy ? 'Healthy' : 'Failing'}
+          </Badge>
+
+          <span className={styles.bulkSpacer} />
+
+          <div className={styles.jobMeta}>
+            <span>
+              {job.last_run_at ? `Last run ${formatFull(job.last_run_at)}` : 'Not yet run'}
+            </span>
+            {job.last_duration_ms !== null && <span>{job.last_duration_ms} ms</span>}
+            {/* Failures out of total, not a rate: "2 / 480" tells an operator
+                both how bad it is and how long it has been running, which a
+                percentage collapses into one uninformative number. */}
+            <span>
+              {job.failures} failed / {job.total_runs} runs
+            </span>
+          </div>
+
+          {isAdmin && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={run.isPending}
+              onClick={async () => {
+                try {
+                  const report = await run.mutateAsync(job.name)
+                  // The request succeeding does not mean the job did.
+                  if (report.healthy) {
+                    toast.success(`${job.name} ran`)
+                  } else {
+                    toast.error(`${job.name} failed`, report.last_error ?? undefined)
+                  }
+                } catch (error) {
+                  toast.error(errorText(error, 'Could not run the job'))
+                }
+              }}
+            >
+              Run now
+            </Button>
+          )}
+
+          {job.last_error && <code className={styles.jobError}>{job.last_error}</code>}
+        </div>
+      ))}
+
+      <p className={styles.pagerCount}>
+        Counters are per-process and reset when the API restarts — they describe
+        the instance that answered this request.
+      </p>
+    </section>
   )
 }

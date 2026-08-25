@@ -83,6 +83,11 @@ impl Outbound {
 pub(super) struct Session {
     /// Who this socket is currently authenticated as, if anyone.
     pub(super) current_user: Option<CurrentUser>,
+    /// Whether that account was staff when it authenticated.
+    ///
+    /// Only ever gates payload-free console signals — see `authenticate` for
+    /// why reading it once per connection is a safe trade.
+    is_staff: bool,
     /// Rooms this connection asked to hear about.
     subscribed_rooms: HashSet<RoomId>,
     /// Whoever this connection is counted against for presence.
@@ -101,6 +106,7 @@ impl Session {
     pub(super) fn new() -> Self {
         Self {
             current_user: None,
+            is_staff: false,
             subscribed_rooms: HashSet::new(),
             counted_as: None,
             typing_sent: HashMap::new(),
@@ -138,6 +144,19 @@ impl Session {
             user_id: user.user_id,
             session_id: user.session_id,
         });
+
+        // Read once per connection rather than per event: the alternative is a
+        // database round trip on every console signal delivered to every
+        // socket. The cost is that a demotion only takes effect on this
+        // connection's next authenticate — which is why the signals carry no
+        // payload. Everything they point at is fetched over REST, where the
+        // role *is* re-read per request, so a stale `true` here buys somebody
+        // nothing but the knowledge that a list they cannot read has changed.
+        self.is_staff = state
+            .staff
+            .role_of(user.user_id)
+            .await
+            .is_ok_and(|role| role.is_staff());
 
         if self.counted_as != Some(user.user_id) {
             if let Some(previous) = self.counted_as {
@@ -185,6 +204,13 @@ impl Session {
     /// Two independent filters, and an event that is neither room-scoped nor
     /// user-scoped passes both — presence changes go to everybody by design.
     pub(super) fn accepts(&self, event: &ChatServerEvent) -> bool {
+        // Checked first, and by denying rather than by falling through: a
+        // console event is neither room- nor user-scoped, so every filter below
+        // would pass it — to every connection, signed in or not.
+        if event.requires_staff() && !self.is_staff {
+            return false;
+        }
+
         if let Some(room_id) = event.room_id()
             && !self.is_subscribed(room_id)
         {
