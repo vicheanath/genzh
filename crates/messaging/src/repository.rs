@@ -344,13 +344,31 @@ impl MessageRepository {
             "SELECT m.id, m.room_id, m.author_id, m.content, m.is_anonymous, m.reply_to_id,
                     m.edited_at, m.created_at
              FROM messages m
-             WHERE m.content_tsv @@ websearch_to_tsquery('english', $2)
+             WHERE (
+                     -- Words, where the language has them.
+                     m.content_tsv @@ websearch_to_tsquery('english', $2)
+                     -- Characters, where it does not. Khmer is written without
+                     -- spaces, so its whole sentence is one token in the vector
+                     -- above and nothing short of the entire sentence can match
+                     -- it; a substring is what a Khmer query actually means.
+                     -- Indexed by `messages_content_trgm_idx`.
+                     OR m.content ILIKE $5 ESCAPE '\\'
+                   )
                AND ($3::uuid IS NULL OR m.room_id = $3)
                AND EXISTS (
                    SELECT 1 FROM room_participants rp
                    WHERE rp.room_id = m.room_id AND rp.user_id = $1
                )
-             ORDER BY ts_rank(m.content_tsv, websearch_to_tsquery('english', $2)) DESC,
+             -- Whichever half matched better decides the position. `ts_rank`
+             -- is 0 for a row that only matched as a substring, and
+             -- `word_similarity` measures the query against the best-matching
+             -- *part* of the message rather than against the whole of it —
+             -- plain `similarity` would score a long message low no matter how
+             -- exactly the query appeared inside it.
+             ORDER BY GREATEST(
+                        ts_rank(m.content_tsv, websearch_to_tsquery('english', $2)),
+                        word_similarity($2, m.content)
+                      ) DESC,
                       m.created_at DESC
              LIMIT $4",
         )
@@ -358,6 +376,7 @@ impl MessageRepository {
         .bind(query)
         .bind(room_id)
         .bind(limit)
+        .bind(contains_pattern(query))
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::from)
@@ -372,4 +391,55 @@ struct GroupedReaction {
     reaction: String,
     count: i64,
     me: bool,
+}
+
+/// Wrap a user's query as a `LIKE` pattern matching it as a literal substring.
+///
+/// `%` and `_` are wildcards to `LIKE`, and a search box is the one place a
+/// user is guaranteed to type them without meaning them. Unescaped, a search
+/// for `100%` matches every message, and `a_b` matches `axb` — not a security
+/// hole, since the value is still a bound parameter and never concatenated into
+/// SQL, but a search that quietly answers a different question than it was
+/// asked. The backslash is escaped first, or escaping the other two would
+/// itself be undone.
+fn contains_pattern(query: &str) -> String {
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+
+    format!("%{escaped}%")
+}
+
+#[cfg(test)]
+mod pattern_tests {
+    use super::contains_pattern;
+
+    #[test]
+    fn an_ordinary_query_is_wrapped_in_wildcards() {
+        assert_eq!(contains_pattern("hello"), "%hello%");
+    }
+
+    #[test]
+    fn khmer_passes_through_untouched() {
+        // Nothing in Khmer script is a LIKE metacharacter, so the pattern is
+        // the query between two wildcards — which is the whole mechanism by
+        // which Khmer search works.
+        assert_eq!(contains_pattern("ភាសាខ្មែរ"), "%ភាសាខ្មែរ%");
+    }
+
+    #[test]
+    fn wildcards_typed_by_a_user_are_literal() {
+        // Without this, "100%" matches every message in every room.
+        assert_eq!(contains_pattern("100%"), "%100\\%%");
+        assert_eq!(contains_pattern("a_b"), "%a\\_b%");
+    }
+
+    #[test]
+    fn a_backslash_is_escaped_before_the_characters_it_would_escape() {
+        // Escaping in the other order would turn the user's backslash into the
+        // escape for the `%` that follows it, and the `%` would go back to
+        // being a wildcard.
+        assert_eq!(contains_pattern("\\%"), "%\\\\\\%%");
+    }
 }

@@ -1297,9 +1297,9 @@ async fn a_report_reaches_the_queue_and_gets_an_answer() {
         .expect_status(StatusCode::OK)
         .json;
     assert!(
-        queue["tickets"]
+        queue["items"]
             .as_array()
-            .expect("tickets")
+            .expect("the queue is a page: items, plus a cursor and open_count")
             .iter()
             .any(|t| t["id"] == ticket_id.as_str()),
         "the report is not in the queue",
@@ -1500,9 +1500,9 @@ async fn suspending_an_account_stops_its_live_session_and_is_audited() {
         .await
         .expect_status(StatusCode::OK)
         .json;
-    let entry = log
+    let entry = log["items"]
         .as_array()
-        .expect("audit array")
+        .expect("the audit log is a page: items, plus a cursor")
         .iter()
         .find(|e| e["action"] == "user.suspended")
         .expect("a suspension entry");
@@ -1826,13 +1826,19 @@ async fn unread_counts_track_reading_and_muting_is_separate() {
     .expect_status(StatusCode::CREATED);
     // Joining the room is what makes them a participant, which is what the
     // unread overview is keyed on.
+    //
+    // The status is asserted. This used to `POST` to `/participants` — which is
+    // a GET-only route — and discard the result, so the join 405'd, the reader
+    // never became a participant, and the real assertion below failed with a
+    // bare `None` that said nothing about why.
     api.send(
         "POST",
-        &format!("/api/v1/rooms/{room_id}/participants"),
+        &format!("/api/v1/rooms/{room_id}/join"),
         Some(&reader.access_token),
         Some(serde_json::json!({})),
     )
-    .await;
+    .await
+    .expect_status(StatusCode::OK);
 
     api.post_message(&owner, &room_id, "first").await;
     api.post_message(&owner, &room_id, "second").await;
@@ -1987,4 +1993,124 @@ async fn revoking_an_invite_closes_the_door() {
     )
     .await
     .expect_status(StatusCode::NOT_FOUND);
+}
+
+/// Khmer is written without spaces between words, so PostgreSQL's text search
+/// parser cannot find a boundary anywhere in a Khmer sentence and emits the
+/// whole thing as one token. Full-text search therefore matched a Khmer message
+/// only when the query was the entire message, character for character.
+///
+/// Search now runs a trigram-indexed substring match alongside the tsvector,
+/// which needs no word boundaries. This test is the guard on that: it is a
+/// property of the *parser*, so nothing in this repository failing to compile
+/// would tell you it had regressed — the search would simply go quiet again for
+/// every Khmer speaker.
+#[tokio::test]
+async fn khmer_search_finds_a_word_inside_an_unspaced_sentence() {
+    let Some(api) = boot().await else {
+        return skip("khmer_search_finds_a_word_inside_an_unspaced_sentence");
+    };
+
+    let sophea = api.register("sophea").await;
+    let community_id = api.create_community(&sophea, "ភ្នំពេញ").await;
+    let room_id = api
+        .create_room(&sophea, &community_id, "chat", "text")
+        .await;
+
+    // "I love the Khmer language" — four words, no spaces, one tsvector token.
+    let sentence = "ខ្ញុំស្រឡាញ់ភាសាខ្មែរ";
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{room_id}/messages"),
+        Some(&sophea.access_token),
+        Some(serde_json::json!({ "content": sentence })),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+
+    let search = |query: &'static str| {
+        let api = &api;
+        let token = sophea.access_token.clone();
+        async move {
+            api.send(
+                "GET",
+                &format!("/api/v1/search/messages?q={}", urlencode(query)),
+                Some(&token),
+                None,
+            )
+            .await
+            .expect_status(StatusCode::OK)
+            .json
+            .as_array()
+            .expect("search returns a bare array of messages")
+            .len()
+        }
+    };
+
+    // "the Khmer language" — a word in the middle of the sentence, which is
+    // exactly what the old tsvector-only search could not find.
+    assert_eq!(search("ភាសាខ្មែរ").await, 1, "a word inside the sentence");
+    // "love" — a word at the start, and one carrying a subscript cluster.
+    assert_eq!(search("ស្រឡាញ់").await, 1, "a verb inside the sentence");
+    // "sport" — genuinely absent, so substring matching must not invent a hit.
+    assert_eq!(search("កីឡា").await, 0, "a word that is not there");
+}
+
+/// A `%` typed into the search box is a character the user wants to find, not a
+/// wildcard. Unescaped it would make the substring half of search match every
+/// message in every room the caller belongs to.
+#[tokio::test]
+async fn a_wildcard_in_a_search_query_is_matched_literally() {
+    let Some(api) = boot().await else {
+        return skip("a_wildcard_in_a_search_query_is_matched_literally");
+    };
+
+    let alice = api.register("wildcard_alice").await;
+    let community_id = api.create_community(&alice, "Wildcards").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "chat", "text")
+        .await;
+
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{room_id}/messages"),
+        Some(&alice.access_token),
+        Some(serde_json::json!({ "content": "nothing special here" })),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+
+    let hits = api
+        .send(
+            "GET",
+            &format!("/api/v1/search/messages?q={}", urlencode("%")),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json
+        .as_array()
+        .expect("search returns a bare array of messages")
+        .len();
+
+    assert_eq!(hits, 0, "a bare % must not match every message");
+}
+
+/// Percent-encode a query string value.
+///
+/// Hand-rolled rather than pulling in a crate for it: the tests need it in
+/// exactly one shape, and Khmer is multi-byte, so the encoding has to be over
+/// bytes rather than characters.
+fn urlencode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() * 3);
+    for byte in value.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char)
+            }
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
 }
