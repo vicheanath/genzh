@@ -268,12 +268,21 @@ pub async fn reply_to_ticket(
     Path(ticket_id): Path<Uuid>,
     ApiJson(body): ApiJson<StaffReplyRequest>,
 ) -> ApiResult<Json<TicketMessage>> {
-    Ok(Json(
-        state
-            .support
-            .reply(staff.user_id, staff.role, ticket_id, &body.body, body.staff_only)
-            .await?,
-    ))
+    let msg = state
+        .support
+        .reply(staff.user_id, staff.role, ticket_id, &body.body, body.staff_only)
+        .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(staff.user_id),
+            genzh_domain::audit::AuditAction::TicketReplied,
+            format!("Staff reply on ticket {}", ticket_id),
+        )
+        .about("ticket", ticket_id),
+    ).await;
+
+    Ok(Json(msg))
 }
 
 /// `PATCH /api/v1/admin/tickets/{id}` body. Absent fields are left alone.
@@ -358,22 +367,31 @@ pub async fn open_ticket(
     caller: CurrentUser,
     ApiJson(body): ApiJson<OpenTicketRequest>,
 ) -> ApiResult<Json<Ticket>> {
-    Ok(Json(
-        state
-            .support
-            .open(
-                caller.user_id,
-                NewTicket {
-                    kind: body.kind,
-                    subject_type: body.subject_type,
-                    subject_id: body.subject_id,
-                    category: body.category,
-                    subject: body.subject,
-                    details: body.details,
-                },
-            )
-            .await?,
-    ))
+    let ticket = state
+        .support
+        .open(
+            caller.user_id,
+            NewTicket {
+                kind: body.kind,
+                subject_type: body.subject_type,
+                subject_id: body.subject_id,
+                category: body.category,
+                subject: body.subject,
+                details: body.details,
+            },
+        )
+        .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::TicketOpened,
+            format!("Ticket '{}' opened", ticket.subject),
+        )
+        .about("ticket", ticket.id),
+    ).await;
+
+    Ok(Json(ticket))
 }
 
 /// `GET /api/v1/support/tickets`
@@ -421,16 +439,25 @@ pub async fn reply_to_my_ticket(
     Path(ticket_id): Path<Uuid>,
     ApiJson(body): ApiJson<ReplyRequest>,
 ) -> ApiResult<Json<TicketMessage>> {
-    Ok(Json(
-        state
-            .support
-            .reply(
-                caller.user_id,
-                PlatformRole::User,
-                ticket_id,
-                &body.body,
-                false,
-            )
-            .await?,
-    ))
+    let msg = state
+        .support
+        .reply(
+            caller.user_id,
+            PlatformRole::User,
+            ticket_id,
+            &body.body,
+            false,
+        )
+        .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::TicketReplied,
+            format!("Reply on ticket {}", ticket_id),
+        )
+        .about("ticket", ticket_id),
+    ).await;
+
+    Ok(Json(msg))
 }

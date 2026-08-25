@@ -104,10 +104,20 @@ pub async fn callback(
     let user_info = oauth::exchange_code(provider, &state.config, &code).await?;
 
     let context = session_context(&headers);
-    let (_user, tokens) = state
+    let (user, tokens) = state
         .auth
         .login_or_register_oauth(user_info, context)
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(user.user.id),
+            genzh_domain::audit::AuditAction::UserOAuthLogin,
+            format!("User @{} signed in via {}", user.user.handle, key),
+        )
+        .by(&user.user.handle)
+        .about("user", user.user.id.as_uuid()),
+    ).await;
 
     let redirect_url = format!(
         "{}/oauth/callback#access_token={}&refresh_token={}",

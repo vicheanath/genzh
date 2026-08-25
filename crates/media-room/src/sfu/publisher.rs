@@ -130,6 +130,10 @@ impl PeerConnectionEventHandler for PublisherHandler {
             )),
         );
 
+        if !kind.is_audio() {
+            published.request_keyframe();
+        }
+
         self.spawn_pump(track, published.clone(), kind);
 
         if self

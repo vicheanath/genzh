@@ -96,6 +96,16 @@ pub async fn register(
         )
         .await?;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(user.user.id),
+            genzh_domain::audit::AuditAction::UserRegistered,
+            format!("User @{} registered", user.user.handle),
+        )
+        .by(&user.user.handle)
+        .about("user", user.user.id.as_uuid()),
+    ).await;
+
     Ok(Json(AuthResponse {
         user: UserResponse {
             id: user.user.id,
@@ -125,6 +135,16 @@ pub async fn login(
             session_context(&headers),
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(user.user.id),
+            genzh_domain::audit::AuditAction::UserLogin,
+            format!("User @{} logged in", user.user.handle),
+        )
+        .by(&user.user.handle)
+        .about("user", user.user.id.as_uuid()),
+    ).await;
 
     let platform_role = state.staff.role_of(user.user.id).await?;
 
@@ -162,6 +182,15 @@ pub async fn logout(
     ApiJson(body): ApiJson<RefreshRequest>,
 ) -> ApiResult<axum::http::StatusCode> {
     state.auth.logout(&body.refresh_token).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            None,
+            genzh_domain::audit::AuditAction::UserLogout,
+            "User signed out",
+        ),
+    ).await;
+
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
@@ -228,6 +257,15 @@ pub async fn update_profile(
             },
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::UserProfileUpdated,
+            format!("User updated their profile"),
+        )
+        .about("user", caller.user_id.as_uuid()),
+    ).await;
 
     Ok(Json(profile))
 }

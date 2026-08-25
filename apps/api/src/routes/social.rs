@@ -72,6 +72,15 @@ pub async fn request(
     };
     crate::notify::notify_friendship(&state, recipient, caller.user_id, kind).await;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::FriendRequested,
+            format!("Friend request to user {}", body.user_id),
+        )
+        .about("user", body.user_id.as_uuid()),
+    ).await;
+
     Ok((StatusCode::CREATED, Json(friendship)))
 }
 
@@ -99,6 +108,15 @@ pub async fn respond(
         .await;
     }
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::FriendResponded,
+            format!("Friend request from user {} responded (accept={})", requester_id, body.accept),
+        )
+        .about("user", requester_id.as_uuid()),
+    ).await;
+
     Ok(Json(friendship))
 }
 
@@ -109,6 +127,16 @@ pub async fn remove(
     Path(other_id): Path<UserId>,
 ) -> ApiResult<StatusCode> {
     state.social.remove_friend(caller.user_id, other_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::FriendRemoved,
+            format!("Friendship with user {} removed", other_id),
+        )
+        .about("user", other_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -127,6 +155,16 @@ pub async fn block(
     Path(other_id): Path<UserId>,
 ) -> ApiResult<StatusCode> {
     state.social.block(caller.user_id, other_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::UserBlocked,
+            format!("User {} blocked", other_id),
+        )
+        .about("user", other_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -137,5 +175,15 @@ pub async fn unblock(
     Path(other_id): Path<UserId>,
 ) -> ApiResult<StatusCode> {
     state.social.unblock(caller.user_id, other_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::UserUnblocked,
+            format!("User {} unblocked", other_id),
+        )
+        .about("user", other_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }

@@ -55,7 +55,7 @@ const MAX_CONSECUTIVE_WRITE_FAILURES: u32 = 500;
 
 /// How often a forwarding task retries payload-type discovery while it is
 /// still unresolved, in packets.
-const PT_RESOLVE_INTERVAL: u32 = 25;
+const PT_RESOLVE_INTERVAL: u32 = 5;
 
 /// Handles the subscriber connection's events: ICE and connection state.
 ///
@@ -321,6 +321,9 @@ fn spawn_forwarder(
                     if let Some(resolved) = resolve_payload_type(&sender, &codec.mime_type).await {
                         payload_type.store(resolved, Ordering::Relaxed);
                         pt = resolved;
+                        if is_video {
+                            source.request_keyframe();
+                        }
                     }
                 }
                 since_resolve_attempt = (since_resolve_attempt + 1) % PT_RESOLVE_INTERVAL;

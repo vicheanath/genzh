@@ -198,6 +198,15 @@ pub async fn post(
     let actor = (!is_anonymous).then_some(caller.user_id);
     crate::notify::notify_for_message(&state, &access.room, &message, actor).await;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            (!is_anonymous).then_some(caller.user_id),
+            genzh_domain::audit::AuditAction::MessageCreated,
+            format!("Message created in room {}", room_id),
+        )
+        .about("message", message.id.as_uuid()),
+    ).await;
+
     Ok((
         StatusCode::CREATED,
         Json(MessageView {
@@ -248,6 +257,15 @@ pub async fn edit(
         })
         .await;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            (!updated.is_anonymous).then_some(caller.user_id),
+            genzh_domain::audit::AuditAction::MessageEdited,
+            format!("Message {} edited in room {}", message_id, updated.room_id),
+        )
+        .about("message", message_id.as_uuid()),
+    ).await;
+
     Ok(Json(updated))
 }
 
@@ -264,6 +282,15 @@ pub async fn delete(
         .ok_or_else(|| genzh_infrastructure::ServiceError::not_found("message"))?;
 
     state.messaging.delete(message_id, caller.user_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::MessageRemoved,
+            format!("Message {} removed", message_id),
+        )
+        .about("message", message_id.as_uuid()),
+    ).await;
 
     state
         .broadcast(ChatServerEvent::MessageDeleted {
@@ -338,6 +365,16 @@ pub async fn pin(
     Path(message_id): Path<MessageId>,
 ) -> ApiResult<StatusCode> {
     state.messaging.pin(message_id, caller.user_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::MessagePinned,
+            format!("Message {} pinned", message_id),
+        )
+        .about("message", message_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -348,6 +385,16 @@ pub async fn unpin(
     Path(message_id): Path<MessageId>,
 ) -> ApiResult<StatusCode> {
     state.messaging.unpin(message_id, caller.user_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::MessageUnpinned,
+            format!("Message {} unpinned", message_id),
+        )
+        .about("message", message_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 

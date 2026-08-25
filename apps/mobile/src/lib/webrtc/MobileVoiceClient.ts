@@ -157,10 +157,10 @@ export class MobileVoiceClient {
         audio: false,
         video: {
           facingMode: facing,
-          width: { ideal: 1920, max: 1920 },
-          height: { ideal: 1080, max: 1080 },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
           aspectRatio: { ideal: 1.7777777778 },
-          frameRate: { ideal: 30 },
+          frameRate: { ideal: 30, max: 30 },
         },
       });
 
@@ -180,7 +180,7 @@ export class MobileVoiceClient {
         });
 
         this.cameraSender = this.publisher.addTrack(track, stream);
-        await this.applyVideoSenderParams(this.cameraSender, 2_500_000, 'balanced');
+        await this.applyVideoSenderParams(this.cameraSender, 2_500_000, 'maintain-resolution');
         await this.negotiatePublisher();
       }
 
@@ -588,13 +588,21 @@ export class MobileVoiceClient {
     this.subscriber.ontrack = (event: any) => {
       const stream = event.streams?.[0];
       if (stream) {
+        const participantId = stream.id;
         const track = event.track;
+        const isVideo = track?.kind === 'video';
         this.patch({
-          participants: this.state.participants.map((p) => ({
-            ...p,
-            stream: stream,
-            cameraStream: track?.kind === 'video' ? stream : p.cameraStream,
-          })),
+          participants: this.state.participants.map((p) => {
+            if (participantId && p.id !== participantId && this.state.participants.length > 1) {
+              return p;
+            }
+            return {
+              ...p,
+              stream: stream,
+              cameraStream: isVideo ? stream : p.cameraStream,
+              cameraOn: isVideo ? true : p.cameraOn,
+            };
+          }),
         });
       }
     };
@@ -722,6 +730,7 @@ export class MobileVoiceClient {
       }
       if (params.encodings[0]) {
         params.encodings[0].maxBitrate = maxBitrate;
+        params.encodings[0].maxFramerate = 30;
       }
       params.degradationPreference = degradationPreference;
       await sender.setParameters(params);

@@ -166,6 +166,16 @@ pub async fn create_community_room(
             },
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::RoomCreated,
+            format!("Room '{}' created in community {}", room.name, community_id),
+        )
+        .about("room", room.id.as_uuid()),
+    ).await;
+
     Ok((StatusCode::CREATED, Json(room)))
 }
 
@@ -195,6 +205,16 @@ pub async fn create_standalone_room(
             },
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::RoomCreated,
+            format!("Standalone room '{}' created", room.name),
+        )
+        .about("room", room.id.as_uuid()),
+    ).await;
+
     Ok((StatusCode::CREATED, Json(room)))
 }
 
@@ -368,6 +388,15 @@ pub async fn join(
         .await
         .unwrap_or(None);
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::RoomJoined,
+            format!("User joined room {}", room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
+
     Ok(Json(JoinRoomResponse {
         room,
         your_permissions: access.permissions.to_permissions(),
@@ -387,6 +416,15 @@ pub async fn set_persona(
         .set_persona(room_id, caller.user_id, body.is_anonymous)
         .await?;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::RoomPersonaChanged,
+            format!("Room persona set (anonymous={}) in room {}", body.is_anonymous, room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
+
     Ok(Json(participant))
 }
 
@@ -397,6 +435,16 @@ pub async fn leave(
     Path(room_id): Path<RoomId>,
 ) -> ApiResult<StatusCode> {
     state.rooms.leave(room_id, caller.user_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::RoomLeft,
+            format!("User left room {}", room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -433,6 +481,16 @@ pub async fn update(
             },
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::RoomUpdated,
+            format!("Room '{}' updated", room.name),
+        )
+        .about("room", room.id.as_uuid()),
+    ).await;
+
     Ok(Json(room))
 }
 
@@ -443,5 +501,15 @@ pub async fn delete(
     Path(room_id): Path<RoomId>,
 ) -> ApiResult<StatusCode> {
     state.rooms.delete(room_id, caller.user_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::RoomRemoved,
+            format!("Room {} deleted", room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }

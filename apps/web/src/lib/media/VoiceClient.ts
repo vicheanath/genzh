@@ -1079,6 +1079,7 @@ async function applyVideoSenderParameters(
     maxBitrate: number
     degradationPreference: RTCDegradationPreference
     scaleResolutionDownBy?: number
+    maxFramerate?: number
   },
 ): Promise<void> {
   try {
@@ -1089,6 +1090,9 @@ async function applyVideoSenderParameters(
     const encoding = params.encodings[0]
     if (encoding) {
       encoding.maxBitrate = options.maxBitrate
+      if (options.maxFramerate !== undefined) {
+        encoding.maxFramerate = options.maxFramerate
+      }
       if (options.scaleResolutionDownBy !== undefined) {
         encoding.scaleResolutionDownBy = options.scaleResolutionDownBy
       }
@@ -1103,10 +1107,10 @@ async function applyVideoSenderParameters(
 /** The camera equivalent of {@link captureAudio}, with the same fallback. */
 async function captureVideo(deviceId: string): Promise<MediaStream> {
   const video: MediaTrackConstraints = {
-    width: { ideal: 1920, max: 1920 },
-    height: { ideal: 1080, max: 1080 },
+    width: { ideal: 1280, max: 1920 },
+    height: { ideal: 720, max: 1080 },
     aspectRatio: { ideal: 1.7777777778 },
-    frameRate: { ideal: 30, max: 60 },
+    frameRate: { ideal: 30, max: 30 },
   }
   // The microphone is published separately and independently of this, so asking
   // for it here would open a second capture of the same device and fight with

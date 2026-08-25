@@ -4,9 +4,23 @@ use genzh_domain::audit::AuditAction;
 use genzh_domain::ids::UserId;
 use genzh_domain::platform::PlatformRole;
 use genzh_infrastructure::{DbPool, RepositoryError, ServiceError, ServiceResult};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::audit::{AuditLog, AuditRecord};
+
+/// System overview statistics for the admin dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminStats {
+    pub total_users: i64,
+    pub active_users: i64,
+    pub suspended_users: i64,
+    pub staff_users: i64,
+    pub open_tickets: i64,
+    pub resolved_tickets: i64,
+    pub total_communities: i64,
+    pub total_rooms: i64,
+    pub total_audit_entries: i64,
+}
 
 /// An account as staff see it.
 ///
@@ -239,5 +253,57 @@ impl StaffService {
             .await;
 
         self.find_user(target).await
+    }
+
+    /// System overview statistics for the admin dashboard.
+    pub async fn stats(&self) -> ServiceResult<AdminStats> {
+        let (total_users, active_users, suspended_users, staff_users): (i64, i64, i64, i64) =
+            sqlx::query_as(
+                "SELECT count(*)::bigint,
+                        count(*) FILTER (WHERE is_active = TRUE)::bigint,
+                        count(*) FILTER (WHERE is_active = FALSE)::bigint,
+                        count(*) FILTER (WHERE platform_role <> 'user')::bigint
+                 FROM users",
+            )
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::from)?;
+
+        let (open_tickets, resolved_tickets): (i64, i64) = sqlx::query_as(
+            "SELECT count(*) FILTER (WHERE status = 'open')::bigint,
+                    count(*) FILTER (WHERE status = 'resolved' OR status = 'closed')::bigint
+             FROM support_tickets",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        let (total_communities,): (i64,) = sqlx::query_as("SELECT count(*)::bigint FROM communities")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::from)?;
+
+        let (total_rooms,): (i64,) = sqlx::query_as("SELECT count(*)::bigint FROM rooms")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::from)?;
+
+        let (total_audit_entries,): (i64,) =
+            sqlx::query_as("SELECT count(*)::bigint FROM audit_log")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(RepositoryError::from)?;
+
+        Ok(AdminStats {
+            total_users,
+            active_users,
+            suspended_users,
+            staff_users,
+            open_tickets,
+            resolved_tickets,
+            total_communities,
+            total_rooms,
+            total_audit_entries,
+        })
     }
 }

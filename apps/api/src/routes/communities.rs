@@ -215,6 +215,15 @@ pub async fn create(
         )
         .await?;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityCreated,
+            format!("Community '{}' created", community.name),
+        )
+        .about("community", community.id.as_uuid()),
+    ).await;
+
     Ok((
         StatusCode::CREATED,
         Json(CommunityResponse {
@@ -275,6 +284,16 @@ pub async fn update(
             },
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityUpdated,
+            format!("Community '{}' updated", community.name),
+        )
+        .about("community", community.id.as_uuid()),
+    ).await;
+
     Ok(Json(community))
 }
 
@@ -288,6 +307,16 @@ pub async fn delete(
         .communities
         .delete(community_id, caller.user_id)
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityRemoved,
+            format!("Community {} deleted", community_id),
+        )
+        .about("community", community_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -320,6 +349,16 @@ pub async fn add_member(
         .communities
         .add_member(community_id, caller.user_id, target)
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityMemberJoined,
+            format!("User {} joined community {}", target, community_id),
+        )
+        .about("community", community_id.as_uuid()),
+    ).await;
+
     Ok((StatusCode::CREATED, Json(member)))
 }
 
@@ -333,6 +372,16 @@ pub async fn remove_member(
         .communities
         .remove_member(community_id, caller.user_id, user_id)
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityMemberRemoved,
+            format!("User {} removed from community {}", user_id, community_id),
+        )
+        .about("community", community_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -346,6 +395,16 @@ pub async fn remove_role(
         .roles
         .remove(community_id, caller.user_id, user_id, role_id)
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityRoleRevoked,
+            format!("Role {} revoked from user {} in community {}", role_id, user_id, community_id),
+        )
+        .about("community", community_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -382,6 +441,16 @@ pub async fn create_role(
             },
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityRoleCreated,
+            format!("Role '{}' created in community {}", role.role.name, community_id),
+        )
+        .about("role", role.role.id.as_uuid()),
+    ).await;
+
     Ok((StatusCode::CREATED, Json(RoleView::from(role))))
 }
 
@@ -412,6 +481,16 @@ pub async fn update_role(
             },
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityRoleUpdated,
+            format!("Role '{}' updated in community {}", role.role.name, community_id),
+        )
+        .about("role", role.role.id.as_uuid()),
+    ).await;
+
     Ok(Json(RoleView::from(role)))
 }
 
@@ -426,6 +505,16 @@ pub async fn assign_role(
         .roles
         .assign(community_id, caller.user_id, user_id, body.role_id)
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityRoleAssigned,
+            format!("Role {} assigned to user {} in community {}", body.role_id, user_id, community_id),
+        )
+        .about("community", community_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -538,6 +627,16 @@ pub async fn create_invite(
             body.max_uses,
         )
         .await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityInviteCreated,
+            format!("Invite created for community {}", community_id),
+        )
+        .about("community", community_id.as_uuid()),
+    ).await;
+
     Ok((StatusCode::CREATED, Json(invite)))
 }
 
@@ -579,6 +678,15 @@ pub async fn redeem_invite(
         .member_context(community_id, caller.user_id)
         .await?;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityInviteRedeemed,
+            format!("Invite redeemed for community {}", community_id),
+        )
+        .about("community", community_id.as_uuid()),
+    ).await;
+
     Ok(Json(CommunityResponse {
         community,
         your_permissions: context.permissions.to_permissions(),
@@ -592,5 +700,14 @@ pub async fn revoke_invite(
     Path(code): Path<String>,
 ) -> ApiResult<StatusCode> {
     state.invites.revoke(&code, caller.user_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CommunityInviteRevoked,
+            format!("Invite '{}' revoked", code),
+        ),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }

@@ -45,6 +45,15 @@ pub async fn join(
         .join(room_id, caller.user_id, user.profile.display_name)
         .await?;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::MediaSessionJoined,
+            format!("User joined media session in room {}", room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
+
     Ok(Json(response))
 }
 
@@ -58,6 +67,16 @@ pub async fn leave(
     Path(room_id): Path<RoomId>,
 ) -> ApiResult<StatusCode> {
     state.media.leave(room_id, caller.user_id).await?;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::MediaSessionLeft,
+            format!("User left media session in room {}", room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -103,6 +122,15 @@ pub async fn ring(
         })
         .await;
 
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CallStarted,
+            format!("Call started in room {}", room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -126,6 +154,15 @@ pub async fn end_call(
             reason: body.reason,
         })
         .await;
+
+    state.audit.record_best_effort(
+        genzh_admin::AuditRecord::new(
+            Some(caller.user_id),
+            genzh_domain::audit::AuditAction::CallEnded,
+            format!("Call ended in room {}", room_id),
+        )
+        .about("room", room_id.as_uuid()),
+    ).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
