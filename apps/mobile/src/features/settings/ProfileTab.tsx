@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Check } from 'lucide-react-native';
-import { auth as authApi, type CurrentUser } from '@genzh/shared';
+import { type CurrentUser } from '@genzh/shared';
 
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -9,7 +9,7 @@ import { Callout } from '../../components/Callout';
 import { Input } from '../../components/Input';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { primeProfile } from '../../lib/useProfiles';
+import { usePrimeProfile } from '../../lib/useProfiles';
 import { useColors } from '../../theme/ThemeContext';
 
 import { DEFAULT_ACCENT, PRESET_COLORS } from './tabs';
@@ -20,9 +20,10 @@ import { usePanel } from './styles';
 export function ProfileTab({ user }: { user: CurrentUser }) {
   const panel = usePanel();
   const c = useColors();
-  const { getToken, applyProfile } = useAuth();
+  const { updateProfile } = useAuth();
   const toast = useToast();
   const save = useSubmission();
+  const primeProfile = usePrimeProfile();
 
   const [displayName, setDisplayName] = useState(user.profile.display_name ?? '');
   const [bio, setBio] = useState(user.profile.bio ?? '');
@@ -41,7 +42,7 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
 
   async function onSubmit() {
     const updated = await save.run(async () =>
-      authApi.updateProfile(await getToken(), {
+      updateProfile({
         display_name: displayName.trim() || undefined,
         bio: bio.trim() || undefined,
         avatar_url: avatarUrl.trim() || undefined,
@@ -50,7 +51,6 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
     );
     if (!updated) return;
 
-    applyProfile(updated);
     // The transcript draws authors from the profile cache, so without this your
     // own name and avatar stay stale on your own messages until a reload.
     primeProfile({
@@ -64,6 +64,7 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
     });
     toast.success('Profile saved', 'Your changes are now visible to everyone.');
   }
+
 
   return (
     <ScrollView contentContainerStyle={panel.content} keyboardShouldPersistTaps="handled">

@@ -91,3 +91,123 @@ export function useLeaveCommunityMutation(token: string | null) {
     },
   })
 }
+
+export function useUpdateCommunityMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      communityId,
+      input,
+    }: {
+      communityId: Uuid
+      input: { name?: string; description?: string; icon_url?: string }
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return communities.update(token, communityId, input)
+    },
+    onSuccess: (_data, { communityId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.lists() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.detail(communityId) })
+    },
+  })
+}
+
+export function useDeleteCommunityMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (communityId: Uuid) => {
+      if (!token) throw new Error('Unauthenticated')
+      return communities.delete(token, communityId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.all })
+    },
+  })
+}
+
+export function useCreateRoleMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      communityId,
+      input,
+    }: {
+      communityId: Uuid
+      input: { name: string; color?: string; position?: number; permissions?: string[] }
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return communities.createRole(token, communityId, input)
+    },
+    onSuccess: (_data, { communityId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.roles(communityId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.detail(communityId) })
+    },
+  })
+}
+
+export function useUpdateRoleMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      communityId,
+      roleId,
+      input,
+    }: {
+      communityId: Uuid
+      roleId: Uuid
+      input: { name?: string; color?: string; position?: number; permissions?: string[] }
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return communities.updateRole(token, communityId, roleId, input)
+    },
+    onSuccess: (_data, { communityId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.roles(communityId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.detail(communityId) })
+    },
+  })
+}
+
+export function useAssignRoleMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      communityId,
+      userId,
+      roleId,
+    }: {
+      communityId: Uuid
+      userId: Uuid
+      roleId: Uuid
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return communities.assignRole(token, communityId, userId, roleId)
+    },
+    onSuccess: (_data, { communityId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.members(communityId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.detail(communityId) })
+    },
+  })
+}
+
+export function useRemoveRoleMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      communityId,
+      userId,
+      roleId,
+    }: {
+      communityId: Uuid
+      userId: Uuid
+      roleId: Uuid
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return communities.removeRole(token, communityId, userId, roleId)
+    },
+    onSuccess: (_data, { communityId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.members(communityId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.detail(communityId) })
+    },
+  })
+}
+

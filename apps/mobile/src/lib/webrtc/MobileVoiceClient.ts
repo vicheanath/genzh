@@ -340,6 +340,12 @@ export class MobileVoiceClient {
       session = await this.createSession();
     } catch (err: any) {
       this.patch({ status: 'failed', error: err?.message || 'Could not join media session' });
+      // Rethrown only on the first attempt, which is the one somebody is
+      // awaiting: opening the session is also what joins the room, so a room
+      // the caller cannot enter has to fail `join()` rather than settle it and
+      // leave the screen sitting in a call it never got into. A reconnect has
+      // no caller to reject to and keeps backing off.
+      if (this.reconnectAttempts === 0) throw err;
       return;
     }
 

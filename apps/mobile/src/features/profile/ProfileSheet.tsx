@@ -4,10 +4,10 @@ import { useNavigation } from '@react-navigation/native';
 import { MessageSquare, Shield, UserPlus } from 'lucide-react-native';
 import {
   useUserProfileQuery,
+  useOpenDMMutation,
+  useSendFriendRequestMutation,
+  useBlockUserMutation,
   ApiError,
-  blocks as blocksApi,
-  friends as friendsApi,
-  rooms as roomsApi,
 } from '@genzh/shared';
 
 import { Avatar } from '../../components/Avatar';
@@ -45,21 +45,24 @@ export function ProfileSheet() {
 function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void }) {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
-  const { token, getToken, user } = useAuth();
+  const { token, user } = useAuth();
   const navigation = useNavigation<any>();
   const toast = useToast();
   const confirm = useConfirm();
   const { isOnline } = usePresence();
 
   const profileQuery = useUserProfileQuery(token, userId);
-  const [busy, setBusy] = useState(false);
+  const openDMMutation = useOpenDMMutation(token);
+  const friendRequestMutation = useSendFriendRequestMutation(token);
+  const blockMutation = useBlockUserMutation(token);
 
   const isSelf = userId === user?.id;
+  const busy =
+    openDMMutation.isPending || friendRequestMutation.isPending || blockMutation.isPending;
 
   async function handleOpenDM() {
-    setBusy(true);
     try {
-      const room = await roomsApi.openDM(await getToken(), userId);
+      const room = await openDMMutation.mutateAsync(userId);
       onClose();
       navigation.navigate('RoomChat', {
         roomId: room.id,
@@ -70,23 +73,18 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
         'Could not start direct message',
         cause instanceof ApiError ? cause.message : undefined,
       );
-    } finally {
-      setBusy(false);
     }
   }
 
   async function handleSendFriendRequest() {
-    setBusy(true);
     try {
-      await friendsApi.request(await getToken(), userId);
+      await friendRequestMutation.mutateAsync(userId);
       toast.success('Friend request sent');
     } catch (cause) {
       toast.error(
         'Could not send request',
         cause instanceof ApiError ? cause.message : undefined,
       );
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -99,17 +97,15 @@ function ProfileCard({ userId, onClose }: { userId: string; onClose: () => void 
     });
     if (!yes) return;
 
-    setBusy(true);
     try {
-      await blocksApi.block(await getToken(), userId);
+      await blockMutation.mutateAsync(userId);
       toast.success('User blocked', 'They can no longer message or interact with you.');
       onClose();
     } catch (cause) {
       toast.error('Could not block user', cause instanceof ApiError ? cause.message : undefined);
-    } finally {
-      setBusy(false);
     }
   }
+
 
   if (profileQuery.isLoading) return <SkeletonRows rows={2} />;
 

@@ -3,7 +3,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Crown, UserMinus, X } from 'lucide-react-native';
 import {
   ApiError,
-  communities as communitiesApi,
   useCommunityDetailVM,
   DEFAULT_ACCENT,
   type CommunityWithPermissions,
@@ -37,7 +36,7 @@ export function MembersTab({
 }) {
   const panel = usePanel();
   const c = useColors();
-  const { token, getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const { isOnline } = usePresence();
@@ -54,11 +53,7 @@ export function MembersTab({
 
   async function assignRole(userId: Uuid, roleId: Uuid) {
     try {
-      await communitiesApi.assignRole(await getToken(), community.id, userId, roleId);
-      // Reloading is the point: the assignment used to succeed silently and
-      // leave the row exactly as it was, which is indistinguishable from having
-      // done nothing at all.
-      void vm.refetchMembers();
+      await vm.assignRole(userId, roleId);
       toast.success('Role assigned');
     } catch (cause) {
       toast.error('Could not assign role', cause instanceof ApiError ? cause.message : undefined);
@@ -67,8 +62,7 @@ export function MembersTab({
 
   async function removeRole(userId: Uuid, roleId: Uuid, roleName: string, name: string) {
     try {
-      await communitiesApi.removeRole(await getToken(), community.id, userId, roleId);
-      void vm.refetchMembers();
+      await vm.removeRole(userId, roleId);
       toast.success(`${roleName} removed from ${name}`);
     } catch (cause) {
       toast.error('Could not remove role', cause instanceof ApiError ? cause.message : undefined);
@@ -85,13 +79,13 @@ export function MembersTab({
     if (!ok) return;
 
     try {
-      await communitiesApi.leave(await getToken(), community.id, userId);
-      void vm.refetchMembers();
+      await vm.leave(userId);
       toast.success('Member removed');
     } catch (cause) {
       toast.error('Could not remove member', cause instanceof ApiError ? cause.message : undefined);
     }
   }
+
 
   /** Roles this member could still be given. */
   function assignable(userId: Uuid) {

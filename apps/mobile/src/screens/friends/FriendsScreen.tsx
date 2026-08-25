@@ -18,7 +18,7 @@ import {
   formatRelative,
   useBlockedUsersVM,
   useFriendsVM,
-  rooms as roomsApi,
+  useOpenDMMutation,
   type Uuid,
 } from '@genzh/shared';
 
@@ -50,7 +50,7 @@ import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 export function FriendsScreen({ navigation }: any) {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
-  const { token, getToken, user } = useAuth();
+  const { token, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const { isOnline } = usePresence();
@@ -70,6 +70,7 @@ export function FriendsScreen({ navigation }: any) {
   // list corrects itself instead of being patched by hand.
   const friendsVM = useFriendsVM(token);
   const blockedVM = useBlockedUsersVM(token);
+  const openDMMutation = useOpenDMMutation(token);
 
   const blockedUsers = blockedVM.blockedUsers;
 
@@ -85,7 +86,7 @@ export function FriendsScreen({ navigation }: any) {
 
   async function openDM(friendId: Uuid) {
     try {
-      const room = await roomsApi.openDM(await getToken(), friendId);
+      const room = await openDMMutation.mutateAsync(friendId);
       navigation.navigate('RoomChat', {
         roomId: room.id,
         roomName: lookup(friendId)?.display_name ?? room.name,
@@ -94,6 +95,7 @@ export function FriendsScreen({ navigation }: any) {
       toast.error('Could not start direct chat');
     }
   }
+
 
   async function sendRequest() {
     const id = addId.trim();

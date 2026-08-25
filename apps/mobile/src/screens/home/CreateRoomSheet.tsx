@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Lock, Sparkles } from 'lucide-react-native';
-import { ApiError, rooms as roomsApi, type RoomType } from '@genzh/shared';
+import { ApiError, useCreateStandaloneRoomMutation, type RoomType } from '@genzh/shared';
 
 import { Button } from '../../components/Button';
 import { Callout } from '../../components/Callout';
@@ -34,8 +34,9 @@ export function CreateRoomSheet({
 }: CreateRoomSheetProps) {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
+  const createMutation = useCreateStandaloneRoomMutation(token);
 
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
@@ -44,13 +45,11 @@ export function CreateRoomSheet({
   const [durationMinutes, setDurationMinutes] = useState('60');
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   function handleClose() {
     setName('');
     setTopic('');
     setError(null);
-    setBusy(false);
     onClose();
   }
 
@@ -58,9 +57,8 @@ export function CreateRoomSheet({
     if (!name.trim()) return;
 
     setError(null);
-    setBusy(true);
     try {
-      const room = await roomsApi.createStandalone(await getToken(), {
+      const room = await createMutation.mutateAsync({
         name: name.trim(),
         topic: topic.trim() || undefined,
         category,
@@ -78,10 +76,9 @@ export function CreateRoomSheet({
       onOpenRoom(room.id, room.name, room.room_type);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Could not create room');
-    } finally {
-      setBusy(false);
     }
   }
+
 
   return (
     <Sheet open={open} onOpenChange={(next) => !next && handleClose()}>
@@ -170,7 +167,7 @@ export function CreateRoomSheet({
           <Button
             title="Launch room"
             onPress={() => void handleCreate()}
-            loading={busy}
+            loading={createMutation.isPending}
             disabled={!name.trim()}
             style={styles.grow}
           />

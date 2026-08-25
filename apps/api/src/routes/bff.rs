@@ -219,12 +219,22 @@ pub async fn community_overview(
 
 /// `POST /api/v1/rooms/{id}/session`
 ///
-/// Opens a session in the room: metadata, participants, the first page of
-/// history and — for a media room — a freshly minted SFU token.
+/// Opens a session in the room: joins it, then returns metadata, participants,
+/// the first page of history and — for a media room — a freshly minted SFU
+/// token.
 ///
-/// This is a POST rather than a GET because it is not a safe read: entering a
-/// media room issues a credential. Reading a room without opening it stays on
-/// `GET /api/v1/rooms/{id}` and its sibling endpoints.
+/// This is a POST rather than a GET because it is not a safe read: opening a
+/// session enters the room, and in a media room it issues a credential.
+/// Reading a room without opening it stays on `GET /api/v1/rooms/{id}` and its
+/// sibling endpoints.
+///
+/// The join is part of the composition rather than a call the client makes
+/// first. Presence and the anonymous persona are established by joining, so a
+/// session that did not join would hand back a participant list the caller is
+/// missing from and a persona that does not exist yet — and the client would
+/// have to spend a second round-trip fixing both, which is the waterfall this
+/// layer exists to remove. `join` is idempotent, so re-opening a session in a
+/// room you are already in only refreshes `last_seen_at`.
 pub async fn open_room_session(
     current: CurrentUser,
     State(state): State<AppState>,
@@ -232,15 +242,15 @@ pub async fn open_room_session(
 ) -> ApiResult<Json<RoomSessionResponse>> {
     let user_id = current.user_id;
 
-    // 1. Room + permissions + persona
+    // 1. Join, which mints the persona, then read back permissions.
+    let (_, anonymous_identity) = state.rooms.join(room_id, user_id).await?;
     let access = state.rooms.visible_access(room_id, user_id).await?;
-    let anonymous_identity = state
-        .rooms
-        .get_anonymous_identity(room_id, user_id)
-        .await
-        .unwrap_or(None);
 
-    // 2. Participants
+    // The room is now somewhere they already are, so it should stop being
+    // offered to them — the same bookkeeping `POST /rooms/{id}/join` does.
+    state.recommend.forget(user_id.into());
+
+    // 2. Participants, listed after the join so the caller is in their own roster.
     let participants = state.rooms.list_participants(room_id).await?;
 
     // 3. Recent messages
@@ -303,6 +313,18 @@ pub async fn open_room_session(
         }
         _ => None,
     };
+
+    state
+        .audit
+        .record_best_effort(
+            genzh_admin::AuditRecord::new(
+                Some(user_id),
+                genzh_domain::audit::AuditAction::RoomJoined,
+                format!("User opened a session in room {}", room_id),
+            )
+            .about("room", room_id.as_uuid()),
+        )
+        .await;
 
     Ok(Json(RoomSessionResponse {
         room: RoomResponse {

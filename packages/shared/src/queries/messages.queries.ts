@@ -80,3 +80,42 @@ export function useRemoveReactionMutation(token: string | null) {
     },
   })
 }
+
+export function useEditMessageMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      messageId,
+      content,
+    }: {
+      roomId: Uuid
+      messageId: Uuid
+      content: string
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return messages.edit(token, messageId, content)
+    },
+    onSuccess: (_updatedMessage, { roomId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.messages.list(roomId) })
+    },
+  })
+}
+
+export function useDeleteMessageMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      messageId,
+    }: {
+      roomId: Uuid
+      messageId: Uuid
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return messages.remove(token, messageId)
+    },
+    onSuccess: (_data, { roomId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.messages.list(roomId) })
+    },
+  })
+}
+

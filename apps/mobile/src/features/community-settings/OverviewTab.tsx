@@ -3,7 +3,7 @@ import { ScrollView, Text, TextInput, View } from 'react-native';
 import { Trash2 } from 'lucide-react-native';
 import {
   ApiError,
-  communities as communitiesApi,
+  useCommunityDetailVM,
   type CommunityWithPermissions,
 } from '@genzh/shared';
 
@@ -37,23 +37,22 @@ export function OverviewTab({
   onDeleted?: () => void;
 }) {
   const panel = usePanel();
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
+  const vm = useCommunityDetailVM(token, community.id);
 
   const [name, setName] = useState(community.name);
   const [description, setDescription] = useState(community.description ?? '');
   const [iconUrl, setIconUrl] = useState(community.icon_url ?? '');
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const editable = abilities.community;
 
   async function save() {
     setError(null);
-    setSaving(true);
     try {
-      await communitiesApi.update(await getToken(), community.id, {
+      await vm.updateCommunity({
         name: name.trim() || undefined,
         description: description.trim() || undefined,
         icon_url: iconUrl.trim() || undefined,
@@ -62,8 +61,6 @@ export function OverviewTab({
       onUpdated?.();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Could not save server settings');
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -78,13 +75,14 @@ export function OverviewTab({
     if (!ok) return;
 
     try {
-      await communitiesApi.delete(await getToken(), community.id);
+      await vm.deleteCommunity();
       toast.success('Server deleted');
       onDeleted?.();
     } catch (cause) {
       toast.error('Could not delete server', cause instanceof ApiError ? cause.message : undefined);
     }
   }
+
 
   return (
     <ScrollView contentContainerStyle={panel.content} keyboardShouldPersistTaps="handled">
@@ -139,7 +137,7 @@ export function OverviewTab({
         />
 
         {editable ? (
-          <Button title="Save changes" onPress={() => void save()} loading={saving} />
+          <Button title="Save changes" onPress={() => void save()} loading={vm.isUpdatingCommunity} />
         ) : null}
       </View>
 

@@ -15,10 +15,14 @@ import {
   ApiError,
   can,
   useRoomQuery,
+  useSendMessageMutation,
+  useAddReactionMutation,
+  useRemoveReactionMutation,
+  useEditMessageMutation,
+  useDeleteMessageMutation,
   formatClock,
   formatDayDivider,
   MENTION,
-  messages as messagesApi,
   QUICK_REACTIONS,
   type ChatServerEvent,
   type Message,
@@ -62,7 +66,7 @@ export function RoomChatScreen({ route, navigation }: any) {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { roomId, roomName } = route.params ?? {};
-  const { token, getToken, user } = useAuth();
+  const { token, user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const openProfile = useAppStore((s) => s.openProfile);
@@ -72,6 +76,11 @@ export function RoomChatScreen({ route, navigation }: any) {
   const anonByDefault = useAppStore((s) => s.isAnonymousByDefault);
 
   const roomQuery = useRoomQuery(token, roomId);
+  const sendMutation = useSendMessageMutation(token);
+  const addReactionMutation = useAddReactionMutation(token);
+  const removeReactionMutation = useRemoveReactionMutation(token);
+  const editMutation = useEditMessageMutation(token);
+  const deleteMutation = useDeleteMessageMutation(token);
 
   const history = useMessageHistory(roomId);
   const { setItems } = history;
@@ -169,7 +178,7 @@ export function RoomChatScreen({ route, navigation }: any) {
   const send = useCallback(
     async (content: string) => {
       try {
-        await messagesApi.post(await getToken(), roomId, content, isAnonymous);
+        await sendMutation.mutateAsync({ roomId, content, isAnonymous });
         // The socket echoes the stored message back, so nothing is appended
         // here — doing both would show it twice until the merge deduplicated.
       } catch (cause) {
@@ -179,7 +188,7 @@ export function RoomChatScreen({ route, navigation }: any) {
         );
       }
     },
-    [getToken, roomId, isAnonymous, toast],
+    [sendMutation, roomId, isAnonymous, toast],
   );
 
   const onTyping = useCallback(() => {
@@ -202,10 +211,9 @@ export function RoomChatScreen({ route, navigation }: any) {
       );
 
       try {
-        const token = await getToken();
         const reactions = active
-          ? await messagesApi.unreact(token, messageId, emoji)
-          : await messagesApi.react(token, messageId, emoji);
+          ? await removeReactionMutation.mutateAsync({ roomId, messageId, reaction: emoji })
+          : await addReactionMutation.mutateAsync({ roomId, messageId, reaction: emoji });
         setItems((current) =>
           current.map((message) =>
             message.id === messageId ? { ...message, reactions } : message,
@@ -222,14 +230,18 @@ export function RoomChatScreen({ route, navigation }: any) {
         toast.error('Could not react', cause instanceof ApiError ? cause.message : undefined);
       }
     },
-    [getToken, setItems, toast],
+    [roomId, addReactionMutation, removeReactionMutation, setItems, toast],
   );
 
   const submitEdit = useCallback(
     async (content: string) => {
       if (!editing) return;
       try {
-        const updated = await messagesApi.edit(await getToken(), editing.id, content);
+        const updated = await editMutation.mutateAsync({
+          roomId,
+          messageId: editing.id,
+          content,
+        });
         setItems((current) =>
           current.map((message) =>
             message.id === updated.id
@@ -244,7 +256,7 @@ export function RoomChatScreen({ route, navigation }: any) {
         toast.error('Could not edit', cause instanceof ApiError ? cause.message : undefined);
       }
     },
-    [editing, getToken, setItems, toast],
+    [editing, editMutation, roomId, setItems, toast],
   );
 
   const removeMessage = useCallback(
@@ -258,15 +270,16 @@ export function RoomChatScreen({ route, navigation }: any) {
       if (!ok) return;
 
       try {
-        await messagesApi.remove(await getToken(), messageId);
+        await deleteMutation.mutateAsync({ roomId, messageId });
         setItems((current) => current.filter((message) => message.id !== messageId));
         toast.success('Message deleted');
       } catch (cause) {
         toast.error('Could not delete', cause instanceof ApiError ? cause.message : undefined);
       }
     },
-    [confirm, getToken, setItems, toast],
+    [confirm, deleteMutation, roomId, setItems, toast],
   );
+
 
   if (roomQuery.isLoading) return <LoadingPanel label="Opening room" />;
 

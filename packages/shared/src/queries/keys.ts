@@ -14,6 +14,14 @@ export const queryKeys = {
     all: ['users'] as const,
     detail: (id: Uuid) => [...queryKeys.users.all, 'detail', id] as const,
     blocked: () => [...queryKeys.users.all, 'blocked'] as const,
+    /**
+     * One entry per *set* of ids a screen asked for.
+     *
+     * The profiles themselves live under `detail`, one per person; this only
+     * records that a particular list has been resolved, so a re-render with the
+     * same ids is a cache hit rather than a fan-out.
+     */
+    batch: (ids: Uuid[]) => [...queryKeys.users.all, 'batch', [...ids].sort().join(',')] as const,
   },
   communities: {
     all: ['communities'] as const,
@@ -49,5 +57,16 @@ export const queryKeys = {
   notifications: {
     all: ['notifications'] as const,
     list: () => [...queryKeys.notifications.all, 'list'] as const,
+  },
+  /**
+   * The composite views.
+   *
+   * Kept apart from the per-resource keys above because they answer a *screen*
+   * rather than a table: invalidating `rooms.detail` should not throw away a
+   * room session whose media credential took a round-trip to mint.
+   */
+  bff: {
+    all: ['bff'] as const,
+    roomSession: (id: Uuid) => [...queryKeys.bff.all, 'room', id, 'session'] as const,
   },
 } as const

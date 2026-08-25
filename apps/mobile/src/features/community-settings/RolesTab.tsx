@@ -3,7 +3,6 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Check, Plus } from 'lucide-react-native';
 import {
   ApiError,
-  communities as communitiesApi,
   useCommunityDetailVM,
   ACCENT_COLORS,
   DEFAULT_ACCENT,
@@ -40,7 +39,7 @@ export function RolesTab({
   const styles = useThemedStyles(makeStyles);
   const panel = usePanel();
   const c = useColors();
-  const { token, getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
 
   const vm = useCommunityDetailVM(token, community.id);
@@ -50,28 +49,24 @@ export function RolesTab({
   const [granted, setGranted] = useState<Set<Permission>>(
     () => new Set(DEFAULT_NEW_ROLE_PERMISSIONS),
   );
-  const [creating, setCreating] = useState(false);
 
   async function create() {
     if (!name.trim()) return;
 
-    setCreating(true);
     try {
-      await communitiesApi.createRole(await getToken(), community.id, {
+      await vm.createRole({
         name: name.trim(),
         color,
         permissions: [...granted],
       });
       setName('');
       setGranted(new Set(DEFAULT_NEW_ROLE_PERMISSIONS));
-      void vm.refetchCommunity();
       toast.success('Role created');
     } catch (cause) {
       toast.error('Could not create role', cause instanceof ApiError ? cause.message : undefined);
-    } finally {
-      setCreating(false);
     }
   }
+
 
   function toggle(permission: Permission, on: boolean) {
     setGranted((current) => {
@@ -145,7 +140,7 @@ export function RolesTab({
           <Button
             title="Create role"
             onPress={() => void create()}
-            loading={creating}
+            loading={vm.isCreatingRole}
             disabled={!name.trim()}
             icon={<Plus size={15} color={c.accentContrast} />}
           />

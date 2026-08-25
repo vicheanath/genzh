@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { rooms } from '../api/endpoints'
-import type { RoomType, RoomVisibility, Uuid } from '../api/types'
+import type { RoomStatus, RoomType, RoomVisibility, Uuid } from '../api/types'
 import { queryKeys } from './keys'
 
 export interface CreateStandaloneRoomInput {
@@ -79,14 +79,32 @@ export function useMyRoomsQuery(token: string | null) {
   })
 }
 
-export function useRoomParticipantsQuery(token: string | null, roomId: Uuid | null | undefined) {
+export interface RoomParticipantsOptions {
+  /** Held off by the caller — a call only wants the roster once it is in. */
+  enabled?: boolean
+  /**
+   * Reconcile on a timer as well as on socket events.
+   *
+   * Only a call asks for this. The socket already reports arrivals and
+   * departures, so the poll is there to catch a role change or a missed frame,
+   * not to be the source of truth.
+   */
+  refetchInterval?: number
+}
+
+export function useRoomParticipantsQuery(
+  token: string | null,
+  roomId: Uuid | null | undefined,
+  { enabled = true, refetchInterval }: RoomParticipantsOptions = {},
+) {
   return useQuery({
     queryKey: roomId ? queryKeys.rooms.participants(roomId) : ['rooms', 'participants', null],
     queryFn: () => {
       if (!token || !roomId) throw new Error('Missing token or roomId')
       return rooms.participants(token, roomId)
     },
-    enabled: Boolean(token && roomId),
+    enabled: enabled && Boolean(token && roomId),
+    refetchInterval,
   })
 }
 
@@ -128,3 +146,45 @@ export function useDeleteRoomMutation(token: string | null) {
     },
   })
 }
+
+export function useOpenDMMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (targetUserId: Uuid) => {
+      if (!token) throw new Error('Unauthenticated')
+      return rooms.openDM(token, targetUserId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rooms.mine() })
+    },
+  })
+}
+
+export function useUpdateRoomMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      roomId,
+      input,
+    }: {
+      roomId: Uuid
+      input: {
+        name?: string
+        topic?: string
+        category?: string
+        visibility?: RoomVisibility
+        status?: RoomStatus
+        position?: number
+        max_participants?: number
+      }
+    }) => {
+      if (!token) throw new Error('Unauthenticated')
+      return rooms.update(token, roomId, input)
+    },
+    onSuccess: (_room, { roomId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.rooms.detail(roomId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all })
+    },
+  })
+}
+

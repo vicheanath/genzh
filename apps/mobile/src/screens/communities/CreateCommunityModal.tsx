@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { X } from 'lucide-react-native';
-import { ApiError, communities } from '@genzh/shared';
+import { ApiError, useCreateCommunityMutation } from '@genzh/shared';
 import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
@@ -26,12 +26,13 @@ interface Props {
 export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
+  const createMutation = useCreateCommunityMutation(token);
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [iconUrl, setIconUrl] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -39,9 +40,8 @@ export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
       return;
     }
 
-    setLoading(true);
     try {
-      await communities.create(await getToken(), {
+      await createMutation.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
         icon_url: iconUrl.trim() || undefined,
@@ -56,10 +56,9 @@ export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
         'Could not create community',
         cause instanceof ApiError ? cause.message : undefined,
       );
-    } finally {
-      setLoading(false);
     }
   };
+
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -102,7 +101,7 @@ export function CreateCommunityModal({ visible, onClose, onCreated }: Props) {
             <Button
               title="Create"
               onPress={handleCreate}
-              loading={loading}
+              loading={createMutation.isPending}
               style={{ flex: 1, marginLeft: 12 }}
             />
           </View>

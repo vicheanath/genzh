@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, useRef } from 'react';
 import {
-  media as mediaApi,
   useCallVM,
+  useOpenRoomSessionMutation,
   type CallCapabilities,
   type CallVM,
   type Uuid,
@@ -30,6 +30,11 @@ import { MobileVoiceClient } from '../lib/webrtc/MobileVoiceClient';
  * client, what this build is capable of, and the two device settings the SFU
  * has no opinion about.
  *
+ * The fourth thing it supplies is where a media credential comes from, and that
+ * is now the room session: one `POST /rooms/{id}/session` that joins the room,
+ * mints the SFU token and hands back the roster together, instead of the three
+ * sequential requests a call used to open with.
+ *
  * Deafen and speakerphone are those two. Neither is a call concept: deafening
  * is a local output decision and speakerphone is a routing one, so both stay in
  * the persisted device store where they survive between calls, rather than
@@ -48,7 +53,7 @@ export interface VoiceContextValue extends CallVM {
 const VoiceContext = createContext<VoiceContextValue | null>(null);
 
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
-  const { token, user, getToken } = useAuth();
+  const { token, user } = useAuth();
 
   const deafened = useAppStore((s) => s.isDeafened);
   const speakerphone = useAppStore((s) => s.speakerphone);
@@ -60,12 +65,28 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   // at the moment it connects.
   const roomIdRef = useRef<Uuid | null>(null);
 
+  const openSession = useOpenRoomSessionMutation(token);
+
+  // Read inside the session factory, which is built once and must not close
+  // over a mutation object that changes identity on every settle.
+  const openSessionRef = useRef(openSession);
+  openSessionRef.current = openSession;
+
   const clientRef = useRef<MobileVoiceClient | null>(null);
   if (!clientRef.current) {
     clientRef.current = new MobileVoiceClient(async () => {
       const roomId = roomIdRef.current;
       if (!roomId) throw new Error('No active voice room');
-      return mediaApi.join(await getToken(), roomId);
+
+      // Called again on every reconnect, which is why this re-opens the session
+      // rather than replaying a cached one: a media token expires, and a
+      // reconnect that presented a spent credential would be refused. Opening
+      // is idempotent — the join behind it only refreshes `last_seen_at`.
+      const session = await openSessionRef.current.mutateAsync(roomId);
+      if (!session.media_session) {
+        throw new Error('This room does not carry a call');
+      }
+      return session.media_session;
     });
   }
 

@@ -1,5 +1,6 @@
 export * from './keys'
 export * from './auth.queries'
+export * from './bff.queries'
 export * from './communities.queries'
 export * from './rooms.queries'
 export * from './messages.queries'

@@ -1,9 +1,12 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { ApiError } from '../api/client'
 import { media as mediaApi, rooms as roomsApi } from '../api/endpoints'
 import type { RoomParticipant, RoomParticipantRole, Uuid } from '../api/types'
 import type { CallClient, CallClientState, CameraFacing } from '../media/client'
+import { queryKeys } from '../queries/keys'
+import { useRoomParticipantsQuery } from '../queries/rooms.queries'
 
 /**
  * One person in the call, with both halves of the truth about them.
@@ -93,8 +96,9 @@ export function useCallVM({
   const [activeRoomName, setActiveRoomName] = useState<string | null>(null)
   const [joinState, setJoinState] = useState<'idle' | 'joining' | 'joined'>('idle')
   const [joinError, setJoinError] = useState<string | null>(null)
-  const [roster, setRoster] = useState<RoomParticipant[]>([])
   const [duration, setDuration] = useState(0)
+
+  const queryClient = useQueryClient()
 
   // One snapshot of the client, kept in sync by its own subscription. The
   // client is the writer; nothing here sets these fields directly.
@@ -106,25 +110,35 @@ export function useCallVM({
   }, [client])
 
   // ── the roster ────────────────────────────────────────────────────────────
-  // Slower than it was: the socket already reports joins and leaves as they
-  // happen, so this only has to catch a role change or a missed event.
+  //
+  // Read from the query cache rather than fetched here. Opening the room
+  // session already returned the participant list and wrote it under this key,
+  // so by the time the join settles the roster is present without a request of
+  // its own — the waterfall this used to run is now one round-trip that
+  // happened during `client.join()`.
+  //
+  // Held off until `joined` for the same reason: enabling it while the session
+  // is still in flight would fetch exactly what that response is about to
+  // deliver. The interval is slower than the socket, which reports arrivals and
+  // departures as they happen; this only has to catch a role change or a
+  // missed frame.
 
+  const participantsQuery = useRoomParticipantsQuery(token, activeRoomId, {
+    enabled: joinState === 'joined',
+    refetchInterval: ROSTER_INTERVAL_MS,
+  })
+
+  const roster = useMemo<RoomParticipant[]>(
+    () => participantsQuery.data ?? [],
+    [participantsQuery.data],
+  )
+
+  const { refetch: refetchRoster } = participantsQuery
   const refreshRoster = useCallback(async () => {
-    if (!activeRoomId || !token) return
-    try {
-      setRoster(await roomsApi.participants(token, activeRoomId))
-    } catch {
-      // Dropped polls reconcile on the next tick; a roster that failed to
-      // refresh is not worth interrupting a call for.
-    }
-  }, [activeRoomId, token])
-
-  useEffect(() => {
-    if (joinState !== 'joined') return
-    void refreshRoster()
-    const timer = setInterval(() => void refreshRoster(), ROSTER_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [joinState, refreshRoster])
+    // A roster that failed to refresh is not worth interrupting a call for; the
+    // next interval tick reconciles it.
+    await refetchRoster().catch(() => undefined)
+  }, [refetchRoster])
 
   // ── the clock ─────────────────────────────────────────────────────────────
 
@@ -221,12 +235,11 @@ export function useCallVM({
         if (!token) throw new Error('Not signed in')
         await requestMicrophone?.()
 
-        await roomsApi.join(token, roomId).catch((cause: unknown) => {
-          // Already in the room is not a failure to join it.
-          if (cause instanceof ApiError && cause.code === 'CONFLICT') return
-          throw cause
-        })
-
+        // One round-trip, inside `client.join()`. The client asks its session
+        // factory for a credential, and that factory opens the room session —
+        // which joins the room, mints the SFU token and returns the roster in
+        // the same response. There is no separate `rooms.join` here any more,
+        // and no participants fetch: both were folded into that call.
         await client.join()
         setJoinState('joined')
       } catch (cause) {
@@ -244,7 +257,6 @@ export function useCallVM({
     setActiveRoomName(null)
     setJoinState('idle')
     setJoinError(null)
-    setRoster([])
 
     await client.leave()
 
@@ -256,7 +268,15 @@ export function useCallVM({
       // The session is already torn down locally; a failed tidy-up on the
       // server reconciles when the socket drops.
     }
-  }, [activeRoomId, token, client])
+
+    // Whatever the session seeded is now wrong: the roster still lists this
+    // user, and the credential in it is spent. Dropped rather than refetched —
+    // nothing is looking at this room any more, and re-opening it is a POST
+    // that would join it again.
+    queryClient.removeQueries({ queryKey: queryKeys.bff.roomSession(roomId) })
+    queryClient.invalidateQueries({ queryKey: queryKeys.rooms.participants(roomId) })
+    queryClient.invalidateQueries({ queryKey: queryKeys.rooms.mine() })
+  }, [activeRoomId, token, client, queryClient])
 
   const toggleMute = useCallback(() => {
     client.setMuted(!media.muted)

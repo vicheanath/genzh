@@ -3,7 +3,6 @@ import { ScrollView, Text, View } from 'react-native';
 import { Plus, Trash2 } from 'lucide-react-native';
 import {
   ApiError,
-  rooms as roomsApi,
   useCommunityDetailVM,
   type CommunityWithPermissions,
   type RoomType,
@@ -47,7 +46,7 @@ export function ChannelsTab({
 }) {
   const panel = usePanel();
   const c = useColors();
-  const { token, getToken } = useAuth();
+  const { token } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -56,29 +55,24 @@ export function ChannelsTab({
   const [name, setName] = useState('');
   const [type, setType] = useState<RoomType>('text');
   const [topic, setTopic] = useState('');
-  const [creating, setCreating] = useState(false);
 
   async function create() {
     if (!name.trim()) return;
 
-    setCreating(true);
     try {
-      await roomsApi.create(await getToken(), community.id, {
+      await vm.createRoom({
         name: name.trim(),
         room_type: type,
         topic: topic.trim() || undefined,
       });
       setName('');
       setTopic('');
-      void vm.refetchRooms();
       toast.success('Channel created');
     } catch (cause) {
       toast.error(
         'Could not create channel',
         cause instanceof ApiError ? cause.message : undefined,
       );
-    } finally {
-      setCreating(false);
     }
   }
 
@@ -92,8 +86,7 @@ export function ChannelsTab({
     if (!ok) return;
 
     try {
-      await roomsApi.delete(await getToken(), roomId);
-      void vm.refetchRooms();
+      await vm.deleteRoom(roomId);
       toast.success('Channel deleted');
     } catch (cause) {
       toast.error(
@@ -102,6 +95,7 @@ export function ChannelsTab({
       );
     }
   }
+
 
   return (
     <ScrollView contentContainerStyle={panel.content} keyboardShouldPersistTaps="handled">
@@ -141,7 +135,7 @@ export function ChannelsTab({
           <Button
             title="Create channel"
             onPress={() => void create()}
-            loading={creating}
+            loading={vm.isCreatingRoom}
             disabled={!name.trim()}
             icon={<Plus size={15} color={c.accentContrast} />}
           />
