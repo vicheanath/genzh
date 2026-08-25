@@ -8,7 +8,16 @@ import type { SettingsTab } from '@/features/settings'
 interface AppState {
   // User settings modal
   userSettingsOpen: boolean
-  userSettingsTab: SettingsTab
+  /**
+   * The tab the caller asked for, or `null` for "just open settings".
+   *
+   * The distinction matters on a phone, where settings is a drill-down: with no
+   * destination in mind you land on the menu, and a caller that names a tab —
+   * "manage your devices" — goes straight to it. Defaulting to `profile` here
+   * collapsed the two, so every route into settings arrived already one level
+   * deep with no way to tell it was not asked for.
+   */
+  userSettingsTab: SettingsTab | null
   openUserSettings: (tab?: SettingsTab) => void
   closeUserSettings: () => void
 
@@ -115,9 +124,8 @@ const initialDevices = getInitialDevices()
 
 export const useAppStore = create<AppState>((set) => ({
   userSettingsOpen: false,
-  userSettingsTab: 'profile',
-  openUserSettings: (tab = 'profile') =>
-    set({ userSettingsOpen: true, userSettingsTab: tab }),
+  userSettingsTab: null,
+  openUserSettings: (tab) => set({ userSettingsOpen: true, userSettingsTab: tab ?? null }),
   closeUserSettings: () => set({ userSettingsOpen: false }),
 
   addCommunityOpen: false,

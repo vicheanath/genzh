@@ -1,33 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
-import {
-  BanIcon,
-  ChevronDownIcon,
-  HeadphonesIcon,
-  LockIcon,
-  SignOutIcon,
-  SunIcon,
-  UsersIcon,
-} from '@/components/Icons'
+import { ChevronDownIcon, SignOutIcon } from '@/components/Icons'
 import { useAuth } from '@/lib/auth'
 import { useAppStore } from '@/lib/store'
-import type { SettingsTab } from '@/features/settings'
+import { SETTINGS_TABS } from '@/features/settings'
 
 import styles from './MobilePages.module.css'
-
-const SECTIONS: ReadonlyArray<{
-  tab: SettingsTab
-  label: string
-  hint: string
-  icon: typeof UsersIcon
-}> = [
-  { tab: 'profile', label: 'Profile', hint: 'Name, avatar, accent', icon: UsersIcon },
-  { tab: 'anonymous', label: 'Anonymous persona', hint: 'Your masked identity', icon: LockIcon },
-  { tab: 'voice', label: 'Voice & video', hint: 'Microphone, camera, output', icon: HeadphonesIcon },
-  { tab: 'appearance', label: 'Appearance', hint: 'Theme', icon: SunIcon },
-  { tab: 'blocked', label: 'Blocked users', hint: 'Who cannot reach you', icon: BanIcon },
-]
 
 /**
  * You, as a screen.
@@ -39,6 +18,11 @@ const SECTIONS: ReadonlyArray<{
  *
  * The settings themselves stay in the existing modal rather than being
  * duplicated as mobile screens: one implementation, opened at the right tab.
+ *
+ * The menu is rendered from `SETTINGS_TABS` for the same reason. It used to be
+ * a second hand-written list here, and it had already drifted: "My Account" was
+ * missing from it entirely, so on a phone there was no way to reach your own
+ * e-mail and password from the screen named after your account.
  */
 export function AccountRoute() {
   const { user, logout } = useAuth()
@@ -66,12 +50,12 @@ export function AccountRoute() {
 
       <div className={styles.pageBody}>
         <nav className={styles.menu} aria-label="Settings">
-          {SECTIONS.map(({ tab, label, hint, icon: Icon }) => (
+          {SETTINGS_TABS.map(({ id, label, hint, icon: Icon }) => (
             <button
-              key={tab}
+              key={id}
               type="button"
               className={styles.menuItem}
-              onClick={() => openUserSettings(tab)}
+              onClick={() => openUserSettings(id)}
             >
               <span className={styles.menuIcon}>
                 <Icon size={17} />

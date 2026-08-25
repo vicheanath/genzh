@@ -1,7 +1,7 @@
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useEffect, useState } from 'react'
 
-import { SignOutIcon, XIcon } from '@/components/Icons'
+import { ArrowLeftIcon, SignOutIcon, XIcon } from '@/components/Icons'
 import { Tabs } from '@/components/Tabs'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
@@ -20,8 +20,18 @@ export type { SettingsTab }
 
 interface UserSettingsModalProps {
   open: boolean
-  initialTab?: SettingsTab
+  /** A specific destination, or omitted for "just open settings". */
+  initialTab?: SettingsTab | null
   onClose: () => void
+}
+
+/** The label for a tab id, for the mobile header. */
+function labelOf(tab: SettingsTab): string {
+  for (const group of SETTINGS_GROUPS) {
+    const found = group.tabs.find((candidate) => candidate.id === tab)
+    if (found) return found.label
+  }
+  return 'Settings'
 }
 
 /**
@@ -39,21 +49,50 @@ interface UserSettingsModalProps {
  * tab list over panels in this dialog. Base UI wires the real relationship —
  * `aria-controls`/`aria-labelledby` in both directions — and gives the column
  * arrow-key navigation as one tab stop instead of six.
+ *
+ * # Two shapes, one tree
+ *
+ * On a wide screen this is a sidebar beside a panel. On a phone it is a
+ * *drill-down*: the menu fills the screen, tapping an entry slides to that
+ * panel, and a back button returns. Both fall out of the same markup — only
+ * `data-view` changes, and the stylesheet decides whether it means anything —
+ * so the tab semantics, the focus order and the panel mounting behaviour are
+ * identical on both, rather than being two implementations to keep agreeing.
+ *
+ * The previous attempt turned the sidebar into a horizontal strip under 768px.
+ * It did not work: the two groups became two side-by-side columns, `margin-top:
+ * auto` on the sign-out row stretched the strip to the full height of the
+ * screen, and the panel it was supposed to be navigating was pushed off the
+ * bottom entirely. A settings screen with no settings visible on it.
  */
 export function UserSettingsModal({
   open,
-  initialTab = 'profile',
+  // No default. `undefined` here means "the caller did not name a tab", which
+  // is what puts a phone on the menu rather than one level into it — defaulting
+  // to `profile` would make every open look like a request for the profile tab.
+  initialTab,
   onClose,
 }: UserSettingsModalProps) {
   const { user, logout } = useAuth()
   const storeTab = useAppStore((s) => s.userSettingsTab)
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || storeTab)
+  const requested = initialTab ?? storeTab
+
+  const [activeTab, setActiveTab] = useState<SettingsTab>(requested ?? 'profile')
+
+  // Which half of the drill-down is showing. Meaningless above the breakpoint,
+  // where both halves are on screen at once — the stylesheet simply ignores it
+  // there, so there is no second layout rule in JavaScript to disagree with.
+  const [showPanel, setShowPanel] = useState(requested != null)
 
   // Opening the modal returns to the tab the caller asked for; while it stays
   // open, the user's own navigation wins.
   useEffect(() => {
-    if (open) setActiveTab(initialTab || storeTab)
-  }, [open, initialTab, storeTab])
+    if (!open) return
+    setActiveTab(requested ?? 'profile')
+    // Land on the menu when nobody named a destination, and go straight to the
+    // panel when somebody did.
+    setShowPanel(requested != null)
+  }, [open, requested])
 
   if (!open || !user) return null
 
@@ -62,11 +101,48 @@ export function UserSettingsModal({
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className={styles.backdrop} />
         <BaseDialog.Popup className={styles.modal}>
+          {/* Above both columns, so it is present whichever one is showing.
+              Phone only — the desktop close button lives over the panel. */}
+          <div className={styles.mobileBar}>
+            {showPanel ? (
+              <button
+                type="button"
+                className={styles.mobileBarButton}
+                onClick={() => setShowPanel(false)}
+                aria-label="Back to settings menu"
+              >
+                <ArrowLeftIcon size={18} />
+              </button>
+            ) : (
+              // Holds the title centred whether or not there is a back button,
+              // so it does not shift as you move between the two views.
+              <span className={styles.mobileBarSpacer} aria-hidden />
+            )}
+
+            <BaseDialog.Title className={styles.mobileBarTitle}>
+              {showPanel ? labelOf(activeTab) : 'Settings'}
+            </BaseDialog.Title>
+
+            <button
+              type="button"
+              className={styles.mobileBarButton}
+              onClick={onClose}
+              aria-label="Close settings"
+            >
+              <XIcon size={18} />
+            </button>
+          </div>
+
           <Tabs.Root
             value={activeTab}
-            onValueChange={(value) => setActiveTab(value as SettingsTab)}
+            onValueChange={(value) => {
+              setActiveTab(value as SettingsTab)
+              // Only consulted under the breakpoint; harmless above it.
+              setShowPanel(true)
+            }}
             orientation="vertical"
             className={styles.tabsRoot}
+            data-view={showPanel ? 'panel' : 'list'}
           >
             <aside className={styles.sidebar}>
               <Tabs.List variant="rail" className={styles.navList}>
