@@ -11,8 +11,10 @@ import { useToast } from '@/components/Toast'
 import {
   useIsPlatformAdmin,
   useReinstateUserMutation,
+  useRevokeUserSessionsMutation,
   useSetPlatformRoleMutation,
   useStaffList,
+  useStaffUpdateUserProfileMutation,
   useSuspendUserMutation,
   useUserSearch,
   type PlatformRole,
@@ -127,7 +129,13 @@ function UserCard({ account, canEnforce }: { account: StaffUserView; canEnforce:
   const reinstate = useReinstateUserMutation()
   const setRole = useSetPlatformRoleMutation()
 
+  const revokeSessions = useRevokeUserSessionsMutation()
+  const updateProfile = useStaffUpdateUserProfileMutation()
+
   const [reason, setReason] = useState('')
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [modHandle, setModHandle] = useState(account.handle)
+  const [modDisplayName, setModDisplayName] = useState(account.display_name ?? '')
 
   const PRESET_REASONS = [
     'Spam & Bot Activity',
@@ -136,10 +144,38 @@ function UserCard({ account, canEnforce }: { account: StaffUserView; canEnforce:
     'Compromised Account',
   ]
 
+  async function handleRevokeSessions() {
+    const ok = await confirm({
+      title: `Revoke all sessions for @${account.handle}?`,
+      description: 'The user will be immediately logged out of all active devices.',
+      confirmLabel: 'Revoke Sessions',
+    })
+    if (!ok) return
+    try {
+      await revokeSessions.mutateAsync(account.id)
+      toast.success(`Sessions revoked for @${account.handle}`)
+    } catch (cause) {
+      toast.error('Could not revoke sessions', errorText(cause))
+    }
+  }
+
+  async function handleSaveProfile() {
+    try {
+      await updateProfile.mutateAsync({
+        userId: account.id,
+        patch: {
+          handle: modHandle.trim() || undefined,
+          display_name: modDisplayName.trim() || undefined,
+        },
+      })
+      setEditingProfile(false)
+      toast.success(`Profile updated for @${account.handle}`)
+    } catch (cause) {
+      toast.error('Could not update profile', errorText(cause))
+    }
+  }
+
   async function handleSuspend() {
-    // The reason is required by the server too — it is what the audit entry
-    // will say, and an entry reading "suspended, no reason given" is useless to
-    // whoever reads it in six months.
     if (!reason.trim()) {
       toast.error('A reason is required', 'It is what the audit entry will say.')
       return
@@ -210,6 +246,23 @@ function UserCard({ account, canEnforce }: { account: StaffUserView; canEnforce:
         </Callout>
       )}
 
+      {editingProfile && (
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'flex-end', padding: 'var(--space-2) 0' }}>
+          <Input
+            label="Moderate Handle"
+            value={modHandle}
+            onChange={(e) => setModHandle(e.target.value)}
+          />
+          <Input
+            label="Moderate Display Name"
+            value={modDisplayName}
+            onChange={(e) => setModDisplayName(e.target.value)}
+          />
+          <Button size="sm" onClick={() => void handleSaveProfile()}>Save</Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditingProfile(false)}>Cancel</Button>
+        </div>
+      )}
+
       {canEnforce && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
           {account.is_active && (
@@ -250,7 +303,15 @@ function UserCard({ account, canEnforce }: { account: StaffUserView; canEnforce:
               </Button>
             )}
 
-            <div style={{ minWidth: '14rem' }}>
+            <Button variant="ghost" size="sm" onClick={() => void handleRevokeSessions()}>
+              Revoke Sessions
+            </Button>
+
+            <Button variant="ghost" size="sm" onClick={() => setEditingProfile(!editingProfile)}>
+              Moderate Profile
+            </Button>
+
+            <div style={{ minWidth: '12rem' }}>
               <Select
                 aria-label={`Platform role for ${account.handle}`}
                 value={account.platform_role}

@@ -57,6 +57,14 @@ pub fn build(state: AppState) -> Router {
             "/admin/users/{id}/platform-role",
             put(routes::admin::set_platform_role),
         )
+        .route(
+            "/admin/users/{id}/revoke-sessions",
+            post(routes::admin::revoke_user_sessions),
+        )
+        .route(
+            "/admin/users/{id}/profile",
+            patch(routes::admin::staff_update_user_profile),
+        )
         .route("/admin/tickets", get(routes::admin::list_tickets))
         .route(
             "/admin/tickets/{id}",
@@ -97,6 +105,35 @@ pub fn build(state: AppState) -> Router {
             delete(routes::admin::dismiss_broadcast),
         )
         .route("/broadcasts/active", get(routes::admin::list_active_broadcasts))
+        .route(
+            "/admin/settings",
+            get(routes::admin::get_settings).put(routes::admin::update_setting),
+        )
+        .route(
+            "/admin/security/ip-bans",
+            get(routes::admin::list_ip_bans).post(routes::admin::ban_ip),
+        )
+        .route(
+            "/admin/security/ip-bans/{id}",
+            delete(routes::admin::unban_ip),
+        )
+        .route(
+            "/admin/security/email-domains",
+            get(routes::admin::list_blocked_email_domains).post(routes::admin::block_email_domain),
+        )
+        .route(
+            "/admin/security/email-domains/{domain}",
+            delete(routes::admin::unblock_email_domain),
+        )
+        .route(
+            "/admin/automod",
+            get(routes::admin::list_automod_rules).post(routes::admin::create_automod_rule),
+        )
+        .route(
+            "/admin/automod/{id}",
+            delete(routes::admin::delete_automod_rule),
+        )
+        .route("/admin/system/health", get(routes::admin::system_health_telemetry))
         // ---- support, as the person who raised it sees it ----
         .route(
             "/support/tickets",

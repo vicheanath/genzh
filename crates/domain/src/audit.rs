@@ -125,6 +125,25 @@ pub enum AuditAction {
     CommunityQuarantined,
     /// A community was unquarantined.
     CommunityUnquarantined,
+
+    /// A feature flag or platform setting was changed.
+    FeatureFlagUpdated,
+    /// An IP or CIDR range was banned.
+    IpBanned,
+    /// An IP ban was removed.
+    IpUnbanned,
+    /// An email domain was blocked.
+    EmailDomainBlocked,
+    /// An email domain block was lifted.
+    EmailDomainUnblocked,
+    /// A user's active sessions were revoked by staff.
+    UserSessionsRevoked,
+    /// A user's profile was edited by staff.
+    UserProfileStaffEdited,
+    /// An automod rule was created.
+    AutomodRuleCreated,
+    /// An automod rule was removed.
+    AutomodRuleRemoved,
 }
 
 impl AuditAction {
@@ -140,6 +159,8 @@ impl AuditAction {
             AuditAction::UserSuspended => "user.suspended",
             AuditAction::UserReinstated => "user.reinstated",
             AuditAction::PlatformRoleChanged => "user.platform_role_changed",
+            AuditAction::UserSessionsRevoked => "user.sessions_revoked",
+            AuditAction::UserProfileStaffEdited => "user.profile_staff_edited",
 
             AuditAction::CommunityCreated => "community.created",
             AuditAction::CommunityUpdated => "community.updated",
@@ -190,6 +211,14 @@ impl AuditAction {
 
             AuditAction::BroadcastCreated => "broadcast.created",
             AuditAction::BroadcastDismissed => "broadcast.dismissed",
+
+            AuditAction::FeatureFlagUpdated => "settings.feature_flag_updated",
+            AuditAction::IpBanned => "security.ip_banned",
+            AuditAction::IpUnbanned => "security.ip_unbanned",
+            AuditAction::EmailDomainBlocked => "security.email_domain_blocked",
+            AuditAction::EmailDomainUnblocked => "security.email_domain_unblocked",
+            AuditAction::AutomodRuleCreated => "automod.rule_created",
+            AuditAction::AutomodRuleRemoved => "automod.rule_removed",
         }
     }
 
@@ -202,6 +231,8 @@ impl AuditAction {
         AuditAction::UserSuspended,
         AuditAction::UserReinstated,
         AuditAction::PlatformRoleChanged,
+        AuditAction::UserSessionsRevoked,
+        AuditAction::UserProfileStaffEdited,
         AuditAction::CommunityCreated,
         AuditAction::CommunityUpdated,
         AuditAction::CommunityRemoved,
@@ -244,6 +275,13 @@ impl AuditAction {
         AuditAction::MessageEdited,
         AuditAction::BroadcastCreated,
         AuditAction::BroadcastDismissed,
+        AuditAction::FeatureFlagUpdated,
+        AuditAction::IpBanned,
+        AuditAction::IpUnbanned,
+        AuditAction::EmailDomainBlocked,
+        AuditAction::EmailDomainUnblocked,
+        AuditAction::AutomodRuleCreated,
+        AuditAction::AutomodRuleRemoved,
     ];
 }
 

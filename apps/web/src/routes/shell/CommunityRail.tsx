@@ -1,6 +1,13 @@
 import { Avatar } from '@/components/Avatar'
-import { CompassIcon, MessageSquareIcon, PlusIcon, UsersIcon } from '@/components/Icons'
+import {
+  CompassIcon,
+  MessageSquareIcon,
+  PlusIcon,
+  ShieldIcon,
+  UsersIcon,
+} from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
+import { useIsStaff } from '@/features/api'
 import type { Community } from '@/lib/api'
 import { cx } from '@/lib/cx'
 
@@ -23,6 +30,8 @@ export function CommunityRail({
   loading: boolean
   onAddClick: () => void
 }) {
+  const isStaff = useIsStaff()
+
   return (
     <nav className={styles.rail} aria-label="Communities">
       <RailItem to="/" end label="Direct Messages">
@@ -36,6 +45,12 @@ export function CommunityRail({
       <RailItem to="/explore" label="Explore Communities">
         <CompassIcon size={20} />
       </RailItem>
+
+      {isStaff && (
+        <RailItem to="/admin" label="Platform Console">
+          <ShieldIcon size={20} />
+        </RailItem>
+      )}
 
       <div className={styles.railDivider} />
 

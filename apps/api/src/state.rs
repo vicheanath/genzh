@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use genzh_admin::{
-    AuditLog, BroadcastService, CommunityAdminService, LiveMediaService, StaffService,
-    SupportService,
+    AuditLog, AutomodService, BroadcastService, CommunityAdminService, LiveMediaService,
+    SecurityService, SettingsService, StaffService, SupportService, SystemTelemetryService,
 };
 use genzh_auth::{AuthService, JwtService};
 use genzh_community::{CommunityService, InviteService, RoleService};
@@ -81,6 +81,14 @@ pub struct AppState {
     pub broadcasts: BroadcastService,
     /// Live SFU media session monitoring & termination.
     pub live_media: LiveMediaService,
+    /// Global system settings and feature flags.
+    pub settings: SettingsService,
+    /// Network & domain security controls.
+    pub security: SecurityService,
+    /// Automated keyword & regex moderation.
+    pub automod: AutomodService,
+    /// System health & infrastructure telemetry.
+    pub telemetry: SystemTelemetryService,
     /// Invite links into communities.
     pub invites: InviteService,
     /// Where each person got to in each room.
@@ -154,6 +162,10 @@ impl AppState {
         let admin_communities = CommunityAdminService::new(pool.clone(), audit.clone());
         let broadcasts = BroadcastService::new(pool.clone(), audit.clone());
         let live_media = LiveMediaService::new(pool.clone(), audit.clone());
+        let settings = SettingsService::new(pool.clone(), audit.clone());
+        let security = SecurityService::new(pool.clone(), audit.clone());
+        let automod = AutomodService::new(pool.clone(), audit.clone());
+        let telemetry = SystemTelemetryService::new(pool.clone());
         let invites = InviteService::new(pool.clone(), communities.clone());
         let read_state = ReadStateService::new(pool.clone());
 
@@ -218,6 +230,10 @@ impl AppState {
             admin_communities,
             broadcasts,
             live_media,
+            settings,
+            security,
+            automod,
+            telemetry,
             invites,
             read_state,
             media,

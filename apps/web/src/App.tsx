@@ -13,11 +13,15 @@ import { CallProvider } from '@/lib/useCall'
 import { AccountRoute } from './routes/AccountRoute'
 import { AdminRoute } from './routes/AdminRoute'
 import { AuditLogPanel } from './routes/admin/AuditLogPanel'
+import { AutoModPanel } from './routes/admin/AutoModPanel'
 import { BroadcastsPanel } from './routes/admin/BroadcastsPanel'
 import { CommunitiesPanel } from './routes/admin/CommunitiesPanel'
+import { FeatureFlagsPanel } from './routes/admin/FeatureFlagsPanel'
 import { LiveMediaPanel } from './routes/admin/LiveMediaPanel'
+import { SecurityPanel } from './routes/admin/SecurityPanel'
 import { StaffUsersPanel } from './routes/admin/StaffUsersPanel'
 import { SupportQueuePanel } from './routes/admin/SupportQueuePanel'
+import { SystemHealthPanel } from './routes/admin/SystemHealthPanel'
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
 import { CommunitySettingsRoute } from './routes/CommunitySettingsRoute'
@@ -135,6 +139,10 @@ function Router() {
           <Route path="communities" element={<CommunitiesPanel />} />
           <Route path="live" element={<LiveMediaPanel />} />
           <Route path="broadcasts" element={<BroadcastsPanel />} />
+          <Route path="features" element={<FeatureFlagsPanel />} />
+          <Route path="automod" element={<AutoModPanel />} />
+          <Route path="security" element={<SecurityPanel />} />
+          <Route path="health" element={<SystemHealthPanel />} />
           <Route path="audit" element={<AuditLogPanel />} />
         </Route>
         <Route path="/c/:communityId" element={<CommunityRoute />} />

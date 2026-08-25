@@ -663,3 +663,224 @@ pub async fn dismiss_broadcast(
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+// ──────────────────────────── settings & flags ────────────────────────
+
+/// `GET /api/v1/admin/settings`
+pub async fn get_settings(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<std::collections::HashMap<String, serde_json::Value>>> {
+    Ok(Json(state.settings.get_all().await?))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateSettingRequest {
+    pub key: String,
+    pub value: serde_json::Value,
+}
+
+/// `PUT /api/v1/admin/settings`
+pub async fn update_setting(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    ApiJson(body): ApiJson<UpdateSettingRequest>,
+) -> ApiResult<Json<genzh_admin::SystemSetting>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .settings
+            .set(admin.user_id, &handle, &body.key, body.value)
+            .await?,
+    ))
+}
+
+// ──────────────────────────── security bans ───────────────────────────
+
+/// `GET /api/v1/admin/security/ip-bans`
+pub async fn list_ip_bans(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<Vec<genzh_admin::IpBan>>> {
+    Ok(Json(state.security.list_ip_bans().await?))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BanIpRequest {
+    pub ip_or_cidr: String,
+    pub reason: String,
+    pub expires_at: Option<Timestamp>,
+}
+
+/// `POST /api/v1/admin/security/ip-bans`
+pub async fn ban_ip(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    ApiJson(body): ApiJson<BanIpRequest>,
+) -> ApiResult<Json<genzh_admin::IpBan>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .security
+            .ban_ip(
+                admin.user_id,
+                &handle,
+                &body.ip_or_cidr,
+                &body.reason,
+                body.expires_at,
+            )
+            .await?,
+    ))
+}
+
+/// `DELETE /api/v1/admin/security/ip-bans/{id}`
+pub async fn unban_ip(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(ban_id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state.security.unban_ip(admin.user_id, &handle, ban_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/v1/admin/security/email-domains`
+pub async fn list_blocked_email_domains(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<Vec<genzh_admin::BlockedEmailDomain>>> {
+    Ok(Json(state.security.list_email_domains().await?))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BlockDomainRequest {
+    pub domain: String,
+    pub reason: Option<String>,
+}
+
+/// `POST /api/v1/admin/security/email-domains`
+pub async fn block_email_domain(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    ApiJson(body): ApiJson<BlockDomainRequest>,
+) -> ApiResult<Json<genzh_admin::BlockedEmailDomain>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .security
+            .block_email_domain(
+                admin.user_id,
+                &handle,
+                &body.domain,
+                body.reason.as_deref(),
+            )
+            .await?,
+    ))
+}
+
+/// `DELETE /api/v1/admin/security/email-domains/{domain}`
+pub async fn unblock_email_domain(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(domain): Path<String>,
+) -> ApiResult<StatusCode> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state
+        .security
+        .unblock_email_domain(admin.user_id, &handle, &domain)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ──────────────────────────── automod rules ───────────────────────────
+
+/// `GET /api/v1/admin/automod`
+pub async fn list_automod_rules(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<Vec<genzh_admin::AutomodRule>>> {
+    Ok(Json(state.automod.list().await?))
+}
+
+/// `POST /api/v1/admin/automod`
+pub async fn create_automod_rule(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    ApiJson(body): ApiJson<genzh_admin::NewAutomodRule>,
+) -> ApiResult<Json<genzh_admin::AutomodRule>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .automod
+            .create(admin.user_id, &handle, body)
+            .await?,
+    ))
+}
+
+/// `DELETE /api/v1/admin/automod/{id}`
+pub async fn delete_automod_rule(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(rule_id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state
+        .automod
+        .delete(admin.user_id, &handle, rule_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ────────────────────────── system telemetry ──────────────────────────
+
+/// `GET /api/v1/admin/system/health`
+pub async fn system_health_telemetry(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<genzh_admin::SystemHealthTelemetry>> {
+    Ok(Json(state.telemetry.get_health().await?))
+}
+
+// ────────────────────── user session moderation ───────────────────────
+
+/// `POST /api/v1/admin/users/{id}/revoke-sessions`
+pub async fn revoke_user_sessions(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(target_user): Path<UserId>,
+) -> ApiResult<StatusCode> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state
+        .staff
+        .revoke_all_sessions(admin.user_id, &handle, target_user)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StaffUpdateProfileRequest {
+    pub handle: Option<String>,
+    pub display_name: Option<String>,
+}
+
+/// `PATCH /api/v1/admin/users/{id}/profile`
+pub async fn staff_update_user_profile(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(target_user): Path<UserId>,
+    ApiJson(body): ApiJson<StaffUpdateProfileRequest>,
+) -> ApiResult<Json<genzh_admin::StaffUserView>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .staff
+            .update_user_profile(
+                admin.user_id,
+                &handle,
+                target_user,
+                body.handle,
+                body.display_name,
+            )
+            .await?,
+    ))
+}

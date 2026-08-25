@@ -5,9 +5,15 @@ import type {
   AuditEntry,
   AuthConfig,
   AuthResponse,
+  AutomodRule,
+  BlockedEmailDomain,
+  IpBan,
   LiveMediaSessionView,
+  NewAutomodRuleInput,
   NewBroadcastInput,
   SystemBroadcast,
+  SystemHealthTelemetry,
+  SystemSetting,
   CallEndReason,
   Community,
   CommunityMember,
@@ -819,6 +825,95 @@ export const admin = {
   deleteBroadcast: (token: string | null, id: Uuid) =>
     request<void>(`/api/v1/admin/broadcasts/${id}`, {
       method: 'DELETE',
+      token,
+    }),
+
+  /** Global system settings & feature flags. */
+  settings: (token: string | null) =>
+    request<Record<string, unknown>>('/api/v1/admin/settings', { token }),
+
+  updateSetting: (token: string | null, key: string, value: unknown) =>
+    request<SystemSetting>('/api/v1/admin/settings', {
+      method: 'PUT',
+      body: { key, value },
+      token,
+    }),
+
+  /** Network & domain security bans. */
+  ipBans: (token: string | null) =>
+    request<IpBan[]>('/api/v1/admin/security/ip-bans', { token }),
+
+  banIp: (
+    token: string | null,
+    ip_or_cidr: string,
+    reason: string,
+    expires_at?: Timestamp,
+  ) =>
+    request<IpBan>('/api/v1/admin/security/ip-bans', {
+      method: 'POST',
+      body: { ip_or_cidr, reason, expires_at },
+      token,
+    }),
+
+  unbanIp: (token: string | null, id: Uuid) =>
+    request<void>(`/api/v1/admin/security/ip-bans/${id}`, {
+      method: 'DELETE',
+      token,
+    }),
+
+  emailDomains: (token: string | null) =>
+    request<BlockedEmailDomain[]>('/api/v1/admin/security/email-domains', { token }),
+
+  blockEmailDomain: (token: string | null, domain: string, reason?: string) =>
+    request<BlockedEmailDomain>('/api/v1/admin/security/email-domains', {
+      method: 'POST',
+      body: { domain, reason },
+      token,
+    }),
+
+  unblockEmailDomain: (token: string | null, domain: string) =>
+    request<void>(`/api/v1/admin/security/email-domains/${encodeURIComponent(domain)}`, {
+      method: 'DELETE',
+      token,
+    }),
+
+  /** Auto-Mod rules & keyword filters. */
+  automodRules: (token: string | null) =>
+    request<AutomodRule[]>('/api/v1/admin/automod', { token }),
+
+  createAutomodRule: (token: string | null, input: NewAutomodRuleInput) =>
+    request<AutomodRule>('/api/v1/admin/automod', {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+
+  deleteAutomodRule: (token: string | null, id: Uuid) =>
+    request<void>(`/api/v1/admin/automod/${id}`, {
+      method: 'DELETE',
+      token,
+    }),
+
+  /** Operational telemetry & health. */
+  telemetry: (token: string | null) =>
+    request<SystemHealthTelemetry>('/api/v1/admin/system/health', { token }),
+
+  /** User session and profile moderation. */
+  revokeUserSessions: (token: string | null, userId: Uuid) =>
+    request<void>(`/api/v1/admin/users/${userId}/revoke-sessions`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  staffUpdateUserProfile: (
+    token: string | null,
+    userId: Uuid,
+    patch: { handle?: string; display_name?: string },
+  ) =>
+    request<StaffUserView>(`/api/v1/admin/users/${userId}/profile`, {
+      method: 'PATCH',
+      body: patch,
       token,
     }),
 }

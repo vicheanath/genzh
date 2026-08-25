@@ -2,6 +2,18 @@ import { Navigate, NavLink, Outlet } from 'react-router-dom'
 
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
+import {
+  ActivityIcon,
+  BellIcon,
+  FileTextIcon,
+  FlagIcon,
+  GlobeIcon,
+  HelpCircleIcon,
+  LockIcon,
+  RadioIcon,
+  ShieldIcon,
+  UsersIcon,
+} from '@/components/Icons'
 import { LoadingPanel } from '@/components/Spinner'
 import { useAdminStats, useIsPlatformAdmin, useIsStaff, useSupportQueue } from '@/features/api'
 import { useAuth } from '@/lib/auth'
@@ -31,22 +43,25 @@ export function AdminRoute() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.title}>Platform console</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <h1 className={styles.title}>Platform Console</h1>
+            <span className={styles.titleBadge}>{isAdmin ? 'Super Admin' : 'Staff Moderation'}</span>
+          </div>
           <p className={styles.subtitle}>
             {isAdmin
-              ? 'Support, enforcement, communities, and real-time audit trail.'
-              : 'The support queue and account lookups.'}
+              ? 'Real-time telemetry, enforcement, safety rules, server controls, and platform audit trail.'
+              : 'Support ticket queue, community moderation, and account lookups.'}
           </p>
         </div>
         <div className={styles.headerRight}>
           <QueueBadge />
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={() => void stats.refetch()}
             disabled={stats.isFetching}
           >
-            {stats.isFetching ? 'Refreshing…' : 'Refresh'}
+            {stats.isFetching ? 'Refreshing…' : 'Refresh Metrics'}
           </Button>
         </div>
       </header>
@@ -54,7 +69,10 @@ export function AdminRoute() {
       {stats.data && (
         <section className={styles.statsGrid} aria-label="Platform Metrics">
           <div className={styles.statCard}>
-            <span className={styles.statLabel}>Total Accounts</span>
+            <div className={styles.statHeader}>
+              <span className={styles.statLabel}>Total Accounts</span>
+              <UsersIcon size={16} className={styles.statIcon} />
+            </div>
             <span className={styles.statValue}>{stats.data.total_users}</span>
             <span className={styles.statDesc}>
               {stats.data.active_users} active · {stats.data.suspended_users} suspended
@@ -62,85 +80,133 @@ export function AdminRoute() {
           </div>
 
           <div className={styles.statCard}>
-            <span className={styles.statLabel}>Staff Members</span>
+            <div className={styles.statHeader}>
+              <span className={styles.statLabel}>Staff Team</span>
+              <ShieldIcon size={16} className={styles.statIcon} />
+            </div>
             <span className={styles.statValue}>{stats.data.staff_users}</span>
-            <span className={styles.statDesc}>Support & Admin</span>
+            <span className={styles.statDesc}>Platform support & admins</span>
           </div>
 
           <div className={styles.statCard}>
-            <span className={styles.statLabel}>Support Tickets</span>
+            <div className={styles.statHeader}>
+              <span className={styles.statLabel}>Support Queue</span>
+              <HelpCircleIcon size={16} className={styles.statIcon} />
+            </div>
             <span className={styles.statValue}>{stats.data.open_tickets}</span>
-            <span className={styles.statDesc}>{stats.data.resolved_tickets} resolved</span>
+            <span className={styles.statDesc}>{stats.data.resolved_tickets} resolved tickets</span>
           </div>
 
           <div className={styles.statCard}>
-            <span className={styles.statLabel}>Communities & Rooms</span>
+            <div className={styles.statHeader}>
+              <span className={styles.statLabel}>Communities & Rooms</span>
+              <GlobeIcon size={16} className={styles.statIcon} />
+            </div>
             <span className={styles.statValue}>{stats.data.total_communities}</span>
-            <span className={styles.statDesc}>{stats.data.total_rooms} total rooms</span>
+            <span className={styles.statDesc}>{stats.data.total_rooms} total channels</span>
           </div>
 
           {isAdmin && (
             <div className={styles.statCard}>
-              <span className={styles.statLabel}>Audit Trail</span>
+              <div className={styles.statHeader}>
+                <span className={styles.statLabel}>Audit Trail</span>
+                <FileTextIcon size={16} className={styles.statIcon} />
+              </div>
               <span className={styles.statValue}>{stats.data.total_audit_entries}</span>
-              <span className={styles.statDesc}>Platform events logged</span>
+              <span className={styles.statDesc}>Platform events recorded</span>
             </div>
           )}
         </section>
       )}
 
-      <nav className={styles.nav} aria-label="Console navigation">
-        <NavLink
-          to="/admin/queue"
-          className={({ isActive }) =>
-            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-          }
-        >
-          Support
-        </NavLink>
-        <NavLink
-          to="/admin/users"
-          className={({ isActive }) =>
-            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-          }
-        >
-          Users
-        </NavLink>
-        <NavLink
-          to="/admin/communities"
-          className={({ isActive }) =>
-            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-          }
-        >
-          Communities
-        </NavLink>
-        <NavLink
-          to="/admin/live"
-          className={({ isActive }) =>
-            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-          }
-        >
-          Live SFU
-        </NavLink>
-        <NavLink
-          to="/admin/broadcasts"
-          className={({ isActive }) =>
-            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
-          }
-        >
-          Broadcasts
-        </NavLink>
-        {isAdmin && (
+      <div className={styles.navWrapper}>
+        <nav className={styles.nav} aria-label="Console navigation">
           <NavLink
-            to="/admin/audit"
+            to="/admin/queue"
             className={({ isActive }) =>
               `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
             }
           >
-            Audit log
+            <HelpCircleIcon size={15} /> Support
           </NavLink>
-        )}
-      </nav>
+          <NavLink
+            to="/admin/users"
+            className={({ isActive }) =>
+              `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+            }
+          >
+            <UsersIcon size={15} /> Users
+          </NavLink>
+          <NavLink
+            to="/admin/communities"
+            className={({ isActive }) =>
+              `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+            }
+          >
+            <GlobeIcon size={15} /> Communities
+          </NavLink>
+          <NavLink
+            to="/admin/live"
+            className={({ isActive }) =>
+              `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+            }
+          >
+            <RadioIcon size={15} /> Live SFU
+          </NavLink>
+          <NavLink
+            to="/admin/broadcasts"
+            className={({ isActive }) =>
+              `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+            }
+          >
+            <BellIcon size={15} /> Broadcasts
+          </NavLink>
+          {isAdmin && (
+            <>
+              <NavLink
+                to="/admin/features"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                }
+              >
+                <FlagIcon size={15} /> Feature Flags
+              </NavLink>
+              <NavLink
+                to="/admin/automod"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                }
+              >
+                <ShieldIcon size={15} /> Auto-Mod
+              </NavLink>
+              <NavLink
+                to="/admin/security"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                }
+              >
+                <LockIcon size={15} /> Security & Bans
+              </NavLink>
+              <NavLink
+                to="/admin/health"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                }
+              >
+                <ActivityIcon size={15} /> System Health
+              </NavLink>
+              <NavLink
+                to="/admin/audit"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                }
+              >
+                <FileTextIcon size={15} /> Audit Log
+              </NavLink>
+            </>
+          )}
+        </nav>
+      </div>
 
       <div className={styles.panel}>
         <Outlet />

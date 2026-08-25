@@ -7,8 +7,10 @@ import {
   CompassIcon,
   HomeIcon,
   MenuIcon,
+  ShieldIcon,
   UsersIcon,
 } from '@/components/Icons'
+import { useIsStaff } from '@/features/api'
 import { NotificationBadge } from '@/features/notifications'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
@@ -51,12 +53,16 @@ export function MobileTopBar({
 export function MobileNav() {
   const { user } = useAuth()
   const { unread } = useNotifications()
+  const isStaff = useIsStaff()
 
   return (
     <nav className={styles.mobileNav} aria-label="Main">
       <MobileNavLink to="/" end icon={<HomeIcon size={20} />} label="Home" />
       <MobileNavLink to="/friends" icon={<UsersIcon size={20} />} label="Friends" />
       <MobileNavLink to="/explore" icon={<CompassIcon size={20} />} label="Explore" />
+      {isStaff && (
+        <MobileNavLink to="/admin" icon={<ShieldIcon size={20} />} label="Admin" />
+      )}
 
       <MobileNavLink
         to="/notifications"

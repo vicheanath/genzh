@@ -103,6 +103,15 @@ async fn main() -> anyhow::Result<()> {
         user_ids.push((handle.to_string(), user.id));
     }
 
+    // Set platform roles for initial staff
+    let _ = sqlx::query("UPDATE users SET platform_role = 'admin' WHERE handle = 'vichea'")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("UPDATE users SET platform_role = 'support' WHERE handle = 'alex_coder'")
+        .execute(&pool)
+        .await;
+    println!("  ✓ Configured @vichea as 'admin' and @alex_coder as 'support'");
+
     let primary_user = user_ids[0].1;
 
     println!("\n--- 2. Seeding Friendships ---");

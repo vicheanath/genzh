@@ -583,3 +583,52 @@ export interface LiveMediaSessionView {
   started_at: Timestamp | null
 }
 
+export interface SystemSetting {
+  key: string
+  value: unknown
+  updated_at: Timestamp
+  updated_by: Uuid | null
+}
+
+export interface IpBan {
+  id: Uuid
+  ip_or_cidr: string
+  reason: string
+  banned_by: Uuid | null
+  created_at: Timestamp
+  expires_at: Timestamp | null
+}
+
+export interface BlockedEmailDomain {
+  domain: string
+  reason: string | null
+  created_by: Uuid | null
+  created_at: Timestamp
+}
+
+export interface AutomodRule {
+  id: Uuid
+  name: string
+  pattern: string
+  is_regex: boolean
+  action: 'block' | 'flag_report' | string
+  is_active: boolean
+  created_by: Uuid | null
+  created_at: Timestamp
+}
+
+export interface NewAutomodRuleInput {
+  name: string
+  pattern: string
+  is_regex?: boolean
+  action?: string
+}
+
+export interface SystemHealthTelemetry {
+  database_status: string
+  pool_size: number
+  pool_idle_connections: number
+  uptime_seconds: number
+  server_timestamp: Timestamp
+}
+

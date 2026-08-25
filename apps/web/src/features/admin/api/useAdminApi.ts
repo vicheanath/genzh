@@ -4,10 +4,12 @@ import { admin, broadcasts, support } from '@/lib/api'
 import { useAuth, useIsSignedIn } from '@/lib/auth'
 
 import type {
+  NewAutomodRuleInput,
   NewBroadcastInput,
   OpenTicketInput,
   PlatformRole,
   TicketStatus,
+  Timestamp,
   Uuid,
 } from './types'
 
@@ -24,6 +26,11 @@ export const adminKeys = {
   communities: (filter: string) => [...adminKeys.all, 'communities', filter] as const,
   liveMedia: () => [...adminKeys.all, 'live-media'] as const,
   broadcasts: () => [...adminKeys.all, 'broadcasts'] as const,
+  settings: () => [...adminKeys.all, 'settings'] as const,
+  ipBans: () => [...adminKeys.all, 'ip-bans'] as const,
+  emailDomains: () => [...adminKeys.all, 'email-domains'] as const,
+  automod: () => [...adminKeys.all, 'automod'] as const,
+  telemetry: () => [...adminKeys.all, 'telemetry'] as const,
 }
 
 export const broadcastKeys = {
@@ -334,6 +341,150 @@ export function useDeleteBroadcastMutation() {
       invalidate()
       queryClient.invalidateQueries({ queryKey: broadcastKeys.active() })
     },
+  })
+}
+
+// ── feature flags & settings ───────────────────────────────────────────────
+
+export function useAdminSettings() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.settings(),
+    queryFn: () => admin.settings(null),
+    enabled: isStaff,
+  })
+}
+
+export function useUpdateSettingMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: ({ key, value }: { key: string; value: unknown }) =>
+      admin.updateSetting(null, key, value),
+    onSuccess: invalidate,
+  })
+}
+
+// ── security & bans ────────────────────────────────────────────────────────
+
+export function useIpBans() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.ipBans(),
+    queryFn: () => admin.ipBans(null),
+    enabled: isStaff,
+  })
+}
+
+export function useBanIpMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: ({
+      ipOrCidr,
+      reason,
+      expiresAt,
+    }: {
+      ipOrCidr: string
+      reason: string
+      expiresAt?: Timestamp
+    }) => admin.banIp(null, ipOrCidr, reason, expiresAt),
+    onSuccess: invalidate,
+  })
+}
+
+export function useUnbanIpMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (banId: Uuid) => admin.unbanIp(null, banId),
+    onSuccess: invalidate,
+  })
+}
+
+export function useBlockedEmailDomains() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.emailDomains(),
+    queryFn: () => admin.emailDomains(null),
+    enabled: isStaff,
+  })
+}
+
+export function useBlockEmailDomainMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: ({ domain, reason }: { domain: string; reason?: string }) =>
+      admin.blockEmailDomain(null, domain, reason),
+    onSuccess: invalidate,
+  })
+}
+
+export function useUnblockEmailDomainMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (domain: string) => admin.unblockEmailDomain(null, domain),
+    onSuccess: invalidate,
+  })
+}
+
+// ── automod rules ──────────────────────────────────────────────────────────
+
+export function useAutomodRules() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.automod(),
+    queryFn: () => admin.automodRules(null),
+    enabled: isStaff,
+  })
+}
+
+export function useCreateAutomodRuleMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (input: NewAutomodRuleInput) => admin.createAutomodRule(null, input),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteAutomodRuleMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (id: Uuid) => admin.deleteAutomodRule(null, id),
+    onSuccess: invalidate,
+  })
+}
+
+// ── system health & telemetry ──────────────────────────────────────────────
+
+export function useSystemTelemetry() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.telemetry(),
+    queryFn: () => admin.telemetry(null),
+    enabled: isStaff,
+    refetchInterval: 5_000,
+  })
+}
+
+// ── user session moderation ────────────────────────────────────────────────
+
+export function useRevokeUserSessionsMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (userId: Uuid) => admin.revokeUserSessions(null, userId),
+    onSuccess: invalidate,
+  })
+}
+
+export function useStaffUpdateUserProfileMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: ({
+      userId,
+      patch,
+    }: {
+      userId: Uuid
+      patch: { handle?: string; display_name?: string }
+    }) => admin.staffUpdateUserProfile(null, userId, patch),
+    onSuccess: invalidate,
   })
 }
 

@@ -48,6 +48,12 @@ impl AuditRecord {
         self
     }
 
+    /// What category was acted on when there is no UUID entity id.
+    pub fn about_type(mut self, subject_type: impl Into<String>) -> Self {
+        self.subject_type = Some(subject_type.into());
+        self
+    }
+
     /// Anything the action needs that the summary does not carry.
     pub fn with(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = metadata;

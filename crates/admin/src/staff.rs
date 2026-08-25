@@ -318,4 +318,82 @@ impl StaffService {
             total_audit_entries,
         })
     }
+
+    /// Force revoke all refresh tokens and active sessions for a user.
+    pub async fn revoke_all_sessions(
+        &self,
+        actor: UserId,
+        actor_handle: &str,
+        target: UserId,
+    ) -> ServiceResult<()> {
+        let subject = self.find_user(target).await?;
+
+        sqlx::query("DELETE FROM refresh_tokens WHERE user_id = $1")
+            .bind(target)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::from)?;
+
+        self.audit
+            .record_best_effort(
+                AuditRecord::new(
+                    Some(actor),
+                    AuditAction::UserSessionsRevoked,
+                    format!("force-revoked all active sessions for @{}", subject.handle),
+                )
+                .by(actor_handle)
+                .about("user", target.into()),
+            )
+            .await;
+
+        Ok(())
+    }
+
+    /// Staff update of user handle or display name (e.g. offensive username cleanup).
+    pub async fn update_user_profile(
+        &self,
+        actor: UserId,
+        actor_handle: &str,
+        target: UserId,
+        new_handle: Option<String>,
+        new_display_name: Option<String>,
+    ) -> ServiceResult<StaffUserView> {
+        let subject = self.find_user(target).await?;
+
+        if let Some(ref h) = new_handle {
+            sqlx::query("UPDATE users SET handle = $1, updated_at = now() WHERE id = $2")
+                .bind(h.trim().to_lowercase())
+                .bind(target)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::from)?;
+        }
+
+        if let Some(ref d) = new_display_name {
+            sqlx::query("UPDATE users SET display_name = $1, updated_at = now() WHERE id = $2")
+                .bind(d.trim())
+                .bind(target)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::from)?;
+        }
+
+        self.audit
+            .record_best_effort(
+                AuditRecord::new(
+                    Some(actor),
+                    AuditAction::UserProfileStaffEdited,
+                    format!("moderated profile for @{}", subject.handle),
+                )
+                .by(actor_handle)
+                .about("user", target.into())
+                .with(serde_json::json!({
+                    "new_handle": new_handle,
+                    "new_display_name": new_display_name
+                })),
+            )
+            .await;
+
+        self.find_user(target).await
+    }
 }

@@ -1,5 +1,6 @@
 import type { LucideProps } from 'lucide-react'
 import {
+  Activity,
   ArrowDown,
   ArrowLeft,
   AtSign,
@@ -12,6 +13,8 @@ import {
   Compass,
   Copy,
   Crown,
+  FileText,
+  Flag,
   Flame,
   Gamepad2,
   Globe,
@@ -156,6 +159,9 @@ export const PinOffIcon: IconComponent = (props: IconProps) => <PinOff size={18}
 export const ReplyIcon: IconComponent = (props: IconProps) => <Reply size={18} {...props} />
 export const LinkIcon: IconComponent = (props: IconProps) => <Link2 size={18} {...props} />
 export const BellOffIcon: IconComponent = (props: IconProps) => <BellOff size={18} {...props} />
+export const ActivityIcon: IconComponent = (props: IconProps) => <Activity size={18} {...props} />
+export const FileTextIcon: IconComponent = (props: IconProps) => <FileText size={18} {...props} />
+export const FlagIcon: IconComponent = (props: IconProps) => <Flag size={18} {...props} />
 
 /* ── OAuth Providers ────────────────────────────────────────────────────── */
 export const GoogleIcon: IconComponent = ({ size = 18, className }) => (
