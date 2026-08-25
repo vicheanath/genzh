@@ -11,6 +11,7 @@ use genzh_infrastructure::{DbPool, RepositoryError, ServiceError, ServiceResult}
 use uuid::Uuid;
 
 use crate::audit::{AuditLog, AuditRecord};
+use crate::page::Page;
 
 /// What somebody raising a ticket supplies.
 #[derive(Debug, Clone)]
@@ -30,6 +31,16 @@ pub struct TicketQuery {
     pub kind: Option<TicketKind>,
     pub assignee_id: Option<UserId>,
     pub q: Option<String>,
+    /// Keyset cursor: tickets raised strictly *after* this.
+    ///
+    /// Forwards rather than backwards, because the queue is oldest-first — the
+    /// longest wait belongs at the top, and "next page" means further down the
+    /// backlog.
+    pub after: Option<genzh_domain::Timestamp>,
+    /// Tie-breaker for [`Self::after`], from the previous page's
+    /// `next_cursor_id`. A burst of reports filed together shares a timestamp,
+    /// and without this the boundary can fall inside that burst.
+    pub after_id: Option<Uuid>,
     pub limit: i64,
 }
 
@@ -79,11 +90,13 @@ impl SupportService {
     }
 
     /// The queue, oldest first — the person waiting longest is served first.
-    pub async fn list(&self, query: TicketQuery) -> ServiceResult<Vec<Ticket>> {
+    pub async fn list(&self, query: TicketQuery) -> ServiceResult<Page<Ticket>> {
         let search_pattern = query.q.and_then(|q| {
             let t = q.trim().to_lowercase();
             if t.is_empty() { None } else { Some(format!("%{t}%")) }
         });
+
+        let limit = query.limit.clamp(1, 200);
 
         let tickets = sqlx::query_as::<_, Ticket>(
             "SELECT id, kind, reporter_id, subject_type, subject_id, category, subject,
@@ -93,19 +106,27 @@ impl SupportService {
                AND ($2::support_ticket_kind IS NULL OR kind = $2)
                AND ($3::uuid IS NULL OR assignee_id = $3)
                AND ($4::text IS NULL OR lower(subject) LIKE $4 OR lower(category) LIKE $4 OR lower(details) LIKE $4)
-             ORDER BY created_at ASC
-             LIMIT $5",
+               AND ($5::timestamptz IS NULL
+                    OR ($6::uuid IS NULL AND created_at > $5)
+                    OR ($6::uuid IS NOT NULL AND (created_at, id) > ($5, $6)))
+             ORDER BY created_at ASC, id ASC
+             LIMIT $7",
         )
         .bind(query.status)
         .bind(query.kind)
         .bind(query.assignee_id)
         .bind(search_pattern)
-        .bind(query.limit.clamp(1, 200))
+        .bind(query.after)
+        .bind(query.after_id)
+        // One more than asked for, to learn whether another page exists.
+        .bind(limit + 1)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::from)?;
 
-        Ok(tickets)
+        Ok(Page::from_overfetch(tickets, limit, |ticket| {
+            (ticket.created_at, ticket.id)
+        }))
     }
 
     /// The tickets one account raised.

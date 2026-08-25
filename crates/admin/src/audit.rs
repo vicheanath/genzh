@@ -5,6 +5,8 @@ use genzh_domain::ids::UserId;
 use genzh_infrastructure::{DbPool, RepositoryResult};
 use uuid::Uuid;
 
+use crate::page::Page;
+
 /// What to record about one action.
 ///
 /// Built by the caller on the success path of whatever it is describing, so an
@@ -71,6 +73,14 @@ pub struct AuditQuery {
     pub subject_id: Option<Uuid>,
     /// Keyset cursor: return entries strictly older than this.
     pub before: Option<chrono::DateTime<chrono::Utc>>,
+    /// Tie-breaker for [`Self::before`], from the previous page's
+    /// `next_cursor_id`.
+    ///
+    /// Optional so a caller holding only a timestamp still works. Supplying it
+    /// is what makes the boundary exact: a bulk action writes every one of its
+    /// entries with the same `now()`, and a timestamp-only cursor landing inside
+    /// that group skips the rest of it.
+    pub before_id: Option<Uuid>,
     pub limit: i64,
 }
 
@@ -125,7 +135,7 @@ impl AuditLog {
     }
 
     /// Read the log, newest first.
-    pub async fn list(&self, query: AuditQuery) -> RepositoryResult<Vec<AuditEntry>> {
+    pub async fn list(&self, query: AuditQuery) -> RepositoryResult<Page<AuditEntry>> {
         let limit = query.limit.clamp(1, 200);
         let category_pattern = query.category.map(|c| format!("{c}.%"));
         let search_pattern = query.q.and_then(|q| {
@@ -136,6 +146,11 @@ impl AuditLog {
         // Every filter is optional, so each predicate is written to pass when
         // its parameter is null rather than building SQL by string
         // concatenation — which is how an audit reader grows an injection.
+        //
+        // The cursor is three branches of one predicate rather than three
+        // queries: no cursor at all, a timestamp from a client that predates
+        // the tie-breaker, and the full `(created_at, id)` keyset that matches
+        // the ORDER BY row for row.
         let entries = sqlx::query_as::<_, AuditEntry>(
             "SELECT id, actor_id, actor_handle, action, subject_type, subject_id,
                     summary, metadata, created_at
@@ -143,22 +158,28 @@ impl AuditLog {
              WHERE ($1::uuid IS NULL OR actor_id = $1)
                AND ($2::text IS NULL OR action = $2)
                AND ($3::uuid IS NULL OR subject_id = $3)
-               AND ($4::timestamptz IS NULL OR created_at < $4)
-               AND ($5::text IS NULL OR action LIKE $5)
-               AND ($6::text IS NULL OR lower(summary) LIKE $6 OR lower(coalesce(actor_handle, '')) LIKE $6 OR lower(action) LIKE $6)
+               AND ($4::timestamptz IS NULL
+                    OR ($5::uuid IS NULL AND created_at < $4)
+                    OR ($5::uuid IS NOT NULL AND (created_at, id) < ($4, $5)))
+               AND ($6::text IS NULL OR action LIKE $6)
+               AND ($7::text IS NULL OR lower(summary) LIKE $7 OR lower(coalesce(actor_handle, '')) LIKE $7 OR lower(action) LIKE $7)
              ORDER BY created_at DESC, id DESC
-             LIMIT $7",
+             LIMIT $8",
         )
         .bind(query.actor_id)
         .bind(&query.action)
         .bind(query.subject_id)
         .bind(query.before)
+        .bind(query.before_id)
         .bind(category_pattern)
         .bind(search_pattern)
-        .bind(limit)
+        // One more than asked for, to learn whether another page exists.
+        .bind(limit + 1)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(entries)
+        Ok(Page::from_overfetch(entries, limit, |entry| {
+            (entry.created_at, entry.id)
+        }))
     }
 }

@@ -7,6 +7,26 @@ use genzh_infrastructure::{DbPool, RepositoryError, ServiceError, ServiceResult}
 use serde::{Deserialize, Serialize};
 
 use crate::audit::{AuditLog, AuditRecord};
+use crate::page::Page;
+
+/// How to narrow a search of the account list.
+///
+/// A struct rather than five positional arguments: `search_users(q, role,
+/// active, before, before_id, limit)` is a call nobody can read, and two
+/// adjacent `Option`s of the same type are a swap waiting to happen.
+#[derive(Debug, Clone, Default)]
+pub struct UserSearch {
+    /// Handle or e-mail, matched as a substring. Empty means "no filter".
+    pub q: String,
+    pub role: Option<PlatformRole>,
+    pub is_active: Option<bool>,
+    /// Keyset cursor: accounts created strictly before this.
+    pub before: Option<chrono::DateTime<chrono::Utc>>,
+    /// Tie-breaker for [`Self::before`], from the previous page's
+    /// `next_cursor_id`.
+    pub before_id: Option<uuid::Uuid>,
+    pub limit: i64,
+}
 
 /// System overview statistics for the admin dashboard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,19 +89,19 @@ impl StaffService {
     }
 
     /// Find accounts by handle or e-mail, with optional role or status filtering.
-    pub async fn search_users(
-        &self,
-        query: &str,
-        role: Option<PlatformRole>,
-        is_active: Option<bool>,
-        limit: i64,
-    ) -> ServiceResult<Vec<StaffUserView>> {
-        let trimmed = query.trim();
+    ///
+    /// Newest accounts first, paged by the `(created_at, id)` cursor in
+    /// [`UserSearch`]. Registrations arrive in bursts — an invite link posted
+    /// somewhere busy — so the tie-breaker is doing real work here rather than
+    /// guarding a theoretical case.
+    pub async fn search_users(&self, search: UserSearch) -> ServiceResult<Page<StaffUserView>> {
+        let trimmed = search.q.trim();
         let needle = if trimmed.is_empty() {
             None
         } else {
             Some(format!("%{}%", trimmed.to_lowercase()))
         };
+        let limit = search.limit.clamp(1, 100);
 
         let users = sqlx::query_as::<_, StaffUserView>(
             "SELECT u.id, u.handle, u.email, p.display_name, u.is_active, u.platform_role,
@@ -91,18 +111,26 @@ impl StaffService {
              WHERE ($1::text IS NULL OR lower(u.handle) LIKE $1 OR lower(u.email) LIKE $1)
                AND ($2::platform_role IS NULL OR u.platform_role = $2)
                AND ($3::boolean IS NULL OR u.is_active = $3)
-             ORDER BY u.created_at DESC
-             LIMIT $4",
+               AND ($4::timestamptz IS NULL
+                    OR ($5::uuid IS NULL AND u.created_at < $4)
+                    OR ($5::uuid IS NOT NULL AND (u.created_at, u.id) < ($4, $5)))
+             ORDER BY u.created_at DESC, u.id DESC
+             LIMIT $6",
         )
         .bind(needle)
-        .bind(role)
-        .bind(is_active)
-        .bind(limit.clamp(1, 100))
+        .bind(search.role)
+        .bind(search.is_active)
+        .bind(search.before)
+        .bind(search.before_id)
+        // One more than asked for, to learn whether another page exists.
+        .bind(limit + 1)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::from)?;
 
-        Ok(users)
+        Ok(Page::from_overfetch(users, limit, |user| {
+            (user.created_at, user.id.into())
+        }))
     }
 
     /// One account, by id.

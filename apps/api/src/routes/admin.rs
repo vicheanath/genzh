@@ -9,7 +9,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use genzh_admin::{AuditQuery, AuditRecord, NewTicket, TicketQuery};
+use genzh_admin::{AuditQuery, AuditRecord, NewTicket, Page, TicketQuery, UserSearch};
 use genzh_domain::DomainError;
 use genzh_domain::audit::{AuditAction, AuditEntry};
 use genzh_domain::platform::PlatformRole;
@@ -41,6 +41,13 @@ pub struct AuditFilter {
     /// Keyset cursor: entries strictly older than this.
     #[serde(default)]
     pub before: Option<Timestamp>,
+    /// Tie-breaker for `before`, from the previous page's `next_cursor_id`.
+    ///
+    /// Optional so a client sending only `before` keeps working; sending both
+    /// is what stops a page boundary from falling inside a group of entries
+    /// that share a timestamp — which every bulk action produces.
+    #[serde(default)]
+    pub before_id: Option<Uuid>,
     #[serde(default)]
     pub limit: Option<i64>,
 }
@@ -54,8 +61,8 @@ pub async fn audit(
     State(state): State<AppState>,
     _admin: AdminUser,
     Query(filter): Query<AuditFilter>,
-) -> ApiResult<Json<Vec<AuditEntry>>> {
-    let entries = state
+) -> ApiResult<Json<Page<AuditEntry>>> {
+    let page = state
         .audit
         .list(AuditQuery {
             actor_id: filter.actor_id,
@@ -64,12 +71,13 @@ pub async fn audit(
             q: filter.q,
             subject_id: filter.subject_id,
             before: filter.before,
+            before_id: filter.before_id,
             limit: filter.limit.unwrap_or(50),
         })
         .await
         .map_err(|_| ApiError::BadRequest("could not read the audit log".into()))?;
 
-    Ok(Json(entries))
+    Ok(Json(page))
 }
 
 /// `GET /api/v1/admin/audit/actions`
@@ -94,7 +102,7 @@ pub async fn stats(
 
 /// `GET /api/v1/admin/users` query string.
 #[derive(Debug, Deserialize)]
-pub struct UserSearch {
+pub struct UserSearchParams {
     /// Handle or e-mail, matched as a substring.
     #[serde(default)]
     pub q: String,
@@ -102,6 +110,12 @@ pub struct UserSearch {
     pub role: Option<PlatformRole>,
     #[serde(default)]
     pub is_active: Option<bool>,
+    /// Keyset cursor: accounts created strictly before this.
+    #[serde(default)]
+    pub before: Option<Timestamp>,
+    /// Tie-breaker for `before`, from the previous page's `next_cursor_id`.
+    #[serde(default)]
+    pub before_id: Option<Uuid>,
     #[serde(default)]
     pub limit: Option<i64>,
 }
@@ -112,17 +126,19 @@ pub struct UserSearch {
 pub async fn search_users(
     State(state): State<AppState>,
     _staff: StaffUser,
-    Query(search): Query<UserSearch>,
-) -> ApiResult<Json<Vec<genzh_admin::StaffUserView>>> {
+    Query(params): Query<UserSearchParams>,
+) -> ApiResult<Json<Page<genzh_admin::StaffUserView>>> {
     Ok(Json(
         state
             .staff
-            .search_users(
-                &search.q,
-                search.role,
-                search.is_active,
-                search.limit.unwrap_or(25),
-            )
+            .search_users(UserSearch {
+                q: params.q,
+                role: params.role,
+                is_active: params.is_active,
+                before: params.before,
+                before_id: params.before_id,
+                limit: params.limit.unwrap_or(25),
+            })
             .await?,
     ))
 }
@@ -221,6 +237,15 @@ pub struct TicketFilter {
     pub assignee_id: Option<UserId>,
     #[serde(default)]
     pub q: Option<String>,
+    /// Keyset cursor: tickets raised strictly *after* this.
+    ///
+    /// Forwards, because the queue is oldest-first: the longest wait is on top,
+    /// so the next page is further down the backlog.
+    #[serde(default)]
+    pub after: Option<Timestamp>,
+    /// Tie-breaker for `after`, from the previous page's `next_cursor_id`.
+    #[serde(default)]
+    pub after_id: Option<Uuid>,
     #[serde(default)]
     pub limit: Option<i64>,
 }
@@ -228,7 +253,9 @@ pub struct TicketFilter {
 /// The queue, plus the number waiting.
 #[derive(Debug, Serialize)]
 pub struct TicketQueueResponse {
-    pub tickets: Vec<Ticket>,
+    /// One page of the queue, with the cursor for the next.
+    #[serde(flatten)]
+    pub page: Page<Ticket>,
     /// How many are still `open`, for the console's badge — which must count
     /// every waiting ticket, not just the page that was returned.
     pub open_count: i64,
@@ -240,19 +267,21 @@ pub async fn list_tickets(
     _staff: StaffUser,
     Query(filter): Query<TicketFilter>,
 ) -> ApiResult<Json<TicketQueueResponse>> {
-    let tickets = state
+    let page = state
         .support
         .list(TicketQuery {
             status: filter.status,
             kind: filter.kind,
             assignee_id: filter.assignee_id,
             q: filter.q,
+            after: filter.after,
+            after_id: filter.after_id,
             limit: filter.limit.unwrap_or(50),
         })
         .await?;
 
     Ok(Json(TicketQueueResponse {
-        tickets,
+        page,
         open_count: state.support.open_count().await?,
     }))
 }
