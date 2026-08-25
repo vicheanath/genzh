@@ -29,7 +29,14 @@ COPY packages/shared/package.json packages/shared/
 # every `pnpm run`, sees it was installed with a filter, and silently starts a
 # full unfiltered install to reconcile it — pulling in that same React Native
 # tree, which is not even in the context. Off, so the filtered install stands.
-ENV PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
+#
+# MINIMUM_RELEASE_AGE for the same reason CI sets it: pnpm 11 rejects any
+# lockfile entry published within the last 24 hours, so without this the image
+# stops building for a day after every dependency bump — for a lockfile that is
+# already committed and reviewed. The check earns its keep at resolution time,
+# on a developer's machine, where pnpm's default still applies.
+ENV PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false \
+    PNPM_CONFIG_MINIMUM_RELEASE_AGE=0
 RUN pnpm install --frozen-lockfile --filter web --filter @genzh/shared
 
 COPY packages/shared/ packages/shared/

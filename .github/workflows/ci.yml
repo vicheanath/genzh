@@ -117,6 +117,21 @@ jobs:
       # the final word.
       PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
+      # pnpm 11 refuses any lockfile entry published in the last 24 hours
+      # (`minimumReleaseAge`, default 1440 minutes). That check is worth having
+      # when a version first *enters* the lockfile — it is the window in which
+      # a compromised release gets pulled before anyone notices — so developer
+      # machines keep pnpm's default and `pnpm add` still waits.
+      #
+      # Re-running it here does not: `--frozen-lockfile` installs a lockfile
+      # that is already committed and reviewed, and re-checking its age against
+      # wall-clock time means the same commit is red today and green tomorrow
+      # with nothing changed. A dependency bump would break CI for a day.
+      #
+      # To enforce it here anyway, drop this line and use
+      # `minimumReleaseAgeExclude` for the packages you have vetted.
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE: "0"
+
     steps:
       - uses: actions/checkout@v4
 
