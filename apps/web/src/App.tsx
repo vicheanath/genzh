@@ -13,6 +13,9 @@ import { CallProvider } from '@/lib/useCall'
 import { AccountRoute } from './routes/AccountRoute'
 import { AdminRoute } from './routes/AdminRoute'
 import { AuditLogPanel } from './routes/admin/AuditLogPanel'
+import { BroadcastsPanel } from './routes/admin/BroadcastsPanel'
+import { CommunitiesPanel } from './routes/admin/CommunitiesPanel'
+import { LiveMediaPanel } from './routes/admin/LiveMediaPanel'
 import { StaffUsersPanel } from './routes/admin/StaffUsersPanel'
 import { SupportQueuePanel } from './routes/admin/SupportQueuePanel'
 import { AppShell } from './routes/AppShell'
@@ -129,6 +132,9 @@ function Router() {
           <Route index element={<Navigate to="/admin/queue" replace />} />
           <Route path="queue" element={<SupportQueuePanel />} />
           <Route path="users" element={<StaffUsersPanel />} />
+          <Route path="communities" element={<CommunitiesPanel />} />
+          <Route path="live" element={<LiveMediaPanel />} />
+          <Route path="broadcasts" element={<BroadcastsPanel />} />
           <Route path="audit" element={<AuditLogPanel />} />
         </Route>
         <Route path="/c/:communityId" element={<CommunityRoute />} />

@@ -109,11 +109,22 @@ pub enum AuditAction {
     MediaSessionJoined,
     /// A media session was left.
     MediaSessionLeft,
+    /// A media session was forcefully terminated by staff.
+    MediaSessionForceEnded,
 
     /// A message was created.
     MessageCreated,
     /// A message was edited.
     MessageEdited,
+
+    /// A platform broadcast was created.
+    BroadcastCreated,
+    /// A platform broadcast was dismissed.
+    BroadcastDismissed,
+    /// A community was quarantined.
+    CommunityQuarantined,
+    /// A community was unquarantined.
+    CommunityUnquarantined,
 }
 
 impl AuditAction {
@@ -133,6 +144,8 @@ impl AuditAction {
             AuditAction::CommunityCreated => "community.created",
             AuditAction::CommunityUpdated => "community.updated",
             AuditAction::CommunityRemoved => "community.removed",
+            AuditAction::CommunityQuarantined => "community.quarantined",
+            AuditAction::CommunityUnquarantined => "community.unquarantined",
             AuditAction::CommunityMemberJoined => "community.member_joined",
             AuditAction::CommunityMemberRemoved => "community.member_removed",
             AuditAction::CommunityRoleCreated => "community.role_created",
@@ -151,6 +164,8 @@ impl AuditAction {
             AuditAction::CallStarted => "call.started",
             AuditAction::CallEnded => "call.ended",
 
+            AuditAction::MessageCreated => "message.created",
+            AuditAction::MessageEdited => "message.edited",
             AuditAction::MessageRemoved => "message.removed",
             AuditAction::MessagePinned => "message.pinned",
             AuditAction::MessageUnpinned => "message.unpinned",
@@ -169,11 +184,12 @@ impl AuditAction {
             AuditAction::UserOAuthLogin => "user.oauth_login",
             AuditAction::CommunityInviteRedeemed => "community.invite_redeemed",
             AuditAction::RoomPersonaChanged => "room.persona_changed",
-            AuditAction::MediaSessionJoined => "media.joined",
-            AuditAction::MediaSessionLeft => "media.left",
+            AuditAction::MediaSessionJoined => "media.session_joined",
+            AuditAction::MediaSessionLeft => "media.session_left",
+            AuditAction::MediaSessionForceEnded => "media.force_ended",
 
-            AuditAction::MessageCreated => "message.created",
-            AuditAction::MessageEdited => "message.edited",
+            AuditAction::BroadcastCreated => "broadcast.created",
+            AuditAction::BroadcastDismissed => "broadcast.dismissed",
         }
     }
 
@@ -189,6 +205,8 @@ impl AuditAction {
         AuditAction::CommunityCreated,
         AuditAction::CommunityUpdated,
         AuditAction::CommunityRemoved,
+        AuditAction::CommunityQuarantined,
+        AuditAction::CommunityUnquarantined,
         AuditAction::CommunityMemberJoined,
         AuditAction::CommunityMemberRemoved,
         AuditAction::CommunityRoleCreated,
@@ -221,8 +239,11 @@ impl AuditAction {
         AuditAction::RoomPersonaChanged,
         AuditAction::MediaSessionJoined,
         AuditAction::MediaSessionLeft,
+        AuditAction::MediaSessionForceEnded,
         AuditAction::MessageCreated,
         AuditAction::MessageEdited,
+        AuditAction::BroadcastCreated,
+        AuditAction::BroadcastDismissed,
     ];
 }
 

@@ -11,6 +11,7 @@ import { AddCommunityDialog } from './AddCommunityDialog'
 import { CallDialogs } from './CallDialogs'
 import { ProfileDialog } from './ProfileDialog'
 import { ChannelSidebar, CommunityRail, MobileNav, MobileTopBar } from './shell'
+import { GlobalBroadcastBanner } from './shell/GlobalBroadcastBanner'
 
 import styles from './shell/shell.module.css'
 
@@ -74,6 +75,7 @@ export function AppShell() {
       )}
 
       <main className={styles.content}>
+        <GlobalBroadcastBanner />
         {isMobile && (
           <MobileTopBar
             title={

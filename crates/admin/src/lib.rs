@@ -6,9 +6,15 @@
 //! describe.
 
 pub mod audit;
+pub mod broadcasts;
+pub mod communities;
+pub mod live;
 pub mod staff;
 pub mod support;
 
 pub use audit::{AuditLog, AuditQuery, AuditRecord};
+pub use broadcasts::{BroadcastService, NewBroadcast, SystemBroadcast};
+pub use communities::{AdminCommunityView, CommunityAdminService, CommunitySearchQuery};
+pub use live::{LiveMediaService, LiveMediaSessionView};
 pub use staff::{AdminStats, StaffService, StaffUserView};
 pub use support::{NewTicket, SupportService, TicketQuery};

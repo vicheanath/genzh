@@ -540,3 +540,46 @@ export interface OpenTicketInput {
   subject: string
   details: string
 }
+
+export interface AdminCommunityView {
+  id: Uuid
+  name: String
+  description: string | null
+  owner_id: Uuid
+  owner_handle: string | null
+  member_count: number
+  room_count: number
+  is_quarantined: boolean
+  quarantined_at: Timestamp | null
+  quarantine_reason: string | null
+  created_at: Timestamp
+}
+
+export interface SystemBroadcast {
+  id: Uuid
+  title: string
+  message: string
+  level: 'info' | 'warning' | 'danger' | string
+  is_active: boolean
+  created_by: Uuid | null
+  created_at: Timestamp
+  expires_at: Timestamp | null
+}
+
+export interface NewBroadcastInput {
+  title: string
+  message: string
+  level?: string
+  expires_at?: Timestamp
+}
+
+export interface LiveMediaSessionView {
+  room_id: Uuid
+  room_name: string
+  room_type: string
+  community_name: string | null
+  participant_count: number
+  status: string
+  started_at: Timestamp | null
+}
+

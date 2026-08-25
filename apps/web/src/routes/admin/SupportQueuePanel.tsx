@@ -8,14 +8,18 @@ import { Select } from '@/components/Select'
 import { Skeleton } from '@/components/Skeleton'
 import { useToast } from '@/components/Toast'
 import {
+  useAssignTicketMutation,
   useIsStaff,
+  useStaffList,
   useStaffReplyMutation,
   useSupportQueue,
   useSupportTicket,
   useUpdateTicketMutation,
+  type StaffUserView,
   type SupportTicket,
   type TicketStatus,
 } from '@/features/api'
+import { useAuth } from '@/lib/auth'
 import { errorText } from '@/lib/errors'
 import { formatFull } from '@/lib/time'
 
@@ -170,11 +174,14 @@ const CANNED_REPLIES = [
 
 /** One ticket: what was said, and the two things staff can do about it. */
 function TicketThread({ ticketId }: { ticketId: string }) {
+  const { user } = useAuth()
   const isStaff = useIsStaff()
   const toast = useToast()
   const detail = useSupportTicket(ticketId)
   const reply = useStaffReplyMutation()
   const updateTicket = useUpdateTicketMutation()
+  const assignTicket = useAssignTicketMutation()
+  const staffMembers = useStaffList()
 
   const [body, setBody] = useState('')
   const [staffOnly, setStaffOnly] = useState(false)
@@ -209,13 +216,62 @@ function TicketThread({ ticketId }: { ticketId: string }) {
     }
   }
 
+  async function handleAssign(assigneeId: string | null) {
+    try {
+      await assignTicket.mutateAsync({ ticketId, assigneeId })
+      toast.success(assigneeId ? 'Ticket assigned' : 'Ticket unassigned')
+    } catch (cause) {
+      toast.error('Could not assign ticket', errorText(cause))
+    }
+  }
+
+  const staffOptions = [
+    { value: 'none', label: 'Unassigned' },
+    ...(staffMembers.data ?? []).map((s: StaffUserView) => ({
+      value: s.id,
+      label: `@${s.handle} (${s.display_name ?? s.platform_role})`,
+    })),
+  ]
+
+  const isAssignedToMe = user && ticket.assignee_id === user.id
+
   return (
     <article className={styles.thread}>
       <header className={styles.threadHeader}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
           <h2 className={styles.threadSubject}>{ticket.subject}</h2>
-          <Badge tone={STATUS_TONE[ticket.status]}>{ticket.status}</Badge>
+          <div className={styles.badges}>
+            <Badge tone={STATUS_TONE[ticket.status]}>{ticket.status}</Badge>
+            {ticket.assignee_id ? (
+              <Badge tone="accent">
+                {isAssignedToMe ? 'Assigned to you' : 'Assigned'}
+              </Badge>
+            ) : (
+              <Badge tone="neutral">Unassigned</Badge>
+            )}
+          </div>
         </div>
+
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap', paddingTop: 'var(--space-1)' }}>
+          <div style={{ minWidth: '13rem' }}>
+            <Select
+              aria-label="Assign ticket to staff"
+              value={ticket.assignee_id ?? 'none'}
+              onValueChange={(val) => void handleAssign(val === 'none' ? null : val)}
+              options={staffOptions}
+            />
+          </div>
+          {user && !isAssignedToMe && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleAssign(user.id)}
+            >
+              Assign to me
+            </Button>
+          )}
+        </div>
+
         <p className={styles.rowMeta}>
           {ticket.kind === 'report' ? 'Report' : 'Help request'} · {ticket.category} ·{' '}
           {formatFull(ticket.created_at)}

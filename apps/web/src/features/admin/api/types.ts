@@ -1,6 +1,9 @@
 import type {
+  AdminCommunityView,
   AdminStats,
   AuditEntry,
+  LiveMediaSessionView,
+  NewBroadcastInput,
   OpenTicketInput,
   PlatformRole,
   StaffUserView,
@@ -8,6 +11,7 @@ import type {
   SupportQueue,
   SupportTicket,
   SupportTicketDetail,
+  SystemBroadcast,
   TicketKind,
   TicketStatus,
   TicketSubjectType,
@@ -16,8 +20,11 @@ import type {
 } from '@/lib/api'
 
 export type {
+  AdminCommunityView,
   AdminStats,
   AuditEntry,
+  LiveMediaSessionView,
+  NewBroadcastInput,
   OpenTicketInput,
   PlatformRole,
   StaffUserView,
@@ -25,6 +32,7 @@ export type {
   SupportQueue,
   SupportTicket,
   SupportTicketDetail,
+  SystemBroadcast,
   TicketKind,
   TicketStatus,
   TicketSubjectType,

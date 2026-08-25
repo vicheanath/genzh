@@ -63,9 +63,40 @@ pub fn build(state: AppState) -> Router {
             get(routes::admin::get_ticket).patch(routes::admin::update_ticket),
         )
         .route(
+            "/admin/tickets/{id}/assign",
+            put(routes::admin::assign_ticket),
+        )
+        .route(
             "/admin/tickets/{id}/messages",
             post(routes::admin::reply_to_ticket),
         )
+        .route("/admin/communities", get(routes::admin::list_admin_communities))
+        .route(
+            "/admin/communities/{id}/quarantine",
+            post(routes::admin::quarantine_community),
+        )
+        .route(
+            "/admin/communities/{id}/unquarantine",
+            post(routes::admin::unquarantine_community),
+        )
+        .route(
+            "/admin/communities/{id}",
+            delete(routes::admin::delete_admin_community),
+        )
+        .route("/admin/live", get(routes::admin::list_live_media))
+        .route(
+            "/admin/live/{id}/terminate",
+            post(routes::admin::terminate_live_media),
+        )
+        .route(
+            "/admin/broadcasts",
+            get(routes::admin::list_admin_broadcasts).post(routes::admin::create_broadcast),
+        )
+        .route(
+            "/admin/broadcasts/{id}",
+            delete(routes::admin::dismiss_broadcast),
+        )
+        .route("/broadcasts/active", get(routes::admin::list_active_broadcasts))
         // ---- support, as the person who raised it sees it ----
         .route(
             "/support/tickets",

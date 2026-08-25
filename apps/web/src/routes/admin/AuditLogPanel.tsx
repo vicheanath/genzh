@@ -87,6 +87,39 @@ export function AuditLogPanel() {
     toast.success('Metadata copied to clipboard')
   }
 
+  function exportJson() {
+    const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Audit log JSON exported')
+  }
+
+  function exportCsv() {
+    const headers = ['id', 'created_at', 'action', 'actor_handle', 'summary', 'subject_type', 'subject_id']
+    const rows = entries.map((e) => [
+      e.id,
+      e.created_at,
+      e.action,
+      e.actor_handle ?? 'system',
+      `"${(e.summary ?? '').replace(/"/g, '""')}"`,
+      e.subject_type ?? '',
+      e.subject_id ?? '',
+    ])
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Audit log CSV exported')
+  }
+
   return (
     <div className={styles.stack}>
       {/* Category Filter Chips */}
@@ -131,7 +164,23 @@ export function AuditLogPanel() {
           onClick={() => void log.refetch()}
           disabled={log.isFetching}
         >
-          {log.isFetching ? 'Refreshing…' : 'Refresh Log'}
+          {log.isFetching ? 'Refreshing…' : 'Refresh'}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={exportCsv}
+          disabled={entries.length === 0}
+        >
+          Export CSV
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={exportJson}
+          disabled={entries.length === 0}
+        >
+          Export JSON
         </Button>
       </div>
 

@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { admin, support } from '@/lib/api'
+import { admin, broadcasts, support } from '@/lib/api'
 import { useAuth, useIsSignedIn } from '@/lib/auth'
 
-import type { OpenTicketInput, PlatformRole, TicketStatus, Uuid } from './types'
+import type {
+  NewBroadcastInput,
+  OpenTicketInput,
+  PlatformRole,
+  TicketStatus,
+  Uuid,
+} from './types'
 
 export const adminKeys = {
   all: ['admin'] as const,
@@ -15,6 +21,14 @@ export const adminKeys = {
   staff: () => [...adminKeys.all, 'staff'] as const,
   tickets: (filter: string) => [...adminKeys.all, 'tickets', filter] as const,
   ticket: (id: Uuid) => [...adminKeys.all, 'ticket', id] as const,
+  communities: (filter: string) => [...adminKeys.all, 'communities', filter] as const,
+  liveMedia: () => [...adminKeys.all, 'live-media'] as const,
+  broadcasts: () => [...adminKeys.all, 'broadcasts'] as const,
+}
+
+export const broadcastKeys = {
+  all: ['broadcasts'] as const,
+  active: () => [...broadcastKeys.all, 'active'] as const,
 }
 
 export const supportKeys = {
@@ -200,6 +214,126 @@ export function useUpdateTicketMutation() {
       patch: { status?: TicketStatus; assignee_id?: Uuid | null }
     }) => admin.updateTicket(null, ticketId, patch),
     onSuccess: invalidate,
+  })
+}
+
+export function useAssignTicketMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: ({
+      ticketId,
+      assigneeId,
+    }: {
+      ticketId: Uuid
+      assigneeId: Uuid | null
+    }) => admin.assignTicket(null, ticketId, assigneeId),
+    onSuccess: invalidate,
+  })
+}
+
+// ── communities ────────────────────────────────────────────────────────────
+
+export function useAdminCommunities(
+  params: { q?: string; is_quarantined?: boolean; limit?: number } = {},
+) {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.communities(JSON.stringify(params)),
+    queryFn: () => admin.communities(null, params),
+    enabled: isStaff,
+  })
+}
+
+export function useQuarantineCommunityMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: ({
+      communityId,
+      reason,
+    }: {
+      communityId: Uuid
+      reason: string
+    }) => admin.quarantineCommunity(null, communityId, reason),
+    onSuccess: invalidate,
+  })
+}
+
+export function useUnquarantineCommunityMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (communityId: Uuid) => admin.unquarantineCommunity(null, communityId),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteAdminCommunityMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (communityId: Uuid) => admin.deleteCommunity(null, communityId),
+    onSuccess: invalidate,
+  })
+}
+
+// ── live media ─────────────────────────────────────────────────────────────
+
+export function useLiveMediaSessions() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.liveMedia(),
+    queryFn: () => admin.liveMedia(null),
+    enabled: isStaff,
+    refetchInterval: 5_000,
+  })
+}
+
+export function useTerminateLiveMediaMutation() {
+  const invalidate = useConsoleInvalidation()
+  return useMutation({
+    mutationFn: (roomId: Uuid) => admin.terminateLiveMedia(null, roomId),
+    onSuccess: invalidate,
+  })
+}
+
+// ── system broadcasts ──────────────────────────────────────────────────────
+
+export function useActiveBroadcasts() {
+  return useQuery({
+    queryKey: broadcastKeys.active(),
+    queryFn: () => broadcasts.active(),
+    refetchInterval: 60_000,
+  })
+}
+
+export function useAdminBroadcasts() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.broadcasts(),
+    queryFn: () => admin.broadcasts(null),
+    enabled: isStaff,
+  })
+}
+
+export function useCreateBroadcastMutation() {
+  const invalidate = useConsoleInvalidation()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: NewBroadcastInput) => admin.createBroadcast(null, input),
+    onSuccess: () => {
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: broadcastKeys.active() })
+    },
+  })
+}
+
+export function useDeleteBroadcastMutation() {
+  const invalidate = useConsoleInvalidation()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (broadcastId: Uuid) => admin.deleteBroadcast(null, broadcastId),
+    onSuccess: () => {
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: broadcastKeys.active() })
+    },
   })
 }
 

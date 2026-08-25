@@ -106,6 +106,30 @@ export function AdminRoute() {
         >
           Users
         </NavLink>
+        <NavLink
+          to="/admin/communities"
+          className={({ isActive }) =>
+            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+          }
+        >
+          Communities
+        </NavLink>
+        <NavLink
+          to="/admin/live"
+          className={({ isActive }) =>
+            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+          }
+        >
+          Live SFU
+        </NavLink>
+        <NavLink
+          to="/admin/broadcasts"
+          className={({ isActive }) =>
+            `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+          }
+        >
+          Broadcasts
+        </NavLink>
         {isAdmin && (
           <NavLink
             to="/admin/audit"

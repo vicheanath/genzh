@@ -6,7 +6,10 @@
 
 use std::sync::Arc;
 
-use genzh_admin::{AuditLog, StaffService, SupportService};
+use genzh_admin::{
+    AuditLog, BroadcastService, CommunityAdminService, LiveMediaService, StaffService,
+    SupportService,
+};
 use genzh_auth::{AuthService, JwtService};
 use genzh_community::{CommunityService, InviteService, RoleService};
 use genzh_graph::SocialService;
@@ -72,6 +75,12 @@ pub struct AppState {
     pub staff: StaffService,
     /// Reports and help requests.
     pub support: SupportService,
+    /// Community safety & moderation.
+    pub admin_communities: CommunityAdminService,
+    /// Platform announcements.
+    pub broadcasts: BroadcastService,
+    /// Live SFU media session monitoring & termination.
+    pub live_media: LiveMediaService,
     /// Invite links into communities.
     pub invites: InviteService,
     /// Where each person got to in each room.
@@ -142,6 +151,9 @@ impl AppState {
         let audit = AuditLog::new(pool.clone());
         let staff = StaffService::new(pool.clone(), audit.clone());
         let support = SupportService::new(pool.clone(), audit.clone());
+        let admin_communities = CommunityAdminService::new(pool.clone(), audit.clone());
+        let broadcasts = BroadcastService::new(pool.clone(), audit.clone());
+        let live_media = LiveMediaService::new(pool.clone(), audit.clone());
         let invites = InviteService::new(pool.clone(), communities.clone());
         let read_state = ReadStateService::new(pool.clone());
 
@@ -203,6 +215,9 @@ impl AppState {
             audit,
             staff,
             support,
+            admin_communities,
+            broadcasts,
+            live_media,
             invites,
             read_state,
             media,

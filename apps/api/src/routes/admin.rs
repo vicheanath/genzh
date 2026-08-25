@@ -8,6 +8,7 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use genzh_admin::{AuditQuery, NewTicket, TicketQuery};
 use genzh_domain::audit::{AuditAction, AuditEntry};
 use genzh_domain::platform::PlatformRole;
@@ -488,4 +489,177 @@ pub async fn reply_to_my_ticket(
     ).await;
 
     Ok(Json(msg))
+}
+
+// ────────────────────────── ticket assignment ─────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct AssignTicketRequest {
+    pub assignee_id: Option<UserId>,
+}
+
+/// `PUT /api/v1/admin/tickets/{id}/assign`
+pub async fn assign_ticket(
+    State(state): State<AppState>,
+    staff: StaffUser,
+    Path(ticket_id): Path<Uuid>,
+    ApiJson(body): ApiJson<AssignTicketRequest>,
+) -> ApiResult<Json<Ticket>> {
+    let handle = state.staff.find_user(staff.user_id).await?.handle;
+    Ok(Json(
+        state
+            .support
+            .assign(staff.user_id, &handle, ticket_id, body.assignee_id)
+            .await?,
+    ))
+}
+
+// ──────────────────────────── communities ─────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct AdminCommunityFilter {
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
+    pub is_quarantined: Option<bool>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+/// `GET /api/v1/admin/communities`
+pub async fn list_admin_communities(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+    Query(filter): Query<AdminCommunityFilter>,
+) -> ApiResult<Json<Vec<genzh_admin::AdminCommunityView>>> {
+    Ok(Json(
+        state
+            .admin_communities
+            .list(genzh_admin::CommunitySearchQuery {
+                q: filter.q,
+                is_quarantined: filter.is_quarantined,
+                limit: filter.limit.unwrap_or(50),
+            })
+            .await?,
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct QuarantineCommunityRequest {
+    pub reason: String,
+}
+
+/// `POST /api/v1/admin/communities/{id}/quarantine`
+pub async fn quarantine_community(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(community_id): Path<genzh_domain::CommunityId>,
+    ApiJson(body): ApiJson<QuarantineCommunityRequest>,
+) -> ApiResult<Json<genzh_admin::AdminCommunityView>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .admin_communities
+            .quarantine(admin.user_id, &handle, community_id, &body.reason)
+            .await?,
+    ))
+}
+
+/// `POST /api/v1/admin/communities/{id}/unquarantine`
+pub async fn unquarantine_community(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(community_id): Path<genzh_domain::CommunityId>,
+) -> ApiResult<Json<genzh_admin::AdminCommunityView>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .admin_communities
+            .unquarantine(admin.user_id, &handle, community_id)
+            .await?,
+    ))
+}
+
+/// `DELETE /api/v1/admin/communities/{id}`
+pub async fn delete_admin_community(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(community_id): Path<genzh_domain::CommunityId>,
+) -> ApiResult<StatusCode> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state
+        .admin_communities
+        .delete_community(admin.user_id, &handle, community_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ──────────────────────────── live media ──────────────────────────────
+
+/// `GET /api/v1/admin/live`
+pub async fn list_live_media(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<Vec<genzh_admin::LiveMediaSessionView>>> {
+    Ok(Json(state.live_media.list_active().await?))
+}
+
+/// `POST /api/v1/admin/live/{id}/terminate`
+pub async fn terminate_live_media(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(room_id): Path<genzh_domain::RoomId>,
+) -> ApiResult<StatusCode> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state
+        .live_media
+        .terminate_session(admin.user_id, &handle, room_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ──────────────────────────── broadcasts ──────────────────────────────
+
+/// `GET /api/v1/broadcasts/active`
+pub async fn list_active_broadcasts(
+    State(state): State<AppState>,
+) -> ApiResult<Json<Vec<genzh_admin::SystemBroadcast>>> {
+    Ok(Json(state.broadcasts.list_active().await?))
+}
+
+/// `GET /api/v1/admin/broadcasts`
+pub async fn list_admin_broadcasts(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<Vec<genzh_admin::SystemBroadcast>>> {
+    Ok(Json(state.broadcasts.list_all().await?))
+}
+
+/// `POST /api/v1/admin/broadcasts`
+pub async fn create_broadcast(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    ApiJson(body): ApiJson<genzh_admin::NewBroadcast>,
+) -> ApiResult<Json<genzh_admin::SystemBroadcast>> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    Ok(Json(
+        state
+            .broadcasts
+            .create(admin.user_id, &handle, body)
+            .await?,
+    ))
+}
+
+/// `DELETE /api/v1/admin/broadcasts/{id}`
+pub async fn dismiss_broadcast(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(broadcast_id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state
+        .broadcasts
+        .dismiss(admin.user_id, &handle, broadcast_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }

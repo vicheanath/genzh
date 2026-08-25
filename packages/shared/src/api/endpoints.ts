@@ -1,9 +1,13 @@
 import { request } from './client'
 import type {
+  AdminCommunityView,
   AdminStats,
   AuditEntry,
   AuthConfig,
   AuthResponse,
+  LiveMediaSessionView,
+  NewBroadcastInput,
+  SystemBroadcast,
   CallEndReason,
   Community,
   CommunityMember,
@@ -756,4 +760,70 @@ export const admin = {
       body: patch,
       token,
     }),
+
+  assignTicket: (token: string | null, id: Uuid, assigneeId: Uuid | null) =>
+    request<SupportTicket>(`/api/v1/admin/tickets/${id}/assign`, {
+      method: 'PUT',
+      body: { assignee_id: assigneeId },
+      token,
+    }),
+
+  /** Search and list communities with moderation metrics. */
+  communities: (
+    token: string | null,
+    params: { q?: string; is_quarantined?: boolean; limit?: number } = {},
+  ) => request<AdminCommunityView[]>('/api/v1/admin/communities', { token, params }),
+
+  quarantineCommunity: (token: string | null, id: Uuid, reason: string) =>
+    request<AdminCommunityView>(`/api/v1/admin/communities/${id}/quarantine`, {
+      method: 'POST',
+      body: { reason },
+      token,
+    }),
+
+  unquarantineCommunity: (token: string | null, id: Uuid) =>
+    request<AdminCommunityView>(`/api/v1/admin/communities/${id}/unquarantine`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  deleteCommunity: (token: string | null, id: Uuid) =>
+    request<void>(`/api/v1/admin/communities/${id}`, {
+      method: 'DELETE',
+      token,
+    }),
+
+  /** Live active SFU media rooms and calls. */
+  liveMedia: (token: string | null) =>
+    request<LiveMediaSessionView[]>('/api/v1/admin/live', { token }),
+
+  terminateLiveMedia: (token: string | null, roomId: Uuid) =>
+    request<void>(`/api/v1/admin/live/${roomId}/terminate`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  /** System broadcasts and announcement banners. */
+  broadcasts: (token: string | null) =>
+    request<SystemBroadcast[]>('/api/v1/admin/broadcasts', { token }),
+
+  createBroadcast: (token: string | null, input: NewBroadcastInput) =>
+    request<SystemBroadcast>('/api/v1/admin/broadcasts', {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+
+  deleteBroadcast: (token: string | null, id: Uuid) =>
+    request<void>(`/api/v1/admin/broadcasts/${id}`, {
+      method: 'DELETE',
+      token,
+    }),
+}
+
+export const broadcasts = {
+  /** Active system broadcasts for clients/users. */
+  active: () => request<SystemBroadcast[]>('/api/v1/broadcasts/active', { token: null }),
 }
