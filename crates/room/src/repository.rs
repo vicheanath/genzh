@@ -677,7 +677,7 @@ impl RoomRepository {
     pub async fn prune_stale_participants(
         &self,
         stale_after: Duration,
-        empty_grace: Duration,
+        _empty_grace: Duration,
     ) -> RepositoryResult<PruneOutcome> {
         let mut tx = self.pool.begin().await?;
 
