@@ -1,6 +1,7 @@
 import type {
   Community,
   CommunityMember,
+  CommunityTemplate,
   CommunityWithPermissions,
   CreateRoleInput,
   Permission,
@@ -14,6 +15,8 @@ export interface CreateCommunityInput {
   name: string
   description?: string
   icon_url?: string
+  /** A key from `useCommunityTemplates`. Omitted means the default shape. */
+  template?: string
 }
 
 export interface UpdateCommunityInput {
@@ -32,6 +35,7 @@ export interface UpdateRoleInput {
 export type {
   Community,
   CommunityMember,
+  CommunityTemplate,
   CommunityWithPermissions,
   CreateRoleInput,
   Permission,

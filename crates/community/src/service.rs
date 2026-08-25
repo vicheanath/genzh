@@ -6,7 +6,7 @@
 //! role operation and to none of the ones left in this file.
 
 use genzh_domain::community::{self, Community, CommunityMember, MemberWithRoles};
-use genzh_domain::{CommunityId, DomainError, Permission, RoleId, UserId, now};
+use genzh_domain::{CommunityId, DomainError, Permission, RoleId, RoomId, UserId, now};
 use genzh_infrastructure::{DbPool, ServiceError, ServiceResult};
 
 use crate::authorization::MemberContext;
@@ -21,6 +21,8 @@ pub struct CreateCommunity {
     pub description: Option<String>,
     /// Optional icon.
     pub icon_url: Option<String>,
+    /// Which starting shape to build. `None` means the default template.
+    pub template: Option<String>,
 }
 
 /// Input for updating a community. Absent fields are left alone.
@@ -149,16 +151,44 @@ impl CommunityService {
             updated_at: timestamp,
         };
 
+        // An unrecognised key is a client sending something this server does
+        // not build. Falling back to the default would hand back a server that
+        // is not the one they picked, silently, so it is refused instead.
+        let key = input
+            .template
+            .as_deref()
+            .unwrap_or(community::DEFAULT_TEMPLATE_KEY);
+        let template = community::community_template(key).ok_or_else(|| {
+            ServiceError::Domain(DomainError::invalid(
+                "template",
+                format!("`{key}` is not a community template"),
+            ))
+        })?;
+
         // Ids are minted here rather than in the repository so the whole set is
         // one value the transaction either writes or does not.
-        let roles: Vec<(RoleId, community::RoleTemplate)> = community::starter_roles()
-            .into_iter()
-            .map(|template| (RoleId::new(), template))
+        let roles: Vec<(RoleId, community::RoleTemplate)> =
+            community::roles_for_template(&template)
+                .into_iter()
+                .map(|role| (RoleId::new(), role))
+                .collect();
+
+        let rooms: Vec<(RoomId, community::RoomTemplate)> = template
+            .rooms
+            .iter()
+            .copied()
+            .map(|room| (RoomId::new(), room))
             .collect();
 
-        let created = self.repository.create(&candidate, &roles).await?;
+        let created = self.repository.create(&candidate, &roles, &rooms).await?;
 
-        tracing::info!(community_id = %created.id, %owner_id, "community created");
+        tracing::info!(
+            community_id = %created.id,
+            %owner_id,
+            template = key,
+            rooms = rooms.len(),
+            "community created"
+        );
         Ok(created)
     }
 

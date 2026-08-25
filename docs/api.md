@@ -135,19 +135,50 @@ would let an attacker probe for live tokens.
 
 ## Communities
 
-| Method   | Path                | Requires                                                    |
-| -------- | ------------------- | ----------------------------------------------------------- |
-| `POST`   | `/communities`      | authentication                                              |
-| `GET`    | `/communities/{id}` | membership                                                  |
-| `PATCH`  | `/communities/{id}` | `manage_community`                                          |
-| `DELETE` | `/communities/{id}` | **owner** — `manage_community` renames, it does not destroy |
+| Method   | Path                     | Requires                                                    |
+| -------- | ------------------------ | ----------------------------------------------------------- |
+| `GET`    | `/communities/templates` | authentication                                              |
+| `POST`   | `/communities`           | authentication                                              |
+| `GET`    | `/communities/{id}`      | membership                                                  |
+| `PATCH`  | `/communities/{id}`      | `manage_community`                                          |
+| `DELETE` | `/communities/{id}`      | **owner** — `manage_community` renames, it does not destroy |
 
 `GET` returns the community plus `your_permissions`, the caller's resolved
 permission list. Clients use it to hide controls the server would refuse anyway.
 
-Creating a community also creates its `@everyone` role (granting `view_room`,
-`send_message`, `add_reaction`, `speak`, `use_video`) and the owner's
-membership, in one transaction.
+### Templates
+
+`POST /communities` takes an optional `template` key, from
+`GET /communities/templates`. The template decides which channels the community
+is created with and which extra role it gets:
+
+```json
+{
+  "key": "gaming", "name": "Gaming", "icon": "🎮",
+  "description": "For clips, squads, and late night matches",
+  "suggested_name": "Gamers' Den", "suggested_description": "…",
+  "rooms": [{ "name": "clips", "topic": "…", "room_type": "text", "position": 1 }],
+  "extra_roles": [{ "name": "Squad Leader", "color": "#f59e0b", "permissions": ["…"] }]
+}
+```
+
+The catalogue is served rather than shipped in each client, because the server
+is what builds these — a client holding its own copy could offer a template that
+no longer exists, or promise channels it does not create.
+
+An **absent** `template` means the default (`general`), which is what clients
+predating templates send, and it still yields a `general` channel exactly as
+before. An **unrecognised** key is a `400`, not a silent fallback: the creator
+would otherwise get a server they did not pick.
+
+Template roles are **additive**. Every community gets the same starter ladder —
+`@everyone`, `Presenter`, `Moderator`, `Admin` — and a template contributes one
+trusted-member role on top, ranked above `Presenter` and below the staff roles,
+since position gates who may edit whom.
+
+Creating a community writes the community, its roles, its template's channels
+and the owner's membership **in one transaction**. `@everyone` grants
+`view_room`, `send_message`, `add_reaction`, `speak` and `use_video`.
 
 `GET /communities` is the first call a client makes after signing in. It returns
 the whole list rather than paginating: a user belongs to tens of communities,

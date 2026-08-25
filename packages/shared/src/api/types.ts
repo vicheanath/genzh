@@ -91,6 +91,40 @@ export interface CommunityWithPermissions extends Community {
   your_permissions: Permission[]
 }
 
+/** A channel a community template creates. */
+export interface TemplateRoom {
+  name: string
+  topic: string | null
+  room_type: RoomType
+  position: number
+}
+
+/** A role a community template adds on top of the ones every community gets. */
+export interface TemplateRole {
+  name: string
+  color: string | null
+  permissions: Permission[]
+}
+
+/**
+ * A starting shape for a community: its channels and its roles.
+ *
+ * Served by the API rather than declared per client. The server is what builds
+ * these, so a client holding its own copy could offer a template that no longer
+ * exists, or promise channels it does not create.
+ */
+export interface CommunityTemplate {
+  key: string
+  name: string
+  icon: string
+  description: string
+  /** Prefilled into the create form. Empty for the blank template. */
+  suggested_name: string
+  suggested_description: string
+  rooms: TemplateRoom[]
+  extra_roles: TemplateRole[]
+}
+
 export interface CommunityMember {
   community_id: Uuid
   user_id: Uuid

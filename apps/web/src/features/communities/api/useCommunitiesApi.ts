@@ -14,6 +14,7 @@ import type {
 export const communityKeys = {
   all: ['communities'] as const,
   list: () => [...communityKeys.all, 'list'] as const,
+  templates: () => [...communityKeys.all, 'templates'] as const,
   detail: (id: Uuid) => [...communityKeys.all, 'detail', id] as const,
   members: (id: Uuid) => [...communityKeys.detail(id), 'members'] as const,
   roles: (id: Uuid) => [...communityKeys.detail(id), 'roles'] as const,
@@ -27,6 +28,23 @@ export function useCommunitiesList() {
     queryKey: communityKeys.list(),
     queryFn: () => communities.list(null),
     enabled: signedIn,
+  })
+}
+
+/**
+ * The shapes a new community can be built from.
+ *
+ * A static catalogue that changes only when the server is deployed, so it is
+ * never refetched within a session — but it is still *fetched*, because the
+ * server is what builds the channels and roles each template promises.
+ */
+export function useCommunityTemplates() {
+  const signedIn = useIsSignedIn()
+  return useQuery({
+    queryKey: communityKeys.templates(),
+    queryFn: () => communities.templates(null),
+    enabled: signedIn,
+    staleTime: Infinity,
   })
 }
 

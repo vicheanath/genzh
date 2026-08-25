@@ -358,3 +358,57 @@
   border-radius: var(--radius-xs);
   font-size: 0.8em;
 }
+
+/* ── what a template will build ─────────────────────────────────────────── */
+
+.templatePreview {
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-sunken);
+}
+
+.templatePreviewHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.templatePreviewList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.templatePreviewItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  font-size: 0.8rem;
+  color: var(--color-text);
+}
+
+/* The room type, kept quieter than the name it qualifies. */
+.templatePreviewKind {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.templatePreviewRoles {
+  margin-top: var(--space-2);
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}

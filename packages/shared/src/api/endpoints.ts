@@ -6,6 +6,7 @@ import type {
   Community,
   CommunityMember,
   CommunityWithPermissions,
+  CommunityTemplate,
   CurrentUser,
   DiscoveryResponse,
   Friendship,
@@ -102,7 +103,26 @@ export const communities = {
   get: (token: string | null, id: Uuid) =>
     request<CommunityWithPermissions>(`/api/v1/communities/${id}`, { token }),
 
-  create: (token: string | null, input: { name: string; description?: string; icon_url?: string }) =>
+  /**
+   * The shapes a community can be created from.
+   *
+   * A static catalogue, so it is cached hard on the client — but it is fetched
+   * rather than hard-coded, because the server is what actually builds the
+   * channels and roles each one promises.
+   */
+  templates: (token: string | null) =>
+    request<CommunityTemplate[]>('/api/v1/communities/templates', { token }),
+
+  create: (
+    token: string | null,
+    input: {
+      name: string
+      description?: string
+      icon_url?: string
+      /** A key from `communities.templates`. Omitted means the default shape. */
+      template?: string
+    },
+  ) =>
     request<CommunityWithPermissions>('/api/v1/communities', {
       method: 'POST',
       body: input,

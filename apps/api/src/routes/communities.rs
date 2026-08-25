@@ -4,9 +4,9 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use genzh_domain::community::{
-    Community, CommunityMember, MemberWithRoles, Role, RoleWithPermissions,
+    self, Community, CommunityMember, MemberWithRoles, Role, RoleWithPermissions,
 };
-use genzh_domain::{CommunityId, Permission, RoleId, UserId};
+use genzh_domain::{CommunityId, Permission, RoleId, RoomType, UserId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ApiError, ApiResult};
@@ -25,6 +25,47 @@ pub struct CreateCommunityRequest {
     /// Optional icon.
     #[serde(default)]
     pub icon_url: Option<String>,
+    /// Which starting shape to build, from `GET /communities/templates`.
+    ///
+    /// Absent means the default template, which is what every client that
+    /// predates templates sends — so they keep working unchanged.
+    #[serde(default)]
+    pub template: Option<String>,
+}
+
+/// One entry in `GET /api/v1/communities/templates`.
+///
+/// A projection rather than the domain type: the wire should carry permission
+/// *names*, not the bitmask the domain folds them into.
+#[derive(Debug, Serialize)]
+pub struct CommunityTemplateResponse {
+    pub key: String,
+    pub name: String,
+    pub icon: String,
+    pub description: String,
+    /// Prefilled into the create form; empty for the blank template.
+    pub suggested_name: String,
+    pub suggested_description: String,
+    pub rooms: Vec<TemplateRoomResponse>,
+    /// The roles this template adds on top of the ones every community gets.
+    pub extra_roles: Vec<TemplateRoleResponse>,
+}
+
+/// A channel a template creates.
+#[derive(Debug, Serialize)]
+pub struct TemplateRoomResponse {
+    pub name: String,
+    pub topic: Option<String>,
+    pub room_type: RoomType,
+    pub position: i32,
+}
+
+/// A role a template adds.
+#[derive(Debug, Serialize)]
+pub struct TemplateRoleResponse {
+    pub name: String,
+    pub color: Option<String>,
+    pub permissions: Vec<Permission>,
 }
 
 /// `PATCH /api/v1/communities/{id}` body.
@@ -158,6 +199,9 @@ pub async fn create(
     caller: CurrentUser,
     ApiJson(body): ApiJson<CreateCommunityRequest>,
 ) -> ApiResult<(StatusCode, Json<CommunityResponse>)> {
+    // The template's channels and roles are written by the same transaction
+    // that writes the community, so there is no follow-up call here to fail
+    // separately and leave a server with nothing in it.
     let community = state
         .communities
         .create(
@@ -166,30 +210,10 @@ pub async fn create(
                 name: body.name,
                 description: body.description,
                 icon_url: body.icon_url,
+                template: body.template,
             },
         )
         .await?;
-
-    let _ = state
-        .rooms
-        .create(
-            Some(community.id),
-            caller.user_id,
-            genzh_room::CreateRoom {
-                community_id: Some(community.id),
-                name: "general".to_string(),
-                topic: Some("Welcome to your new server!".to_string()),
-                category: None,
-                room_type: genzh_domain::RoomType::Text,
-                visibility: None,
-                is_anonymous: false,
-                duration_minutes: None,
-                position: Some(0),
-                max_participants: None,
-                participant_ids: None,
-            },
-        )
-        .await;
 
     Ok((
         StatusCode::CREATED,
@@ -439,4 +463,48 @@ mod tests {
     fn an_empty_permission_list_is_valid() {
         assert!(parse_permissions(&[]).expect("parse").is_empty());
     }
+}
+
+/// `GET /api/v1/communities/templates`
+///
+/// The shapes a community can be created from. Served rather than shipped in
+/// each client: the server is what builds them, so a client that held its own
+/// copy could offer a template that no longer exists, or describe one as having
+/// channels it does not create.
+///
+/// No authentication beyond a session: this is a static catalogue, and the
+/// create screen needs it before any community exists.
+pub async fn templates() -> Json<Vec<CommunityTemplateResponse>> {
+    Json(
+        community::community_templates()
+            .into_iter()
+            .map(|template| CommunityTemplateResponse {
+                key: template.key.to_string(),
+                name: template.name.to_string(),
+                icon: template.icon.to_string(),
+                description: template.description.to_string(),
+                suggested_name: template.suggested_name.to_string(),
+                suggested_description: template.suggested_description.to_string(),
+                rooms: template
+                    .rooms
+                    .iter()
+                    .map(|room| TemplateRoomResponse {
+                        name: room.name.to_string(),
+                        topic: room.topic.map(str::to_string),
+                        room_type: room.room_type,
+                        position: room.position,
+                    })
+                    .collect(),
+                extra_roles: template
+                    .extra_roles
+                    .iter()
+                    .map(|role| TemplateRoleResponse {
+                        name: role.name.to_string(),
+                        color: role.color.map(str::to_string),
+                        permissions: role.permissions.to_permissions(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    )
 }

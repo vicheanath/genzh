@@ -157,6 +157,10 @@ async fn main() -> anyhow::Result<()> {
                     name: comm_name.to_string(),
                     description: Some(comm_desc.to_string()),
                     icon_url: None,
+                    // The fixture names every channel it wants below, so it
+                    // starts from nothing rather than getting a second
+                    // `general` from the default template.
+                    template: Some(genzh_domain::community::BLANK_TEMPLATE_KEY.to_string()),
                 },
             )
             .await

@@ -2,9 +2,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use genzh_domain::community::{Community, CommunityMember, Role, RoleTemplate};
-use genzh_domain::{CommunityId, Permission, RoleId, UserId};
+use genzh_domain::community::{Community, CommunityMember, Role, RoleTemplate, RoomTemplate};
+use genzh_domain::room::{RoomStatus, RoomVisibility};
+use genzh_domain::{CommunityId, Permission, RoleId, RoomId, UserId};
 use genzh_infrastructure::{DbPool, RepositoryError, RepositoryResult};
+
+/// Where a community's own channels sit in discovery.
+///
+/// Matches the room service's fallback, so a template channel and a
+/// hand-made one are the same kind of row.
+const DEFAULT_ROOM_CATEGORY: &str = "random";
 
 /// Row shape for the permission-resolution query.
 #[derive(Debug, sqlx::FromRow)]
@@ -53,10 +60,15 @@ impl CommunityRepository {
     /// anything, and an ownerless community cannot be administered. The extra
     /// starter roles ride the same transaction rather than being added
     /// afterwards, so a community can never exist half-configured.
+    ///
+    /// The template's rooms ride it too. They used to be created by the HTTP
+    /// handler afterwards, with the result discarded — so a failure there left
+    /// a community with no channels at all and reported success anyway.
     pub async fn create(
         &self,
         community: &Community,
         roles: &[(RoleId, RoleTemplate)],
+        rooms: &[(RoomId, RoomTemplate)],
     ) -> RepositoryResult<Community> {
         let mut tx = self.pool.begin().await?;
 
@@ -96,6 +108,28 @@ impl CommunityRepository {
                 .execute(&mut *tx)
                 .await?;
             }
+        }
+
+        for (room_id, template) in rooms {
+            sqlx::query(
+                "INSERT INTO rooms (
+                    id, community_id, owner_id, name, topic, category, room_type,
+                    visibility, status, is_anonymous, position, current_participants
+                 )
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10, 0)",
+            )
+            .bind(room_id)
+            .bind(community.id)
+            .bind(community.owner_id)
+            .bind(template.name)
+            .bind(template.topic)
+            .bind(DEFAULT_ROOM_CATEGORY)
+            .bind(template.room_type)
+            .bind(RoomVisibility::Public)
+            .bind(RoomStatus::Active)
+            .bind(template.position)
+            .execute(&mut *tx)
+            .await?;
         }
 
         sqlx::query("INSERT INTO community_members (community_id, user_id) VALUES ($1, $2)")

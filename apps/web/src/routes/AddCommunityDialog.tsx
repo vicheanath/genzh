@@ -18,7 +18,12 @@ import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { ApiError } from '@/lib/api'
-import { useCreateCommunityMutation, useJoinCommunityMutation } from '@/features/api'
+import {
+  useCommunityTemplates,
+  useCreateCommunityMutation,
+  useJoinCommunityMutation,
+  type CommunityTemplate,
+} from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { useAuth } from '@/lib/auth'
 
@@ -40,44 +45,6 @@ interface AddCommunityDialogProps {
   onCreated?: () => void
 }
 
-const TEMPLATES = [
-  {
-    icon: '🎮',
-    title: 'Gaming',
-    desc: 'For clips, squads, and late night matches',
-    defaultName: "Gamers' Den",
-    defaultDesc: 'A community for gaming, voice chats, and squading up.',
-  },
-  {
-    icon: '👥',
-    title: 'Friends & Hanging Out',
-    desc: 'For everyday chill chat, voice calls, and memes',
-    defaultName: 'The Hangout Lounge',
-    defaultDesc: 'Just a chill place to talk and hang out with friends.',
-  },
-  {
-    icon: '💻',
-    title: 'Tech & Code',
-    desc: 'For builders, hackers, devs, and startups',
-    defaultName: 'Dev & Build Club',
-    defaultDesc: 'Building cool software, sharing projects, and solving bugs.',
-  },
-  {
-    icon: '📚',
-    title: 'Study & School',
-    desc: 'For classes, homework help, and study sessions',
-    defaultName: 'Study Hall',
-    defaultDesc: 'Focus sessions, group study, and shared notes.',
-  },
-  {
-    icon: '🎨',
-    title: 'Art & Creativity',
-    desc: 'For artists, music makers, design, and writing',
-    defaultName: 'Creative Studio',
-    defaultDesc: 'Sharing artwork, music, WIPs, and creative feedback.',
-  },
-]
-
 const RANDOM_NAMES = [
   'Pixel Lounge',
   'Night Owls',
@@ -93,16 +60,25 @@ const RANDOM_NAMES = [
   'Binary Haven',
 ]
 
+/** The template that builds nothing — what "Create My Own" picks. */
+const BLANK_TEMPLATE = 'blank'
+
 export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDialogProps) {
   const { user } = useAuth()
+  const templates = useCommunityTemplates()
   const createCommunity = useCreateCommunityMutation()
   const joinCommunity = useJoinCommunityMutation()
   const navigate = useNavigate()
   const toast = useToast()
 
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu')
+  const [templateKey, setTemplateKey] = useState<string>(BLANK_TEMPLATE)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // "Create My Own" is the blank template, so it is not offered twice.
+  const pickable = (templates.data ?? []).filter((entry) => entry.key !== BLANK_TEMPLATE)
+  const chosen = templates.data?.find((entry) => entry.key === templateKey) ?? null
 
   const createForm = useForm<CreateCommunityFields>({
     defaultValues: {
@@ -127,6 +103,7 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
       iconUrl: '',
     })
     joinForm.reset()
+    setTemplateKey(BLANK_TEMPLATE)
     setError(null)
     setBusy(false)
   }
@@ -136,9 +113,17 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
     onClose()
   }
 
-  function handleSelectTemplate(template: (typeof TEMPLATES)[number]) {
-    createForm.setValue('name', template.defaultName)
-    createForm.setValue('description', template.defaultDesc)
+  function handleCreateOwn() {
+    setTemplateKey(BLANK_TEMPLATE)
+    setMode('create')
+  }
+
+  function handleSelectTemplate(template: CommunityTemplate) {
+    // The suggestions are a starting point the creator can overwrite; the key
+    // is what actually decides which channels and roles get built.
+    if (template.suggested_name) createForm.setValue('name', template.suggested_name)
+    createForm.setValue('description', template.suggested_description)
+    setTemplateKey(template.key)
     setMode('create')
   }
 
@@ -156,6 +141,7 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
         name: data.name.trim(),
         description: data.description?.trim() || undefined,
         icon_url: data.iconUrl?.trim() || undefined,
+        template: templateKey,
       })
       toast.success(`${community.name} created!`)
       onCreated?.()
@@ -230,7 +216,7 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
                         ? `${user.profile.display_name}'s Server`
                         : 'My Server',
                     )
-                    setMode('create')
+                    handleCreateOwn()
                   }}
                 >
                   <div className={styles.choiceIconWrap}>
@@ -238,31 +224,33 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
                   </div>
                   <div className={styles.choiceContent}>
                     <div className={styles.choiceTitle}>Create My Own</div>
-                    <div className={styles.choiceSub}>Start with a clean blank slate</div>
+                    <div className={styles.choiceSub}>An empty server — you make the channels</div>
                   </div>
                   <span className={styles.choiceArrow}>→</span>
                 </button>
 
-                <div className={styles.templatesSection}>
-                  <div className={styles.templatesHeading}>START FROM A TEMPLATE</div>
-                  <div className={styles.templatesGrid}>
-                    {TEMPLATES.map((tmpl) => (
-                      <button
-                        key={tmpl.title}
-                        type="button"
-                        className={styles.templateCard}
-                        onClick={() => handleSelectTemplate(tmpl)}
-                      >
-                        <span className={styles.templateIcon}>{tmpl.icon}</span>
-                        <div className={styles.templateInfo}>
-                          <span className={styles.templateTitle}>{tmpl.title}</span>
-                          <span className={styles.templateDesc}>{tmpl.desc}</span>
-                        </div>
-                        <span className={styles.templateArrow}>→</span>
-                      </button>
-                    ))}
+                {pickable.length > 0 && (
+                  <div className={styles.templatesSection}>
+                    <div className={styles.templatesHeading}>START FROM A TEMPLATE</div>
+                    <div className={styles.templatesGrid}>
+                      {pickable.map((tmpl) => (
+                        <button
+                          key={tmpl.key}
+                          type="button"
+                          className={styles.templateCard}
+                          onClick={() => handleSelectTemplate(tmpl)}
+                        >
+                          <span className={styles.templateIcon}>{tmpl.icon}</span>
+                          <div className={styles.templateInfo}>
+                            <span className={styles.templateTitle}>{tmpl.name}</span>
+                            <span className={styles.templateDesc}>{tmpl.description}</span>
+                          </div>
+                          <span className={styles.templateArrow}>→</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className={styles.joinPrompt}>
                   <div className={styles.joinPromptText}>Already have an invite?</div>
@@ -341,6 +329,34 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
                   {...createForm.register('iconUrl')}
                   placeholder="https://images.unsplash.com/…"
                 />
+
+                {/* What the template actually builds. The picker used to
+                    describe a shape the server never made, so this is read
+                    from the same catalogue the server provisions from. */}
+                {chosen && (chosen.rooms.length > 0 || chosen.extra_roles.length > 0) && (
+                  <div className={styles.templatePreview}>
+                    <div className={styles.templatePreviewHeading}>
+                      <span aria-hidden="true">{chosen.icon}</span>
+                      {chosen.name} starts with
+                    </div>
+                    <ul className={styles.templatePreviewList}>
+                      {chosen.rooms.map((room) => (
+                        <li key={room.name} className={styles.templatePreviewItem}>
+                          <HashIcon size={13} />
+                          <span>{room.name}</span>
+                          <span className={styles.templatePreviewKind}>{room.room_type}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {chosen.extra_roles.length > 0 && (
+                      <div className={styles.templatePreviewRoles}>
+                        Adds the{' '}
+                        {chosen.extra_roles.map((role) => role.name).join(', ')} role
+                        {chosen.extra_roles.length > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className={styles.footer}>
                   <Button

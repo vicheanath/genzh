@@ -42,6 +42,12 @@ pub fn build(state: AppState) -> Router {
             "/communities",
             get(routes::communities::list).post(routes::communities::create),
         )
+        // Registered before `/communities/{id}` so the intent is obvious to a
+        // reader; the router matches the literal segment first regardless.
+        .route(
+            "/communities/templates",
+            get(routes::communities::templates),
+        )
         .route(
             "/communities/{id}",
             get(routes::communities::get)

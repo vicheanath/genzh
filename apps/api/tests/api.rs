@@ -1042,3 +1042,153 @@ async fn members_named(
         .map(|role| role["name"].as_str().unwrap_or_default().to_owned())
         .collect()
 }
+
+/// A community is built from the template the creator picked.
+///
+/// The picker used to be cosmetic — it set the name and description and nothing
+/// else, so every server came out identical. This asserts the part that was
+/// missing: the channels and the role actually exist afterwards.
+#[tokio::test]
+async fn a_template_prebuilds_its_rooms_and_roles() {
+    let Some(api) = boot().await else {
+        return skip("a_template_prebuilds_its_rooms_and_roles");
+    };
+
+    let alice = api.register("alice").await;
+
+    // The catalogue is what the client renders, so read the shape from it
+    // rather than restating it here — a template that changes shape should
+    // change this test's expectations with it.
+    let catalogue = api
+        .send("GET", "/api/v1/communities/templates", Some(&alice.access_token), None)
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+
+    let gaming = catalogue
+        .as_array()
+        .expect("templates array")
+        .iter()
+        .find(|entry| entry["key"] == "gaming")
+        .expect("a gaming template")
+        .clone();
+
+    let expected_rooms: Vec<String> = gaming["rooms"]
+        .as_array()
+        .expect("rooms")
+        .iter()
+        .map(|room| room["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    let expected_role = gaming["extra_roles"][0]["name"]
+        .as_str()
+        .expect("an extra role")
+        .to_owned();
+    assert!(!expected_rooms.is_empty(), "the template must promise channels");
+
+    let community_id = api
+        .send(
+            "POST",
+            "/api/v1/communities",
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "name": "Squad HQ", "template": "gaming" })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED)
+        .json["id"]
+        .as_str()
+        .expect("community id")
+        .to_owned();
+
+    let rooms: Vec<String> = api
+        .send(
+            "GET",
+            &format!("/api/v1/communities/{community_id}/rooms"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json
+        .as_array()
+        .expect("rooms array")
+        .iter()
+        .map(|room| room["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+
+    for name in &expected_rooms {
+        assert!(rooms.contains(name), "`{name}` was promised but not created: {rooms:?}");
+    }
+
+    let roles: Vec<String> = api
+        .send(
+            "GET",
+            &format!("/api/v1/communities/{community_id}/roles"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json
+        .as_array()
+        .expect("roles array")
+        .iter()
+        .map(|role| role["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert!(
+        roles.contains(&expected_role),
+        "`{expected_role}` was promised but not created: {roles:?}",
+    );
+    // The staff ladder is additive, not replaced.
+    for staple in ["@everyone", "Moderator", "Admin"] {
+        assert!(roles.contains(&staple.to_owned()), "template dropped `{staple}`");
+    }
+}
+
+/// Naming a template the server does not build is refused, not silently
+/// swapped for the default — the creator would get a server they did not pick.
+#[tokio::test]
+async fn an_unknown_template_is_refused() {
+    let Some(api) = boot().await else {
+        return skip("an_unknown_template_is_refused");
+    };
+
+    let alice = api.register("alice").await;
+
+    api.send(
+        "POST",
+        "/api/v1/communities",
+        Some(&alice.access_token),
+        Some(serde_json::json!({ "name": "Nope", "template": "no-such-template" })),
+    )
+    .await
+    .expect_status(StatusCode::BAD_REQUEST);
+}
+
+/// A client that predates templates sends no key, and must keep working.
+#[tokio::test]
+async fn omitting_a_template_still_gives_a_general_channel() {
+    let Some(api) = boot().await else {
+        return skip("omitting_a_template_still_gives_a_general_channel");
+    };
+
+    let alice = api.register("alice").await;
+    let community_id = api.create_community(&alice, "Night Owls").await;
+
+    let rooms: Vec<String> = api
+        .send(
+            "GET",
+            &format!("/api/v1/communities/{community_id}/rooms"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json
+        .as_array()
+        .expect("rooms array")
+        .iter()
+        .map(|room| room["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+
+    assert!(rooms.contains(&"general".to_owned()), "{rooms:?}");
+}

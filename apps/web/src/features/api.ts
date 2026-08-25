@@ -38,6 +38,7 @@ export type { EditMessagePayload, Message, MessagePage, ReactionPayload, Reactio
 export {
   communityKeys,
   useCommunitiesList,
+  useCommunityTemplates,
   useCommunityDetail,
   useCommunityMembers,
   useCommunityRoles,
@@ -54,6 +55,7 @@ export {
 export type {
   Community,
   CommunityMember,
+  CommunityTemplate,
   CommunityWithPermissions,
   CreateCommunityInput,
   CreateRoleInput,
