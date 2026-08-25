@@ -144,6 +144,14 @@ pub enum AuditAction {
     AutomodRuleCreated,
     /// An automod rule was removed.
     AutomodRuleRemoved,
+
+    /// A background job was run by hand from the console.
+    ///
+    /// Scheduled runs are not logged — the log is for what a person decided,
+    /// and a timer deciding to fire on schedule is not a decision. Somebody
+    /// reaching for the button is, and it is the entry that explains why rows
+    /// disappeared at a time no schedule accounts for.
+    SystemJobTriggered,
 }
 
 impl AuditAction {
@@ -219,6 +227,8 @@ impl AuditAction {
             AuditAction::EmailDomainUnblocked => "security.email_domain_unblocked",
             AuditAction::AutomodRuleCreated => "automod.rule_created",
             AuditAction::AutomodRuleRemoved => "automod.rule_removed",
+
+            AuditAction::SystemJobTriggered => "system.job_triggered",
         }
     }
 
@@ -282,6 +292,7 @@ impl AuditAction {
         AuditAction::EmailDomainUnblocked,
         AuditAction::AutomodRuleCreated,
         AuditAction::AutomodRuleRemoved,
+        AuditAction::SystemJobTriggered,
     ];
 }
 

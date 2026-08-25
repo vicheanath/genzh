@@ -9,7 +9,6 @@
 //! [`register`] is the one place that knows the full list, and it is called
 //! from `main` after the state is built and before the scheduler starts.
 
-pub mod rooms;
 pub mod sessions;
 pub mod sweep;
 
@@ -18,7 +17,6 @@ use std::sync::Arc;
 use genzh_cron::CronSchedulerResult;
 use genzh_infrastructure::Sweep;
 
-pub use rooms::PruneStaleParticipants;
 pub use sessions::PruneExpiredSessions;
 pub use sweep::SweepVolatileStores;
 
@@ -36,16 +34,6 @@ pub async fn register(state: &AppState) -> CronSchedulerResult<()> {
         .register(Arc::new(PruneExpiredSessions::new(
             state.auth.clone(),
             timings.session_prune_interval,
-        )))
-        .await?;
-
-    state
-        .scheduler
-        .register(Arc::new(PruneStaleParticipants::new(
-            state.rooms.clone(),
-            timings.room_prune_interval,
-            timings.participant_stale_after,
-            timings.room_empty_grace,
         )))
         .await?;
 

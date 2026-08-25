@@ -9,7 +9,8 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use genzh_admin::{AuditQuery, NewTicket, TicketQuery};
+use genzh_admin::{AuditQuery, AuditRecord, NewTicket, TicketQuery};
+use genzh_domain::DomainError;
 use genzh_domain::audit::{AuditAction, AuditEntry};
 use genzh_domain::platform::PlatformRole;
 use genzh_domain::support::{SubjectType, Ticket, TicketKind, TicketMessage, TicketStatus};
@@ -839,6 +840,128 @@ pub async fn system_health_telemetry(
     _staff: StaffUser,
 ) -> ApiResult<Json<genzh_admin::SystemHealthTelemetry>> {
     Ok(Json(state.telemetry.get_health().await?))
+}
+
+/// One background job, as the console renders it.
+///
+/// A view type rather than [`genzh_cron::JobStats`] itself: the scheduler
+/// measures in [`std::time::Duration`], which has no obvious JSON shape, and
+/// `healthy` is a judgement about the numbers rather than one of them. Keeping
+/// the translation here leaves the scheduler crate with no opinion about HTTP.
+#[derive(Debug, Clone, Serialize)]
+pub struct JobReport {
+    /// Registered name, e.g. `rooms.prune_stale_participants`.
+    pub name: String,
+    /// Executions since this process started, scheduled and manual alike.
+    pub total_runs: u64,
+    pub successes: u64,
+    pub failures: u64,
+    /// When the most recent run finished; `null` if it has not run yet.
+    pub last_run_at: Option<Timestamp>,
+    /// How long that run took.
+    pub last_duration_ms: Option<u64>,
+    /// What it failed with, if it did. Cleared by the next success.
+    pub last_error: Option<String>,
+    /// Whether the *most recent* run succeeded.
+    ///
+    /// Deliberately not "has never failed": a job that failed once at 03:00 and
+    /// has been fine since is not something to wake anybody for, and a console
+    /// that says otherwise trains people to ignore it.
+    pub healthy: bool,
+}
+
+impl JobReport {
+    fn new(name: &str, stats: genzh_cron::JobStats) -> Self {
+        Self {
+            name: name.to_owned(),
+            total_runs: stats.total_runs,
+            successes: stats.successes,
+            failures: stats.failures,
+            last_run_at: stats.last_run_at,
+            last_duration_ms: stats
+                .last_duration
+                .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
+            healthy: !stats.is_failing(),
+            last_error: stats.last_error,
+        }
+    }
+}
+
+/// `GET /api/v1/admin/system/jobs`
+///
+/// What the background scheduler has been doing. Staff rather than admin: this
+/// is diagnosis, and the numbers name no accounts.
+///
+/// The counters are per-process and reset on restart — they describe *this*
+/// instance, which is the honest scope for an in-process scheduler.
+pub async fn system_jobs(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> Json<Vec<JobReport>> {
+    let mut reports: Vec<JobReport> = state
+        .scheduler
+        .stats()
+        .into_iter()
+        .map(|(name, stats)| JobReport::new(name, stats))
+        .collect();
+
+    // Failing jobs first, then alphabetically: the console should not need to
+    // be scrolled to find the one thing that is wrong.
+    reports.sort_by(|a, b| a.healthy.cmp(&b.healthy).then_with(|| a.name.cmp(&b.name)));
+    Json(reports)
+}
+
+/// `POST /api/v1/admin/system/jobs/{name}/run`
+///
+/// Run one job now rather than waiting for its next tick.
+///
+/// Admin rather than staff, and audited: every job here deletes rows, and
+/// "why did five hundred sessions vanish at 14:03" should be answerable from
+/// the log rather than from a guess about timers.
+///
+/// A job that fails still returns 200 with the failure in the body. The request
+/// succeeded — the console asked for a run and got one — and reporting that as
+/// a 500 would tell the caller their button was broken when the job was.
+pub async fn run_system_job(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(name): Path<String>,
+) -> ApiResult<Json<JobReport>> {
+    let outcome = state
+        .scheduler
+        .run_now(&name)
+        .await
+        .ok_or(ApiError::Domain(DomainError::NotFound("job")))?;
+
+    if let Err(error) = &outcome {
+        tracing::warn!(job = %name, %error, "manually triggered cron job failed");
+    }
+
+    let handle = state.staff.find_user(admin.user_id).await?.handle;
+    state
+        .audit
+        .record_best_effort(
+            AuditRecord::new(
+                Some(admin.user_id),
+                AuditAction::SystemJobTriggered,
+                format!("ran the background job '{name}' by hand"),
+            )
+            .by(handle)
+            .about_type("system_job")
+            .with(serde_json::json!({
+                "job": name,
+                "succeeded": outcome.is_ok(),
+                "error": outcome.as_ref().err().map(ToString::to_string),
+            })),
+        )
+        .await;
+
+    let stats = state
+        .scheduler
+        .job_stats(&name)
+        .ok_or(ApiError::Domain(DomainError::NotFound("job")))?;
+
+    Ok(Json(JobReport::new(&name, stats)))
 }
 
 // ────────────────────── user session moderation ───────────────────────

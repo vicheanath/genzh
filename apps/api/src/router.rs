@@ -134,6 +134,11 @@ pub fn build(state: AppState) -> Router {
             delete(routes::admin::delete_automod_rule),
         )
         .route("/admin/system/health", get(routes::admin::system_health_telemetry))
+        .route("/admin/system/jobs", get(routes::admin::system_jobs))
+        .route(
+            "/admin/system/jobs/{name}/run",
+            post(routes::admin::run_system_job),
+        )
         // ---- support, as the person who raised it sees it ----
         .route(
             "/support/tickets",

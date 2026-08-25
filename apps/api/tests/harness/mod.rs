@@ -272,9 +272,6 @@ fn api_config(database_url: String) -> api::Config {
         // it either.
         cron: api::config::CronConfig {
             session_prune_interval: Duration::from_secs(3600),
-            room_prune_interval: Duration::from_secs(3600),
-            participant_stale_after: Duration::from_secs(3600),
-            room_empty_grace: Duration::from_secs(3600),
             store_sweep_interval: Duration::from_secs(3600),
         },
     }

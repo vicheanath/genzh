@@ -103,22 +103,6 @@ pub struct CronConfig {
     /// refused on presentation, so this only reclaims rows.
     pub session_prune_interval: Duration,
 
-    /// How often room participants are checked for staleness.
-    pub room_prune_interval: Duration,
-
-    /// How long a participant may go unheard from before they are presumed
-    /// gone. Must comfortably exceed the client heartbeat, or a slow network
-    /// will evict people who are still in the call.
-    pub participant_stale_after: Duration,
-
-    /// How long a room must sit empty before it is ended.
-    ///
-    /// Longer than [`Self::room_prune_interval`] on purpose: a room is empty
-    /// for a moment every time the last person leaves and another arrives, and
-    /// ending it on the first sweep that sees zero would close calls people are
-    /// still walking back into.
-    pub room_empty_grace: Duration,
-
     /// How often the in-process rate-limit and flood maps are swept.
     pub store_sweep_interval: Duration,
 }
@@ -127,9 +111,6 @@ impl CronConfig {
     fn from_env() -> Result<Self, ConfigError> {
         Ok(Self {
             session_prune_interval: seconds("CRON_SESSION_PRUNE_SECONDS", 3600)?,
-            room_prune_interval: seconds("CRON_ROOM_PRUNE_SECONDS", 60)?,
-            participant_stale_after: seconds("ROOM_PARTICIPANT_STALE_SECONDS", 300)?,
-            room_empty_grace: seconds("ROOM_EMPTY_GRACE_SECONDS", 600)?,
             store_sweep_interval: seconds("CRON_STORE_SWEEP_SECONDS", 300)?,
         })
     }
