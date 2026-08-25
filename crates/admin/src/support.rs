@@ -29,6 +29,7 @@ pub struct TicketQuery {
     pub status: Option<TicketStatus>,
     pub kind: Option<TicketKind>,
     pub assignee_id: Option<UserId>,
+    pub q: Option<String>,
     pub limit: i64,
 }
 
@@ -79,6 +80,11 @@ impl SupportService {
 
     /// The queue, oldest first — the person waiting longest is served first.
     pub async fn list(&self, query: TicketQuery) -> ServiceResult<Vec<Ticket>> {
+        let search_pattern = query.q.and_then(|q| {
+            let t = q.trim().to_lowercase();
+            if t.is_empty() { None } else { Some(format!("%{t}%")) }
+        });
+
         let tickets = sqlx::query_as::<_, Ticket>(
             "SELECT id, kind, reporter_id, subject_type, subject_id, category, subject,
                     details, status, assignee_id, created_at, updated_at, resolved_at
@@ -86,12 +92,14 @@ impl SupportService {
              WHERE ($1::support_ticket_status IS NULL OR status = $1)
                AND ($2::support_ticket_kind IS NULL OR kind = $2)
                AND ($3::uuid IS NULL OR assignee_id = $3)
+               AND ($4::text IS NULL OR lower(subject) LIKE $4 OR lower(category) LIKE $4 OR lower(details) LIKE $4)
              ORDER BY created_at ASC
-             LIMIT $4",
+             LIMIT $5",
         )
         .bind(query.status)
         .bind(query.kind)
         .bind(query.assignee_id)
+        .bind(search_pattern)
         .bind(query.limit.clamp(1, 200))
         .fetch_all(&self.pool)
         .await

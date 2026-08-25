@@ -29,31 +29,78 @@ const ROLES = [
   { value: 'admin', label: 'Admin — enforcement and the log' },
 ] as const satisfies ReadonlyArray<{ value: PlatformRole; label: string }>
 
+const STATUS_FILTERS = [
+  { id: 'all', label: 'All Statuses' },
+  { id: 'active', label: 'Active Only' },
+  { id: 'suspended', label: 'Suspended Only' },
+] as const
+
+const ROLE_FILTERS = [
+  { id: 'all', label: 'All Roles' },
+  { id: 'user', label: 'Users' },
+  { id: 'support', label: 'Support' },
+  { id: 'admin', label: 'Admins' },
+] as const
+
 /** Find an account, see its state, and (as an admin) act on it. */
 export function StaffUsersPanel() {
   const isAdmin = useIsPlatformAdmin()
   const [query, setQuery] = useState('')
-  const results = useUserSearch(query)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all')
+  const [roleFilter, setRoleFilter] = useState<PlatformRole | 'all'>('all')
+
+  const results = useUserSearch(query, {
+    role: roleFilter === 'all' ? undefined : roleFilter,
+    is_active: statusFilter === 'all' ? undefined : statusFilter === 'active',
+  })
   const staff = useStaffList()
+
+  const accounts = results.data ?? []
 
   return (
     <div className={styles.stack}>
+      <div className={styles.chips} role="tablist" aria-label="Account status filters">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`${styles.chip} ${statusFilter === s.id ? styles.chipActive : ''}`}
+            onClick={() => setStatusFilter(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.chips} role="tablist" aria-label="Account role filters">
+        {ROLE_FILTERS.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            className={`${styles.chip} ${roleFilter === r.id ? styles.chipActive : ''}`}
+            onClick={() => setRoleFilter(r.id as PlatformRole | 'all')}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
       <Input
         label="Find an account"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="handle or e-mail"
+        placeholder="Search by handle or e-mail…"
       />
 
       {results.isLoading && <Skeleton height="4rem" />}
       {results.error && (
         <Callout tone="danger">{errorText(results.error, 'Could not search')}</Callout>
       )}
-      {query.trim() !== '' && results.data?.length === 0 && (
-        <p className={styles.empty}>No account matches that.</p>
+      {!results.isLoading && accounts.length === 0 && (
+        <p className={styles.empty}>No accounts match your query and filters.</p>
       )}
 
-      {results.data?.map((account) => (
+      {accounts.map((account) => (
         <UserCard key={account.id} account={account} canEnforce={isAdmin} />
       ))}
 

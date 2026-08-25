@@ -59,11 +59,19 @@ export function useAdminStats() {
   })
 }
 
-export function useAuditLog(filter: { action?: string; subject_id?: Uuid } = {}) {
+export function useAuditLog(
+  filter: {
+    action?: string
+    category?: string
+    q?: string
+    subject_id?: Uuid
+    limit?: number
+  } = {},
+) {
   const isAdmin = useIsPlatformAdmin()
   return useQuery({
     queryKey: adminKeys.audit(JSON.stringify(filter)),
-    queryFn: () => admin.audit(null, { ...filter, limit: 100 }),
+    queryFn: () => admin.audit(null, { limit: 100, ...filter }),
     enabled: isAdmin,
   })
 }
@@ -79,18 +87,18 @@ export function useAuditActions() {
 }
 
 /**
- * Account search.
- *
- * Disabled until there is something to search for — an empty query would match
- * every account, which is exactly what this endpoint is shaped to prevent.
+ * Account search and filtering.
  */
-export function useUserSearch(query: string) {
+export function useUserSearch(
+  query: string,
+  options: { role?: PlatformRole; is_active?: boolean; limit?: number } = {},
+) {
   const isStaff = useIsStaff()
   const trimmed = query.trim()
   return useQuery({
-    queryKey: adminKeys.users(trimmed),
-    queryFn: () => admin.searchUsers(null, trimmed),
-    enabled: isStaff && trimmed.length > 0,
+    queryKey: adminKeys.users(`${trimmed}:${JSON.stringify(options)}`),
+    queryFn: () => admin.searchUsers(null, trimmed, options),
+    enabled: isStaff,
   })
 }
 
@@ -103,7 +111,15 @@ export function useStaffList() {
   })
 }
 
-export function useSupportQueue(filter: { status?: TicketStatus } = {}) {
+export function useSupportQueue(
+  filter: {
+    status?: TicketStatus
+    kind?: string
+    q?: string
+    assignee_id?: Uuid
+    limit?: number
+  } = {},
+) {
   const isStaff = useIsStaff()
   return useQuery({
     queryKey: adminKeys.tickets(JSON.stringify(filter)),

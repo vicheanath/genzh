@@ -62,7 +62,11 @@ export function AuditLogPanel() {
   const [openMetaIds, setOpenMetaIds] = useState<Record<string, boolean>>({})
 
   const actions = useAuditActions()
-  const log = useAuditLog(action === 'all' ? {} : { action })
+  const log = useAuditLog({
+    category: selectedCategory === 'all' ? undefined : selectedCategory,
+    action: action === 'all' ? undefined : action,
+    q: searchQuery.trim() || undefined,
+  })
   const toast = useToast()
 
   const actionOptions = [
@@ -72,24 +76,7 @@ export function AuditLogPanel() {
       .map((key) => ({ value: key, label: key })),
   ]
 
-  const filteredEntries = (log.data ?? []).filter((entry) => {
-    // Filter by Category if specific action is 'all'
-    if (action === 'all' && selectedCategory !== 'all') {
-      if (!entry.action.startsWith(`${selectedCategory}.`)) return false
-    }
-
-    // Filter by Search Query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      const matchActor = entry.actor_handle?.toLowerCase().includes(q) ?? false
-      const matchSummary = entry.summary.toLowerCase().includes(q)
-      const matchAction = entry.action.toLowerCase().includes(q)
-      const matchSubject = entry.subject_id?.toLowerCase().includes(q) ?? false
-      if (!matchActor && !matchSummary && !matchAction && !matchSubject) return false
-    }
-
-    return true
-  })
+  const entries = log.data ?? []
 
   function toggleMeta(id: string) {
     setOpenMetaIds((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -153,11 +140,11 @@ export function AuditLogPanel() {
         <Callout tone="danger">{errorText(log.error, 'Could not read the audit log')}</Callout>
       )}
 
-      {!log.isLoading && filteredEntries.length === 0 && (
+      {!log.isLoading && entries.length === 0 && (
         <p className={styles.empty}>No audit log events match your filters.</p>
       )}
 
-      {filteredEntries.map((entry) => {
+      {entries.map((entry) => {
         const hasMetadata = Object.keys(entry.metadata ?? {}).length > 0
         const isMetaOpen = openMetaIds[entry.id] ?? false
 

@@ -68,23 +68,35 @@ impl StaffService {
         Ok(role.map(|(role,)| role).unwrap_or_default())
     }
 
-    /// Find accounts by handle or e-mail.
-    ///
-    /// Substring, case-insensitive, and capped — support is given somebody's
-    /// handle and needs to find them, which is not the same as being able to
-    /// page through every account on the platform.
-    pub async fn search_users(&self, query: &str, limit: i64) -> ServiceResult<Vec<StaffUserView>> {
-        let needle = format!("%{}%", query.trim().to_lowercase());
+    /// Find accounts by handle or e-mail, with optional role or status filtering.
+    pub async fn search_users(
+        &self,
+        query: &str,
+        role: Option<PlatformRole>,
+        is_active: Option<bool>,
+        limit: i64,
+    ) -> ServiceResult<Vec<StaffUserView>> {
+        let trimmed = query.trim();
+        let needle = if trimmed.is_empty() {
+            None
+        } else {
+            Some(format!("%{}%", trimmed.to_lowercase()))
+        };
+
         let users = sqlx::query_as::<_, StaffUserView>(
             "SELECT u.id, u.handle, u.email, p.display_name, u.is_active, u.platform_role,
                     u.suspended_at, u.suspension_reason, u.created_at
              FROM users u
              LEFT JOIN profiles p ON p.user_id = u.id
-             WHERE lower(u.handle) LIKE $1 OR lower(u.email) LIKE $1
+             WHERE ($1::text IS NULL OR lower(u.handle) LIKE $1 OR lower(u.email) LIKE $1)
+               AND ($2::platform_role IS NULL OR u.platform_role = $2)
+               AND ($3::boolean IS NULL OR u.is_active = $3)
              ORDER BY u.created_at DESC
-             LIMIT $2",
+             LIMIT $4",
         )
-        .bind(&needle)
+        .bind(needle)
+        .bind(role)
+        .bind(is_active)
         .bind(limit.clamp(1, 100))
         .fetch_all(&self.pool)
         .await

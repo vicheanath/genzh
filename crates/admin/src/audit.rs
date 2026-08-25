@@ -60,6 +60,8 @@ impl AuditRecord {
 pub struct AuditQuery {
     pub actor_id: Option<UserId>,
     pub action: Option<String>,
+    pub category: Option<String>,
+    pub q: Option<String>,
     pub subject_id: Option<Uuid>,
     /// Keyset cursor: return entries strictly older than this.
     pub before: Option<chrono::DateTime<chrono::Utc>>,
@@ -119,6 +121,11 @@ impl AuditLog {
     /// Read the log, newest first.
     pub async fn list(&self, query: AuditQuery) -> RepositoryResult<Vec<AuditEntry>> {
         let limit = query.limit.clamp(1, 200);
+        let category_pattern = query.category.map(|c| format!("{c}.%"));
+        let search_pattern = query.q.and_then(|q| {
+            let t = q.trim().to_lowercase();
+            if t.is_empty() { None } else { Some(format!("%{t}%")) }
+        });
 
         // Every filter is optional, so each predicate is written to pass when
         // its parameter is null rather than building SQL by string
@@ -131,13 +138,17 @@ impl AuditLog {
                AND ($2::text IS NULL OR action = $2)
                AND ($3::uuid IS NULL OR subject_id = $3)
                AND ($4::timestamptz IS NULL OR created_at < $4)
+               AND ($5::text IS NULL OR action LIKE $5)
+               AND ($6::text IS NULL OR lower(summary) LIKE $6 OR lower(coalesce(actor_handle, '')) LIKE $6 OR lower(action) LIKE $6)
              ORDER BY created_at DESC, id DESC
-             LIMIT $5",
+             LIMIT $7",
         )
         .bind(query.actor_id)
         .bind(&query.action)
         .bind(query.subject_id)
         .bind(query.before)
+        .bind(category_pattern)
+        .bind(search_pattern)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;

@@ -31,6 +31,10 @@ pub struct AuditFilter {
     #[serde(default)]
     pub action: Option<String>,
     #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
     pub subject_id: Option<Uuid>,
     /// Keyset cursor: entries strictly older than this.
     #[serde(default)]
@@ -54,6 +58,8 @@ pub async fn audit(
         .list(AuditQuery {
             actor_id: filter.actor_id,
             action: filter.action,
+            category: filter.category,
+            q: filter.q,
             subject_id: filter.subject_id,
             before: filter.before,
             limit: filter.limit.unwrap_or(50),
@@ -88,15 +94,19 @@ pub async fn stats(
 #[derive(Debug, Deserialize)]
 pub struct UserSearch {
     /// Handle or e-mail, matched as a substring.
+    #[serde(default)]
     pub q: String,
+    #[serde(default)]
+    pub role: Option<PlatformRole>,
+    #[serde(default)]
+    pub is_active: Option<bool>,
     #[serde(default)]
     pub limit: Option<i64>,
 }
 
 /// `GET /api/v1/admin/users`
 ///
-/// Search, never list: support is given a handle and needs to find it, which is
-/// not the same as being able to page through every account on the platform.
+/// Search and filter accounts on the platform.
 pub async fn search_users(
     State(state): State<AppState>,
     _staff: StaffUser,
@@ -105,7 +115,12 @@ pub async fn search_users(
     Ok(Json(
         state
             .staff
-            .search_users(&search.q, search.limit.unwrap_or(25))
+            .search_users(
+                &search.q,
+                search.role,
+                search.is_active,
+                search.limit.unwrap_or(25),
+            )
             .await?,
     ))
 }
@@ -203,6 +218,8 @@ pub struct TicketFilter {
     #[serde(default)]
     pub assignee_id: Option<UserId>,
     #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
     pub limit: Option<i64>,
 }
 
@@ -227,6 +244,7 @@ pub async fn list_tickets(
             status: filter.status,
             kind: filter.kind,
             assignee_id: filter.assignee_id,
+            q: filter.q,
             limit: filter.limit.unwrap_or(50),
         })
         .await?;

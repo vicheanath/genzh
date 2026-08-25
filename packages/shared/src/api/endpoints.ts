@@ -671,6 +671,8 @@ export const admin = {
     params: {
       actor_id?: Uuid
       action?: string
+      category?: string
+      q?: string
       subject_id?: Uuid
       before?: Timestamp
       limit?: number
@@ -681,9 +683,16 @@ export const admin = {
   auditActions: (token: string | null) =>
     request<string[]>('/api/v1/admin/audit/actions', { token }),
 
-  /** Search accounts by handle or e-mail. Never a full listing. */
-  searchUsers: (token: string | null, q: string, limit?: number) =>
-    request<StaffUserView[]>('/api/v1/admin/users', { token, params: { q, limit } }),
+  /** Search and filter accounts on the platform. */
+  searchUsers: (
+    token: string | null,
+    q: string = '',
+    params: { role?: PlatformRole; is_active?: boolean; limit?: number } = {},
+  ) =>
+    request<StaffUserView[]>('/api/v1/admin/users', {
+      token,
+      params: { q, ...params },
+    }),
 
   getUser: (token: string | null, id: Uuid) =>
     request<StaffUserView>(`/api/v1/admin/users/${id}`, { token }),
@@ -716,7 +725,13 @@ export const admin = {
   /** The support queue. */
   tickets: (
     token: string | null,
-    params: { status?: TicketStatus; kind?: string; assignee_id?: Uuid; limit?: number } = {},
+    params: {
+      status?: TicketStatus
+      kind?: string
+      assignee_id?: Uuid
+      q?: string
+      limit?: number
+    } = {},
   ) => request<SupportQueue>('/api/v1/admin/tickets', { token, params }),
 
   /** One ticket and its thread, staff notes included. */

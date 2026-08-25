@@ -35,28 +35,47 @@ const STATUS_TONE: Record<TicketStatus, 'danger' | 'accent' | 'success' | 'neutr
   closed: 'neutral',
 }
 
+const KINDS = [
+  { id: 'all', label: 'All Kinds' },
+  { id: 'report', label: 'Reports' },
+  { id: 'help', label: 'Help Requests' },
+] as const
+
 /** Reports and help requests, and the thread on whichever one is selected. */
 export function SupportQueuePanel() {
   const [status, setStatus] = useState<TicketStatus | 'all'>('open')
+  const [kind, setKind] = useState<string>('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [ticketSearch, setTicketSearch] = useState<string>('')
 
-  const queue = useSupportQueue(status === 'all' ? {} : { status })
-  const tickets = (queue.data?.tickets ?? []).filter((ticket) => {
-    if (!ticketSearch.trim()) return true
-    const q = ticketSearch.toLowerCase()
-    return (
-      ticket.subject.toLowerCase().includes(q) ||
-      ticket.category.toLowerCase().includes(q) ||
-      ticket.details.toLowerCase().includes(q)
-    )
+  const queue = useSupportQueue({
+    status: status === 'all' ? undefined : status,
+    kind: kind === 'all' ? undefined : kind,
+    q: ticketSearch.trim() || undefined,
   })
+  const tickets = queue.data?.tickets ?? []
 
   return (
     <div className={styles.split}>
       <div className={styles.list}>
         <div className={styles.listHeader}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <div className={styles.chips}>
+              {KINDS.map((k) => (
+                <button
+                  key={k.id}
+                  type="button"
+                  className={`${styles.chip} ${kind === k.id ? styles.chipActive : ''}`}
+                  onClick={() => {
+                    setKind(k.id)
+                    setSelected(null)
+                  }}
+                >
+                  {k.label}
+                </button>
+              ))}
+            </div>
+
             <Select
               aria-label="Filter by status"
               value={status}
