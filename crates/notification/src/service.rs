@@ -1,53 +1,14 @@
 //! The notification application service.
 
-use genzh_domain::notification::{Notification, NotificationKind};
-use genzh_domain::{MessageId, NotificationId, RoomId, Timestamp, UserId};
+use genzh_domain::notification::Notification;
+use genzh_domain::{NotificationId, Timestamp, UserId};
 use genzh_infrastructure::{DbPool, ServiceResult};
 
-use crate::repository::{NotificationPage, NotificationRepository};
+use crate::repository::{NewNotification, NotificationPage, NotificationRepository};
 
 /// Default and maximum page sizes for a notification list.
 const DEFAULT_LIMIT: i64 = 30;
 const MAX_LIMIT: i64 = 100;
-
-/// What a producer hands over. Everything except the id and the timestamp,
-/// which are the store's to assign.
-#[derive(Debug, Clone)]
-pub struct NewNotification {
-    pub user_id: UserId,
-    pub kind: NotificationKind,
-    pub actor_id: Option<UserId>,
-    pub room_id: Option<RoomId>,
-    pub message_id: Option<MessageId>,
-    pub preview: Option<String>,
-}
-
-impl NewNotification {
-    /// A notification about something one person did to another.
-    pub fn from_actor(user_id: UserId, kind: NotificationKind, actor_id: UserId) -> Self {
-        Self {
-            user_id,
-            kind,
-            actor_id: Some(actor_id),
-            room_id: None,
-            message_id: None,
-            preview: None,
-        }
-    }
-
-    /// Attach the message this notification is about.
-    pub fn about_message(
-        mut self,
-        room_id: RoomId,
-        message_id: MessageId,
-        preview: String,
-    ) -> Self {
-        self.room_id = Some(room_id);
-        self.message_id = Some(message_id);
-        self.preview = Some(preview);
-        self
-    }
-}
 
 /// Recording and reading notifications.
 #[derive(Debug, Clone)]
@@ -74,15 +35,7 @@ impl NotificationService {
 
         Ok(self
             .repository
-            .create(
-                NotificationId::new(),
-                new.user_id,
-                new.kind,
-                new.actor_id,
-                new.room_id,
-                new.message_id,
-                new.preview.as_deref(),
-            )
+            .create(NotificationId::new(), &new)
             .await?)
     }
 

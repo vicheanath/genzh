@@ -141,9 +141,7 @@ impl VoiceActivityDetector for AudioLevelVad {
     fn observe(&mut self, sample: AudioLevelSample) -> Option<SpeakingTransition> {
         // No extension negotiated: we cannot tell, so we say nothing rather
         // than guessing from packet sizes (which DTX makes meaningless).
-        let Some(level) = sample.level else {
-            return None;
-        };
+        let level = sample.level?;
 
         let loud = level <= self.config.threshold;
 

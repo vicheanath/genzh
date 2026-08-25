@@ -10,6 +10,29 @@ use genzh_domain::room::{
 use genzh_domain::{CommunityId, Permission, RoleId, RoomId, UserId};
 use genzh_infrastructure::{DbPool, RepositoryError, RepositoryResult};
 
+/// Input for updating a room.
+///
+/// A struct rather than eight positional arguments, three of which were
+/// `Option<&str>`: `update(id, topic, category, name, …)` type-checks
+/// perfectly and writes the wrong columns. Named fields make that
+/// unrepresentable.
+#[derive(Debug, Clone, Default)]
+pub struct UpdateRoom {
+    /// New name.
+    pub name: Option<String>,
+    /// New topic.
+    pub topic: Option<String>,
+    /// New category.
+    pub category: Option<String>,
+    /// New visibility.
+    pub visibility: Option<RoomVisibility>,
+    /// New status.
+    pub status: Option<RoomStatus>,
+    /// New position.
+    pub position: Option<i32>,
+    /// New participant cap.
+    pub max_participants: Option<i32>,
+}
 /// Row shape for the override query.
 #[derive(Debug, sqlx::FromRow)]
 struct OverrideRow {
@@ -441,17 +464,7 @@ impl RoomRepository {
     }
 
     /// Partially update a room.
-    pub async fn update(
-        &self,
-        id: RoomId,
-        name: Option<&str>,
-        topic: Option<&str>,
-        category: Option<&str>,
-        visibility: Option<RoomVisibility>,
-        status: Option<RoomStatus>,
-        position: Option<i32>,
-        max_participants: Option<i32>,
-    ) -> RepositoryResult<Room> {
+    pub async fn update(&self, id: RoomId, input: &UpdateRoom) -> RepositoryResult<Room> {
         sqlx::query_as(
             "UPDATE rooms SET
                 name             = COALESCE($2, name),
@@ -469,13 +482,13 @@ impl RoomRepository {
                        created_at, updated_at",
         )
         .bind(id)
-        .bind(name)
-        .bind(topic)
-        .bind(category)
-        .bind(visibility)
-        .bind(status)
-        .bind(position)
-        .bind(max_participants)
+        .bind(input.name.as_deref())
+        .bind(input.topic.as_deref())
+        .bind(input.category.as_deref())
+        .bind(input.visibility)
+        .bind(input.status)
+        .bind(input.position)
+        .bind(input.max_participants)
         .fetch_optional(&self.pool)
         .await?
         .ok_or(RepositoryError::NotFound("room"))

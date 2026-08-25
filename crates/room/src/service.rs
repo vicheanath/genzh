@@ -15,7 +15,7 @@ use genzh_domain::{
 use genzh_infrastructure::{DbPool, ServiceError, ServiceResult};
 
 use crate::authorization::RoomAccess;
-use crate::repository::{PruneOutcome, RoomRepository};
+use crate::repository::{UpdateRoom, PruneOutcome, RoomRepository};
 
 /// Input for creating a room.
 #[derive(Debug, Clone)]
@@ -42,25 +42,6 @@ pub struct CreateRoom {
     pub max_participants: Option<i32>,
     /// Additional participants to join immediately (e.g. for Direct Message rooms).
     pub participant_ids: Option<Vec<UserId>>,
-}
-
-/// Input for updating a room.
-#[derive(Debug, Clone, Default)]
-pub struct UpdateRoom {
-    /// New name.
-    pub name: Option<String>,
-    /// New topic.
-    pub topic: Option<String>,
-    /// New category.
-    pub category: Option<String>,
-    /// New visibility.
-    pub visibility: Option<RoomVisibility>,
-    /// New status.
-    pub status: Option<RoomStatus>,
-    /// New position.
-    pub position: Option<i32>,
-    /// New participant cap.
-    pub max_participants: Option<i32>,
 }
 
 /// Rooms and room authorization.
@@ -169,10 +150,10 @@ impl RoomService {
         let access = self.access(room_id, user_id).await?;
         access.require_visible()?;
 
-        if access.room.is_direct() {
-            if let Some(peer) = self.rooms.direct_peer(room_id, user_id).await? {
-                self.social.ensure_can_reach(user_id, peer).await?;
-            }
+        if access.room.is_direct()
+            && let Some(peer) = self.rooms.direct_peer(room_id, user_id).await?
+        {
+            self.social.ensure_can_reach(user_id, peer).await?;
         }
 
         Ok(access)
@@ -418,25 +399,18 @@ impl RoomService {
         let access = self.access(room_id, user_id).await?;
         access.require(Permission::ManageRoom)?;
 
-        let name = input
-            .name
-            .as_deref()
-            .map(room::validate_room_name)
-            .transpose()?;
+        // Validation replaces the caller's name with the normalised one, so the
+        // repository never sees an unvalidated value.
+        let input = UpdateRoom {
+            name: input
+                .name
+                .as_deref()
+                .map(room::validate_room_name)
+                .transpose()?,
+            ..input
+        };
 
-        Ok(self
-            .rooms
-            .update(
-                room_id,
-                name.as_deref(),
-                input.topic.as_deref(),
-                input.category.as_deref(),
-                input.visibility,
-                input.status,
-                input.position,
-                input.max_participants,
-            )
-            .await?)
+        Ok(self.rooms.update(room_id, &input).await?)
     }
 
     /// Delete a room.

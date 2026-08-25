@@ -4,6 +4,45 @@ use genzh_domain::notification::{Notification, NotificationKind};
 use genzh_domain::{MessageId, NotificationId, RoomId, Timestamp, UserId};
 use genzh_infrastructure::{DbPool, RepositoryError, RepositoryResult};
 
+/// What a producer hands over. Everything except the id and the timestamp,
+/// which are the store's to assign.
+#[derive(Debug, Clone)]
+pub struct NewNotification {
+    pub user_id: UserId,
+    pub kind: NotificationKind,
+    pub actor_id: Option<UserId>,
+    pub room_id: Option<RoomId>,
+    pub message_id: Option<MessageId>,
+    pub preview: Option<String>,
+}
+
+impl NewNotification {
+    /// A notification about something one person did to another.
+    pub fn from_actor(user_id: UserId, kind: NotificationKind, actor_id: UserId) -> Self {
+        Self {
+            user_id,
+            kind,
+            actor_id: Some(actor_id),
+            room_id: None,
+            message_id: None,
+            preview: None,
+        }
+    }
+
+    /// Attach the message this notification is about.
+    pub fn about_message(
+        mut self,
+        room_id: RoomId,
+        message_id: MessageId,
+        preview: String,
+    ) -> Self {
+        self.room_id = Some(room_id);
+        self.message_id = Some(message_id);
+        self.preview = Some(preview);
+        self
+    }
+}
+
 /// A page of notifications, newest first.
 #[derive(Debug, Clone)]
 pub struct NotificationPage {
@@ -35,12 +74,7 @@ impl NotificationRepository {
     pub async fn create(
         &self,
         id: NotificationId,
-        user_id: UserId,
-        kind: NotificationKind,
-        actor_id: Option<UserId>,
-        room_id: Option<RoomId>,
-        message_id: Option<MessageId>,
-        preview: Option<&str>,
+        new: &NewNotification,
     ) -> RepositoryResult<Option<Notification>> {
         sqlx::query_as(
             "INSERT INTO notifications (id, user_id, kind, actor_id, room_id, message_id, preview)
@@ -50,12 +84,12 @@ impl NotificationRepository {
                        created_at",
         )
             .bind(id)
-            .bind(user_id)
-            .bind(kind.key())
-            .bind(actor_id)
-            .bind(room_id)
-            .bind(message_id)
-            .bind(preview)
+            .bind(new.user_id)
+            .bind(new.kind.key())
+            .bind(new.actor_id)
+            .bind(new.room_id)
+            .bind(new.message_id)
+            .bind(new.preview.as_deref())
             .fetch_optional(&self.pool)
             .await
             .map_err(RepositoryError::from)

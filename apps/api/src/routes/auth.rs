@@ -262,7 +262,7 @@ pub async fn update_profile(
         genzh_admin::AuditRecord::new(
             Some(caller.user_id),
             genzh_domain::audit::AuditAction::UserProfileUpdated,
-            format!("User updated their profile"),
+            "User updated their profile".to_owned(),
         )
         .about("user", caller.user_id.as_uuid()),
     ).await;

@@ -317,13 +317,13 @@ fn spawn_forwarder(
 
             let mut pt = payload_type.load(Ordering::Relaxed);
             if pt == 0 {
-                if since_resolve_attempt == 0 {
-                    if let Some(resolved) = resolve_payload_type(&sender, &codec.mime_type).await {
-                        payload_type.store(resolved, Ordering::Relaxed);
-                        pt = resolved;
-                        if is_video {
-                            source.request_keyframe();
-                        }
+                if since_resolve_attempt == 0
+                    && let Some(resolved) = resolve_payload_type(&sender, &codec.mime_type).await
+                {
+                    payload_type.store(resolved, Ordering::Relaxed);
+                    pt = resolved;
+                    if is_video {
+                        source.request_keyframe();
                     }
                 }
                 since_resolve_attempt = (since_resolve_attempt + 1) % PT_RESOLVE_INTERVAL;
@@ -379,7 +379,7 @@ fn spawn_feedback_relay(
     tokio::spawn(async move {
         while let Some(event) = local.poll().await {
             let webrtc::media_stream::track_local::TrackLocalEvent::OnRtcpPacket(packets) = event;
-            if packets.iter().any(is_keyframe_request) {
+            if packets.iter().any(|packet| is_keyframe_request(&**packet)) {
                 source.request_keyframe();
             }
         }
@@ -390,7 +390,7 @@ fn spawn_feedback_relay(
 ///
 /// Receiver reports and transport feedback arrive constantly; only PLI and FIR
 /// mean "I cannot decode, please send an intra frame".
-fn is_keyframe_request(packet: &Box<dyn rtc::rtcp::packet::Packet>) -> bool {
+fn is_keyframe_request(packet: &dyn rtc::rtcp::packet::Packet) -> bool {
     let any = packet.as_any();
     any.is::<PictureLossIndication>() || any.is::<FullIntraRequest>()
 }
@@ -419,15 +419,15 @@ mod tests {
             sender_ssrc: 1,
             media_ssrc: 2,
         });
-        assert!(is_keyframe_request(&pli));
+        assert!(is_keyframe_request(&*pli));
 
         let fir: Box<dyn rtc::rtcp::packet::Packet> = Box::new(FullIntraRequest::default());
-        assert!(is_keyframe_request(&fir));
+        assert!(is_keyframe_request(&*fir));
 
         let report: Box<dyn rtc::rtcp::packet::Packet> =
             Box::new(rtc::rtcp::receiver_report::ReceiverReport::default());
         assert!(
-            !is_keyframe_request(&report),
+            !is_keyframe_request(&*report),
             "receiver reports are not keyframe requests"
         );
     }

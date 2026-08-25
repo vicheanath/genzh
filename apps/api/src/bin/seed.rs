@@ -115,14 +115,13 @@ async fn main() -> anyhow::Result<()> {
     let primary_user = user_ids[0].1;
 
     println!("\n--- 2. Seeding Friendships ---");
-    for i in 1..user_ids.len() {
-        let other_id = user_ids[i].1;
-        let _ = social.request_friend(primary_user, other_id).await;
+    for (i, (handle, other_id)) in user_ids.iter().enumerate().skip(1) {
+        let _ = social.request_friend(primary_user, *other_id).await;
         if i % 2 == 1 {
-            let _ = social.respond_to_request(other_id, primary_user, true).await;
-            println!("  ✓ Friendship established: @vichea <-> @{}", user_ids[i].0);
+            let _ = social.respond_to_request(*other_id, primary_user, true).await;
+            println!("  ✓ Friendship established: @vichea <-> @{handle}");
         } else {
-            println!("  ⌛ Pending friend request: @vichea -> @{}", user_ids[i].0);
+            println!("  ⌛ Pending friend request: @vichea -> @{handle}");
         }
     }
 
@@ -311,12 +310,11 @@ async fn main() -> anyhow::Result<()> {
             .await?;
 
         // Seed participants and anonymous identities
-        for i in 0..participant_count.min(user_ids.len()) {
-            let uid = user_ids[i].1;
+        for (_, uid) in user_ids.iter().take(participant_count.min(user_ids.len())) {
             // `join` picks the participant's role and mints the anonymous
             // identity when the room calls for one, so the seeded rooms end up
             // in the same state a real join would leave them in.
-            let _ = rooms.join(room.id, uid).await;
+            let _ = rooms.join(room.id, *uid).await;
         }
 
         println!("  ✨ Moment: {} [{} - {:?}] ({} participants)", room.name, category, room.room_type, participant_count);
@@ -332,10 +330,10 @@ async fn main() -> anyhow::Result<()> {
 
         for (idx, comment) in anon_comments.iter().enumerate() {
             let author = user_ids[idx % user_ids.len()].1;
-            if let Ok(msg) = messaging.post(room.id, author, comment, is_anon, None).await {
-                if idx % 2 == 0 {
-                    let _ = messaging.react(msg.id, primary_user, "🔥").await;
-                }
+            if let Ok(msg) = messaging.post(room.id, author, comment, is_anon, None).await
+                && idx % 2 == 0
+            {
+                let _ = messaging.react(msg.id, primary_user, "🔥").await;
             }
         }
     }

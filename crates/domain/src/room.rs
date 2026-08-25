@@ -88,55 +88,40 @@ impl RoomType {
 }
 
 /// Lifecycle status of a room.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "room_status", rename_all = "snake_case")]
 pub enum RoomStatus {
     Created,
     Waiting,
+    #[default]
     Active,
     Ending,
     Ended,
 }
 
-impl Default for RoomStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
 /// Discoverability and access visibility of a room.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "room_visibility", rename_all = "snake_case")]
 pub enum RoomVisibility {
+    #[default]
     Public,
     Unlisted,
     FriendsOnly,
     Private,
 }
 
-impl Default for RoomVisibility {
-    fn default() -> Self {
-        Self::Public
-    }
-}
-
 /// Participant role within a room.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "room_participant_role", rename_all = "snake_case")]
 pub enum RoomParticipantRole {
     Owner,
     Moderator,
+    #[default]
     Participant,
     Observer,
-}
-
-impl Default for RoomParticipantRole {
-    fn default() -> Self {
-        Self::Participant
-    }
 }
 
 /// A room on the platform (either standalone global or community-bound).

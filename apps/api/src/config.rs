@@ -210,12 +210,9 @@ impl Config {
             message_repeat_window_seconds: number("MESSAGE_REPEAT_WINDOW_SECONDS", 30)?,
             message_repeat_limit: number("MESSAGE_REPEAT_LIMIT", 3)?,
 
-            app_env: {
-                let env = optional("APP_ENV")
-                    .or_else(|| optional("ENVIRONMENT"))
-                    .unwrap_or_else(|| "development".to_owned());
-                env
-            },
+            app_env: optional("APP_ENV")
+                .or_else(|| optional("ENVIRONMENT"))
+                .unwrap_or_else(|| "development".to_owned()),
             allow_password_signup: {
                 let env = optional("APP_ENV")
                     .or_else(|| optional("ENVIRONMENT"))

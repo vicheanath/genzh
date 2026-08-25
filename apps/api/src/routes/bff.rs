@@ -257,14 +257,14 @@ pub async fn open_room_session(
 
     let mut anon_identities = HashMap::new();
     for msg in &page.messages {
-        if msg.is_anonymous && !anon_identities.contains_key(&msg.author_id) {
-            if let Ok(Some(ident)) = state
+        if msg.is_anonymous
+            && !anon_identities.contains_key(&msg.author_id)
+            && let Ok(Some(ident)) = state
                 .rooms
                 .get_anonymous_identity(room_id, msg.author_id)
                 .await
-            {
-                anon_identities.insert(msg.author_id, ident);
-            }
+        {
+            anon_identities.insert(msg.author_id, ident);
         }
     }
 

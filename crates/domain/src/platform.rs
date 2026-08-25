@@ -16,12 +16,14 @@ use crate::error::DomainError;
 /// Ordered: each tier can do everything the one below it can. Kept to three,
 /// because a tier nobody occupies is a permission nobody audits.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, sqlx::Type,
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+    sqlx::Type,
 )]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "platform_role", rename_all = "snake_case")]
 pub enum PlatformRole {
     /// Everybody. No platform authority at all.
+    #[default]
     User,
     /// Reads the support queue and answers it. Deliberately cannot destroy
     /// anything: answering "I can't join voice" does not require the ability to
@@ -30,12 +32,6 @@ pub enum PlatformRole {
     /// Support, plus enforcement — suspending accounts, removing content — and
     /// the audit log that records it.
     Admin,
-}
-
-impl Default for PlatformRole {
-    fn default() -> Self {
-        Self::User
-    }
 }
 
 impl PlatformRole {

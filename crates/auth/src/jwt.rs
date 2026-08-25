@@ -98,8 +98,11 @@ impl JwtService {
 
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
-        validation.set_issuer(&[issuer.clone()]);
-        validation.set_audience(&[audience.clone()]);
+        // `from_ref` borrows the one value as a one-element slice, which is
+        // what these setters want — no clone, and `issuer`/`audience` stay
+        // owned for the struct below.
+        validation.set_issuer(std::slice::from_ref(&issuer));
+        validation.set_audience(std::slice::from_ref(&audience));
         validation.validate_exp = true;
         validation.leeway = 5;
 

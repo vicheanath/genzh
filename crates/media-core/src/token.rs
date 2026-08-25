@@ -185,7 +185,7 @@ impl MediaTokenSigner {
         validation.leeway = 5;
 
         let issuer = issuer.into();
-        validation.set_issuer(&[issuer.clone()]);
+        validation.set_issuer(std::slice::from_ref(&issuer));
 
         Self {
             encoding: EncodingKey::from_secret(secret),
