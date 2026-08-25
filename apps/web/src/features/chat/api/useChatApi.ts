@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { messages } from '@/lib/api'
 import { useIsSignedIn } from '@/lib/auth'
@@ -10,6 +10,9 @@ export const chatKeys = {
   all: ['chat'] as const,
   room: (roomId: Uuid) => [...chatKeys.all, 'room', roomId] as const,
   messages: (roomId: Uuid) => [...chatKeys.room(roomId), 'messages'] as const,
+  pins: (roomId: Uuid) => [...chatKeys.room(roomId), 'pins'] as const,
+  search: (query: string, roomId?: Uuid) => [...chatKeys.all, 'search', { query, roomId }] as const,
+  unread: () => [...chatKeys.all, 'unread'] as const,
 }
 
 /** Where the next page starts. Both halves, or paging can skip messages. */
@@ -54,7 +57,7 @@ export function useRoomMessagesInfinite(roomId: Uuid | null | undefined, limit =
 export function useSendMessageMutation(roomId: Uuid | null | undefined) {
   return useMutation({
     mutationFn: (payload: SendMessagePayload) =>
-      messages.post(null, roomId!, payload.content, payload.is_anonymous),
+      messages.post(null, roomId!, payload.content, payload.is_anonymous, payload.reply_to_id),
     // No invalidation: the server echoes the message back over the socket, and
     // the bridge writes it into the cache. Refetching here would race that.
   })
@@ -99,3 +102,85 @@ export function useReactionMutation() {
     },
   })
 }
+
+export function useRoomPinsQuery(roomId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
+  return useQuery({
+    queryKey: roomId ? chatKeys.pins(roomId) : [...chatKeys.all, 'idle', 'pins'],
+    queryFn: () => messages.pins(null, roomId!),
+    enabled: signedIn && Boolean(roomId),
+  })
+}
+
+export function usePinMessageMutation(roomId: Uuid | null | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (messageId: Uuid) => messages.pin(null, messageId),
+    onSuccess: () => {
+      if (roomId) {
+        queryClient.invalidateQueries({ queryKey: chatKeys.pins(roomId) })
+      }
+    },
+  })
+}
+
+export function useUnpinMessageMutation(roomId: Uuid | null | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (messageId: Uuid) => messages.unpin(null, messageId),
+    onSuccess: () => {
+      if (roomId) {
+        queryClient.invalidateQueries({ queryKey: chatKeys.pins(roomId) })
+      }
+    },
+  })
+}
+
+export function useSearchMessagesQuery(query: string, roomId?: Uuid, limit = 30) {
+  const signedIn = useIsSignedIn()
+  const trimmed = query.trim()
+  return useQuery({
+    queryKey: chatKeys.search(trimmed, roomId),
+    queryFn: () => messages.search(null, { q: trimmed, room_id: roomId, limit }),
+    enabled: signedIn && trimmed.length > 0,
+    staleTime: 30_000,
+  })
+}
+
+export function useUnreadOverviewQuery() {
+  const signedIn = useIsSignedIn()
+  return useQuery({
+    queryKey: chatKeys.unread(),
+    queryFn: () => messages.unread(null),
+    enabled: signedIn,
+    refetchInterval: 15_000,
+  })
+}
+
+export function useMarkRoomReadMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (roomId: Uuid) => messages.markRead(null, roomId),
+    onSuccess: (_, roomId) => {
+      queryClient.setQueryData<import('@/lib/api').RoomUnread[]>(chatKeys.unread(), (old) => {
+        if (!old) return old
+        return old.map((entry) => (entry.room_id === roomId ? { ...entry, unread: 0 } : entry))
+      })
+    },
+  })
+}
+
+export function useMuteRoomMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ roomId, muted }: { roomId: Uuid; muted: boolean }) =>
+      messages.setMuted(null, roomId, muted),
+    onSuccess: (_, { roomId, muted }) => {
+      queryClient.setQueryData<import('@/lib/api').RoomUnread[]>(chatKeys.unread(), (old) => {
+        if (!old) return old
+        return old.map((entry) => (entry.room_id === roomId ? { ...entry, muted } : entry))
+      })
+    },
+  })
+}
+

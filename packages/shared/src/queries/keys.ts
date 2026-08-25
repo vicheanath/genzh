@@ -18,9 +18,12 @@ export const queryKeys = {
   communities: {
     all: ['communities'] as const,
     lists: () => [...queryKeys.communities.all, 'list'] as const,
+    templates: () => [...queryKeys.communities.all, 'templates'] as const,
     detail: (id: Uuid) => [...queryKeys.communities.all, 'detail', id] as const,
     members: (id: Uuid) => [...queryKeys.communities.detail(id), 'members'] as const,
     roles: (id: Uuid) => [...queryKeys.communities.detail(id), 'roles'] as const,
+    invites: (id: Uuid) => [...queryKeys.communities.detail(id), 'invites'] as const,
+    invitePreview: (code: string) => [...queryKeys.communities.all, 'invitePreview', code] as const,
   },
   rooms: {
     all: ['rooms'] as const,
@@ -35,6 +38,9 @@ export const queryKeys = {
   messages: {
     all: ['messages'] as const,
     list: (roomId: Uuid) => [...queryKeys.messages.all, 'room', roomId] as const,
+    pins: (roomId: Uuid) => [...queryKeys.messages.list(roomId), 'pins'] as const,
+    search: (query: string, roomId?: Uuid) => [...queryKeys.messages.all, 'search', { query, roomId }] as const,
+    unread: () => [...queryKeys.messages.all, 'unread'] as const,
   },
   friends: {
     all: ['friends'] as const,

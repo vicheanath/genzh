@@ -17,11 +17,11 @@ import {
 import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
-import { ApiError } from '@/lib/api'
 import {
   useCommunityTemplates,
   useCreateCommunityMutation,
   useJoinCommunityMutation,
+  useRedeemInviteMutation,
   type CommunityTemplate,
 } from '@/features/api'
 import { errorText } from '@/lib/errors'
@@ -154,24 +154,32 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
     }
   }
 
+  const redeemInvite = useRedeemInviteMutation()
+
   async function handleJoin(data: JoinCommunityFields) {
-    const id = data.inviteId.trim()
-    if (!id) return
+    const raw = data.inviteId.trim()
+    if (!raw) return
+    const code = raw.replace(/^.*\/invite\//i, '').replace(/^.*\/invites\//i, '').trim()
+    if (!code) return
+
     setError(null)
     setBusy(true)
     try {
-      await joinCommunity.mutateAsync(id)
-      toast.success('Joined community!')
-      onCreated?.()
-      handleClose()
-      void navigate(`/c/${id}`)
-    } catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'CONFLICT') {
+      // If code is a standard UUID (36 chars with dashes), use joinCommunity directly
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) {
+        await joinCommunity.mutateAsync(code)
+        toast.success('Joined community!')
         onCreated?.()
         handleClose()
-        void navigate(`/c/${id}`)
-        return
+        void navigate(`/c/${code}`)
+      } else {
+        const community = await redeemInvite.mutateAsync(code)
+        toast.success(`Joined ${community.name}!`)
+        onCreated?.()
+        handleClose()
+        void navigate(`/c/${community.id}`)
       }
+    } catch (cause) {
       setError(errorText(cause, 'Could not join community'))
     } finally {
       setBusy(false)

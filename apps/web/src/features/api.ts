@@ -31,8 +31,24 @@ export {
   useEditMessageMutation,
   useDeleteMessageMutation,
   useReactionMutation,
+  useRoomPinsQuery,
+  usePinMessageMutation,
+  useUnpinMessageMutation,
+  useSearchMessagesQuery,
+  useUnreadOverviewQuery,
+  useMarkRoomReadMutation,
+  useMuteRoomMutation,
 } from './chat/api'
-export type { EditMessagePayload, Message, MessagePage, ReactionPayload, ReactionSummary, SendMessagePayload } from './chat/api'
+export type {
+  EditMessagePayload,
+  Message,
+  MessagePage,
+  MessageSearchParams,
+  ReactionPayload,
+  ReactionSummary,
+  RoomUnread,
+  SendMessagePayload,
+} from './chat/api'
 
 // Communities
 export {
@@ -51,6 +67,11 @@ export {
   useUpdateRoleMutation,
   useAssignRoleMutation,
   useRemoveRoleMutation,
+  useCommunityInvites,
+  useCreateInviteMutation,
+  useRevokeInviteMutation,
+  useInvitePreview,
+  useRedeemInviteMutation,
 } from './communities/api'
 export type {
   Community,
@@ -58,7 +79,10 @@ export type {
   CommunityTemplate,
   CommunityWithPermissions,
   CreateCommunityInput,
+  CreateInviteInput,
   CreateRoleInput,
+  Invite,
+  InvitePreview,
   Permission,
   Role,
   RoleWithPermissions,

@@ -252,10 +252,52 @@ export interface Message {
   author_id: Uuid
   content: string
   is_anonymous?: boolean
+  reply_to_id?: Uuid | null
   edited_at: Timestamp | null
   created_at: Timestamp
   reactions: ReactionSummary[]
   anonymous_author?: RoomAnonymousIdentity | null
+}
+
+export interface RoomUnread {
+  room_id: Uuid
+  unread: number
+  muted: boolean
+  last_read_at: Timestamp | null
+}
+
+export interface Invite {
+  code: string
+  community_id: Uuid
+  created_by: Uuid | null
+  expires_at: Timestamp | null
+  max_uses: number | null
+  uses: number
+  revoked_at: Timestamp | null
+  created_at: Timestamp
+}
+
+export interface InvitePreview {
+  code: string
+  community_id: Uuid
+  name: string
+  description: string | null
+  icon_url: string | null
+  member_count: number
+  expires_at: Timestamp | null
+  max_uses: number | null
+  uses: number
+}
+
+export interface CreateInviteInput {
+  expires_in_hours?: number
+  max_uses?: number
+}
+
+export interface MessageSearchParams {
+  q: string
+  room_id?: Uuid
+  limit?: number
 }
 
 export interface MessagePage {

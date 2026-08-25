@@ -284,6 +284,19 @@
   white-space: nowrap;
 }
 
+.navTrailing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.navMutedIcon {
+  color: var(--color-text-subtle);
+  opacity: 0.6;
+}
+
 /* ── the active voice bar ───────────────────────────────────────────────── */
 
 /* Persistent "you are still in a call" strip above the user bar. It borrows

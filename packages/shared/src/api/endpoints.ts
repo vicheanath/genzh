@@ -216,6 +216,37 @@ export const communities = {
    */
   overview: (token: string | null, id: Uuid) =>
     request<CommunityOverviewResponse>(`/api/v1/communities/${id}/overview`, { token }),
+
+  // ── invite links ──────────────────────────────────────────────────────────
+  createInvite: (
+    token: string | null,
+    communityId: Uuid,
+    input: { expires_in_hours?: number; max_uses?: number } = {},
+  ) =>
+    request<import('./types').Invite>(`/api/v1/communities/${communityId}/invites`, {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+
+  listInvites: (token: string | null, communityId: Uuid) =>
+    request<import('./types').Invite[]>(`/api/v1/communities/${communityId}/invites`, { token }),
+
+  previewInvite: (token: string | null, code: string) =>
+    request<import('./types').InvitePreview>(`/api/v1/invites/${code}`, { token }),
+
+  redeemInvite: (token: string | null, code: string) =>
+    request<CommunityWithPermissions>(`/api/v1/invites/${code}`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  revokeInvite: (token: string | null, code: string) =>
+    request<void>(`/api/v1/invites/${code}`, {
+      method: 'DELETE',
+      token,
+    }),
 }
 
 // ── rooms ─────────────────────────────────────────────────────────────────
@@ -379,10 +410,16 @@ export const messages = {
     return request<MessagePage>(`/api/v1/rooms/${roomId}/messages?${params}`, { token })
   },
 
-  post: (token: string | null, roomId: Uuid, content: string, is_anonymous?: boolean) =>
+  post: (
+    token: string | null,
+    roomId: Uuid,
+    content: string,
+    is_anonymous?: boolean,
+    reply_to_id?: Uuid,
+  ) =>
     request<Message>(`/api/v1/rooms/${roomId}/messages`, {
       method: 'POST',
-      body: { content, is_anonymous },
+      body: { content, is_anonymous, reply_to_id },
       token,
     }),
 
@@ -409,6 +446,51 @@ export const messages = {
     request<ReactionSummary[]>(`/api/v1/messages/${messageId}/reactions`, {
       method: 'DELETE',
       body: { reaction },
+      token,
+    }),
+
+  // ── pins ──────────────────────────────────────────────────────────────────
+  pins: (token: string | null, roomId: Uuid) =>
+    request<Message[]>(`/api/v1/rooms/${roomId}/pins`, { token }),
+
+  pin: (token: string | null, messageId: Uuid) =>
+    request<void>(`/api/v1/messages/${messageId}/pin`, {
+      method: 'PUT',
+      token,
+    }),
+
+  unpin: (token: string | null, messageId: Uuid) =>
+    request<void>(`/api/v1/messages/${messageId}/pin`, {
+      method: 'DELETE',
+      token,
+    }),
+
+  // ── search ────────────────────────────────────────────────────────────────
+  search: (
+    token: string | null,
+    params: { q: string; room_id?: Uuid; limit?: number },
+  ) => {
+    const query = new URLSearchParams({ q: params.q })
+    if (params.room_id) query.set('room_id', params.room_id)
+    if (params.limit) query.set('limit', String(params.limit))
+    return request<Message[]>(`/api/v1/search/messages?${query.toString()}`, { token })
+  },
+
+  // ── read state and muting ─────────────────────────────────────────────────
+  unread: (token: string | null) =>
+    request<import('./types').RoomUnread[]>('/api/v1/me/unread', { token }),
+
+  markRead: (token: string | null, roomId: Uuid) =>
+    request<void>(`/api/v1/rooms/${roomId}/read`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  setMuted: (token: string | null, roomId: Uuid, muted: boolean) =>
+    request<void>(`/api/v1/rooms/${roomId}/mute`, {
+      method: 'PUT',
+      body: { muted },
       token,
     }),
 }

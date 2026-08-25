@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 
 import { ChannelsTab } from './ChannelsTab'
+import { InvitesTab } from './InvitesTab'
 import { MembersTab } from './MembersTab'
 import { OverviewTab } from './OverviewTab'
 import { RolesTab } from './RolesTab'
@@ -104,6 +105,9 @@ export function CommunitySettings({
       </Tabs.Panel>
       <Tabs.Panel value="channels" className={styles.panel}>
         <ChannelsTab community={community} abilities={abilities} />
+      </Tabs.Panel>
+      <Tabs.Panel value="invites" className={styles.panel}>
+        <InvitesTab community={community} abilities={abilities} />
       </Tabs.Panel>
     </Tabs.Root>
   )

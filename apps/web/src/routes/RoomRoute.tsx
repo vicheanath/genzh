@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
@@ -16,7 +16,9 @@ import {
   PaletteIcon,
   PhoneIcon,
   PhoneOffIcon,
+  PinIcon,
   RadioIcon,
+  SearchIcon,
   UsersIcon,
   VideoIcon,
   VoteIcon,
@@ -27,12 +29,15 @@ import { Tooltip } from '@/components/Tooltip'
 import { type RoomType, type RoomWithPermissions, type Uuid } from '@/lib/api'
 import {
   useJoinedRoomQuery,
+  useMarkRoomReadMutation,
   useRoomParticipantsQuery,
+  useRoomPinsQuery,
   useSetPersonaMutation,
 } from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
+import { can } from '@/lib/permissions'
 import { useVoiceRoom } from '@/lib/media'
 import { useAppStore } from '@/lib/store'
 import { useCall } from '@/lib/useCall'
@@ -46,6 +51,8 @@ import { DebateExperience } from '@/features/experiences/DebateExperience'
 import { GameExperience } from '@/features/experiences/GameExperience'
 import { PollExperience } from '@/features/experiences/PollExperience'
 import { QuickChatExperience } from '@/features/experiences/QuickChatExperience'
+import { PinnedMessagesDialog } from '@/features/chat/PinnedMessagesDialog'
+import { SearchMessagesDialog } from '@/features/chat/SearchMessagesDialog'
 
 import { Chat } from './Chat'
 import { MemberList } from './MemberList'
@@ -92,17 +99,38 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const isMobile = useIsMobile()
   const { isOnline } = usePresence()
   const [membersOpen, setMembersOpen] = useState(false)
+  const [pinsOpen, setPinsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const isAnonymousByDefault = useAppStore((s) => s.isAnonymousByDefault)
   const anonymousAlias = useAppStore((s) => s.anonymousAlias)
   const [isAnonymous, setIsAnonymous] = useState(room.is_anonymous || isAnonymousByDefault)
   const [profileUserId, setProfileUserId] = useState<Uuid | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
 
+  const markRead = useMarkRoomReadMutation()
+  const pinsQuery = useRoomPinsQuery(room.id)
+  const canModerate = can(room.your_permissions, 'manage_room')
+  const pinsCount = pinsQuery.data?.length ?? 0
+
+  useEffect(() => {
+    markRead.mutate(room.id)
+  }, [room.id])
+
   const [voiceChatOpen, setVoiceChatOpen] = useState(false)
   const isMediaRoom = room.room_type === 'voice' || room.room_type === 'video' || room.room_type === 'stage'
   const isDM = room.category === 'dm'
   // Only the non-DM header uses this; a DM is headed by an avatar.
   const Icon = ROOM_ICONS[room.room_type] ?? HashIcon
+
+  function handleJumpToMessage(messageId: Uuid) {
+    const el = document.getElementById(`msg-${messageId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.remove('messageHighlighted')
+      void el.offsetWidth
+      el.classList.add('messageHighlighted')
+    }
+  }
 
   // Resolve DM partner
   const participants = useRoomParticipantsQuery(room.id)
@@ -274,6 +302,34 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
             </Badge>
           )}
 
+          {!isMobile && (
+            <>
+              <Tooltip content="Search messages">
+                <button
+                  type="button"
+                  className={cx(styles.headerButton, searchOpen && styles.headerButtonActive)}
+                  onClick={() => setSearchOpen(true)}
+                  aria-label="Search messages"
+                >
+                  <SearchIcon size={17} />
+                </button>
+              </Tooltip>
+
+              <Tooltip content={pinsCount > 0 ? `Pinned messages (${pinsCount})` : 'Pinned messages'}>
+                <button
+                  type="button"
+                  className={cx(styles.headerButton, pinsOpen && styles.headerButtonActive)}
+                  onClick={() => setPinsOpen(true)}
+                  aria-label="Pinned messages"
+                  style={{ position: 'relative' }}
+                >
+                  <PinIcon size={17} />
+                  {pinsCount > 0 && <span className={styles.pinBadge}>{pinsCount}</span>}
+                </button>
+              </Tooltip>
+            </>
+          )}
+
           {isMediaRoom && !isMobile && (
             <Tooltip content={voiceChatOpen ? 'Hide text chat' : 'Show text chat'}>
               <button
@@ -359,6 +415,22 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
           targetUserId={profileUserId}
         />
       )}
+
+      <PinnedMessagesDialog
+        open={pinsOpen}
+        onOpenChange={setPinsOpen}
+        roomId={room.id}
+        canModerate={canModerate}
+        onJumpToMessage={handleJumpToMessage}
+      />
+
+      <SearchMessagesDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        roomId={room.id}
+        roomName={room.name}
+        onJumpToMessage={handleJumpToMessage}
+      />
     </div>
   )
 }

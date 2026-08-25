@@ -5,6 +5,7 @@ import {
   AtSign,
   Ban,
   Bell,
+  BellOff,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -20,6 +21,7 @@ import {
   Heart,
   HelpCircle,
   Home,
+  Link2,
   Lock,
   LogOut,
   Mail,
@@ -36,9 +38,12 @@ import {
   Pencil,
   Phone,
   PhoneOff,
+  Pin,
+  PinOff,
   Play,
   Plus,
   Radio,
+  Reply,
   RotateCcw,
   ScreenShare,
   ScreenShareOff,
@@ -146,6 +151,11 @@ export const BanIcon: IconComponent = (props: IconProps) => <Ban size={18} {...p
 export const MailIcon: IconComponent = (props: IconProps) => <Mail size={18} {...props} />
 export const HeartIcon: IconComponent = (props: IconProps) => <Heart size={18} {...props} />
 export const GlobeIcon: IconComponent = (props: IconProps) => <Globe size={18} {...props} />
+export const PinIcon: IconComponent = (props: IconProps) => <Pin size={18} {...props} />
+export const PinOffIcon: IconComponent = (props: IconProps) => <PinOff size={18} {...props} />
+export const ReplyIcon: IconComponent = (props: IconProps) => <Reply size={18} {...props} />
+export const LinkIcon: IconComponent = (props: IconProps) => <Link2 size={18} {...props} />
+export const BellOffIcon: IconComponent = (props: IconProps) => <BellOff size={18} {...props} />
 
 /* ── OAuth Providers ────────────────────────────────────────────────────── */
 export const GoogleIcon: IconComponent = ({ size = 18, className }) => (

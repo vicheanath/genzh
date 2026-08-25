@@ -18,6 +18,8 @@ export const communityKeys = {
   detail: (id: Uuid) => [...communityKeys.all, 'detail', id] as const,
   members: (id: Uuid) => [...communityKeys.detail(id), 'members'] as const,
   roles: (id: Uuid) => [...communityKeys.detail(id), 'roles'] as const,
+  invites: (id: Uuid) => [...communityKeys.detail(id), 'invites'] as const,
+  invitePreview: (code: string) => [...communityKeys.all, 'invitePreview', code] as const,
 }
 
 const idle = (...parts: string[]) => [...communityKeys.all, 'idle', ...parts] as const
@@ -175,6 +177,61 @@ export function useRemoveRoleMutation(communityId: Uuid | null | undefined) {
       if (communityId) {
         queryClient.invalidateQueries({ queryKey: communityKeys.members(communityId) })
       }
+    },
+  })
+}
+
+export function useCommunityInvites(communityId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
+  return useQuery({
+    queryKey: communityId ? communityKeys.invites(communityId) : idle('invites'),
+    queryFn: () => communities.listInvites(null, communityId!),
+    enabled: signedIn && Boolean(communityId),
+  })
+}
+
+export function useCreateInviteMutation(communityId: Uuid | null | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { expires_in_hours?: number; max_uses?: number }) =>
+      communities.createInvite(null, communityId!, input),
+    onSuccess: () => {
+      if (communityId) {
+        queryClient.invalidateQueries({ queryKey: communityKeys.invites(communityId) })
+      }
+    },
+  })
+}
+
+export function useRevokeInviteMutation(communityId: Uuid | null | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) => communities.revokeInvite(null, code),
+    onSuccess: () => {
+      if (communityId) {
+        queryClient.invalidateQueries({ queryKey: communityKeys.invites(communityId) })
+      }
+    },
+  })
+}
+
+export function useInvitePreview(code: string | null | undefined) {
+  const signedIn = useIsSignedIn()
+  return useQuery({
+    queryKey: code ? communityKeys.invitePreview(code) : idle('invitePreview'),
+    queryFn: () => communities.previewInvite(null, code!),
+    enabled: signedIn && Boolean(code),
+    retry: false,
+  })
+}
+
+export function useRedeemInviteMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) => communities.redeemInvite(null, code),
+    onSuccess: (community) => {
+      queryClient.invalidateQueries({ queryKey: communityKeys.list() })
+      queryClient.invalidateQueries({ queryKey: communityKeys.detail(community.id) })
     },
   })
 }

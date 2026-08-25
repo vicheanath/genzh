@@ -1,8 +1,12 @@
 import type {
+  Invite,
+  InvitePreview,
   Message,
   MessagePage,
+  MessageSearchParams,
   ReactionSummary,
   RoomAnonymousIdentity,
+  RoomUnread,
   Timestamp,
   Uuid,
 } from '@/lib/api'
@@ -10,6 +14,7 @@ import type {
 export interface SendMessagePayload {
   content: string
   is_anonymous?: boolean
+  reply_to_id?: Uuid
 }
 
 export interface EditMessagePayload {
@@ -28,4 +33,15 @@ export interface MessageHistoryParams {
   limit?: number
 }
 
-export type { Message, MessagePage, ReactionSummary, RoomAnonymousIdentity, Timestamp, Uuid }
+export type {
+  Invite,
+  InvitePreview,
+  Message,
+  MessagePage,
+  MessageSearchParams,
+  ReactionSummary,
+  RoomAnonymousIdentity,
+  RoomUnread,
+  Timestamp,
+  Uuid,
+}

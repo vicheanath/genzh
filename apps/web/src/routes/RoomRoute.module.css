@@ -109,6 +109,22 @@
   color: var(--color-accent-text);
 }
 
+.pinBadge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 0.85rem;
+  height: 0.85rem;
+  padding: 0 0.2rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 0.85rem;
+  text-align: center;
+}
+
 .personaSwitch {
   display: inline-flex;
   align-items: center;

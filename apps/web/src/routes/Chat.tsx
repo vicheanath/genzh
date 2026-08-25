@@ -13,6 +13,9 @@ import {
   CopyIcon,
   MoreIcon,
   PencilIcon,
+  PinIcon,
+  PinOffIcon,
+  ReplyIcon,
   SmileIcon,
   TrashIcon,
 } from '@/components/Icons'
@@ -44,9 +47,12 @@ import {
   applyMessageUpdated,
   useDeleteMessageMutation,
   useEditMessageMutation,
+  usePinMessageMutation,
   useReactionMutation,
   useRoomMessagesInfinite,
+  useRoomPinsQuery,
   useSendMessageMutation,
+  useUnpinMessageMutation,
 } from '@/features/api'
 import { useRoomSubscription, useRoomTyping, useSocketEvent } from '@/features/realtime'
 import { useAuth } from '@/lib/auth'
@@ -115,8 +121,16 @@ export function Chat({
   const editMessageMutation = useEditMessageMutation()
   const deleteMessageMutation = useDeleteMessageMutation()
   const reactionMutation = useReactionMutation()
+  const pinsQuery = useRoomPinsQuery(room.id)
+  const pinMutation = usePinMessageMutation(room.id)
+  const unpinMutation = useUnpinMessageMutation(room.id)
   const sendTyping = useRoomTyping(room.id)
 
+  const [replyingTo, setReplyingTo] = useState<{
+    id: Uuid
+    authorName: string
+    content: string
+  } | null>(null)
   const [pending, setPending] = useState<PendingMessage[]>([])
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
 
@@ -135,7 +149,57 @@ export function Chat({
   const canReact = can(room.your_permissions, 'add_reaction')
   const canModerate = can(room.your_permissions, 'manage_room')
 
+  const pinnedIds = new Set((pinsQuery.data ?? []).map((p) => p.id))
+  const itemsMap = useRef(new Map<Uuid, Message>())
+  itemsMap.current = new Map(items.map((m) => [m.id, m]))
+
   const lookup = useProfiles([...new Set(items.map((message) => message.author_id))])
+
+  const scrollToMessage = useCallback((messageId: Uuid) => {
+    const el = document.getElementById(`msg-${messageId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (styles.messageHighlighted) {
+        el.classList.remove(styles.messageHighlighted)
+        void el.offsetWidth
+        el.classList.add(styles.messageHighlighted)
+      }
+    } else {
+      toast.success('Message is further up in history')
+    }
+  }, [toast])
+
+  const handleReply = useCallback((msg: Message, authorName: string) => {
+    setReplyingTo({
+      id: msg.id,
+      authorName,
+      content: msg.content,
+    })
+  }, [])
+
+  const pinMessage = useCallback(
+    async (messageId: Uuid) => {
+      try {
+        await pinMutation.mutateAsync(messageId)
+        toast.success('Message pinned')
+      } catch (cause) {
+        toast.error('Could not pin message', errorText(cause))
+      }
+    },
+    [pinMutation, toast],
+  )
+
+  const unpinMessage = useCallback(
+    async (messageId: Uuid) => {
+      try {
+        await unpinMutation.mutateAsync(messageId)
+        toast.success('Message unpinned')
+      } catch (cause) {
+        toast.error('Could not unpin message', errorText(cause))
+      }
+    },
+    [unpinMutation, toast],
+  )
 
   // ── realtime ─────────────────────────────────────────────────────────────
 
@@ -448,19 +512,34 @@ export function Chat({
             previous?.author_id === message.author_id &&
             withinGroupingWindow(previous.created_at, message.created_at)
 
+          const repliedMsg = message.reply_to_id ? itemsMap.current.get(message.reply_to_id) : null
+          const repliedAuthor = repliedMsg ? lookup(repliedMsg.author_id) : null
+          const repliedAuthorName = repliedMsg?.anonymous_author
+            ? repliedMsg.anonymous_author.alias_name
+            : (repliedAuthor?.display_name ?? 'Unknown')
+
           return (
             <div key={message.id}>
               {startsNewDay && <DayDivider iso={message.created_at} />}
               <MessageRow
                 message={message}
                 author={lookup(message.author_id)}
+                repliedMessage={repliedMsg}
+                repliedAuthorName={repliedAuthorName}
                 grouped={grouped}
                 isOwn={message.author_id === user?.id}
+                isPinned={pinnedIds.has(message.id)}
                 canReact={canReact}
                 canDelete={message.author_id === user?.id || canModerate}
+                canModerate={canModerate}
+                canReply={canSend}
                 onToggleReaction={toggleReaction}
                 onEdit={editMessage}
                 onDelete={deleteMessage}
+                onReply={handleReply}
+                onPin={(id) => void pinMessage(id)}
+                onUnpin={(id) => void unpinMessage(id)}
+                onScrollToMessage={scrollToMessage}
                 onOpenProfile={(id) => {
                   setProfileUserId(id)
                   setProfileOpen(true)
@@ -517,6 +596,8 @@ export function Chat({
           onTogglePersona={onTogglePersona}
           anonAlias={room.anonymous_identity?.alias_name || useAppStore.getState().anonymousAlias || 'Anonymous'}
           publicName={user?.profile.display_name ?? 'You'}
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
         />
       ) : (
         <p className={styles.readOnly}>You do not have permission to post in this room.</p>
@@ -538,26 +619,44 @@ export function Chat({
 interface MessageRowProps {
   message: Message
   author: PublicProfile | null
+  repliedMessage?: Message | null
+  repliedAuthorName?: string
   grouped: boolean
   isOwn: boolean
+  isPinned: boolean
   canReact: boolean
   canDelete: boolean
+  canModerate: boolean
+  canReply: boolean
   onToggleReaction: (id: Uuid, emoji: string, active: boolean) => void
   onEdit: (id: Uuid, content: string) => void
   onDelete: (id: Uuid) => void
+  onReply: (message: Message, authorName: string) => void
+  onPin: (id: Uuid) => void
+  onUnpin: (id: Uuid) => void
+  onScrollToMessage: (id: Uuid) => void
   onOpenProfile?: (id: Uuid) => void
 }
 
 function MessageRow({
   message,
   author,
+  repliedMessage,
+  repliedAuthorName,
   grouped,
   isOwn,
+  isPinned,
   canReact,
   canDelete,
+  canModerate,
+  canReply,
   onToggleReaction,
   onEdit,
   onDelete,
+  onReply,
+  onPin,
+  onUnpin,
+  onScrollToMessage,
   onOpenProfile,
 }: MessageRowProps) {
   const toast = useToast()
@@ -599,12 +698,20 @@ function MessageRow({
         Separator: ContextMenuSeparator,
         isOwn,
         canDelete,
+        canModerate,
+        isPinned,
         onCopy: copyText,
         onEdit: beginEdit,
         onDelete: () => onDelete(message.id),
+        onReply: canReply ? () => onReply(message, name) : undefined,
+        onPin: () => onPin(message.id),
+        onUnpin: () => onUnpin(message.id),
       })}
     >
-      <article className={cx(styles.message, grouped && styles.grouped)}>
+      <article
+        id={`msg-${message.id}`}
+        className={cx(styles.message, grouped && styles.grouped)}
+      >
         {grouped ? (
           // The timestamp takes the avatar's place in a grouped row, appearing on
           // hover. It keeps the text column aligned without repeating the header.
@@ -629,6 +736,20 @@ function MessageRow({
         )}
 
         <div className={styles.messageBody}>
+          {repliedMessage && (
+            <div
+              className={styles.replyPreview}
+              onClick={() => onScrollToMessage(repliedMessage.id)}
+              role="button"
+              tabIndex={0}
+              title="Click to jump to replied message"
+            >
+              <ReplyIcon size={12} className={styles.replyPreviewIcon} />
+              <span className={styles.replyAuthor}>@{repliedAuthorName ?? 'Unknown'}</span>
+              <span className={styles.replyContent}>{repliedMessage.content}</span>
+            </div>
+          )}
+
           {!grouped && (
             <div className={styles.messageHeader}>
               <span
@@ -648,6 +769,11 @@ function MessageRow({
               >
                 {formatClock(message.created_at)}
               </time>
+              {isPinned && (
+                <span className={styles.pinIndicator} title="Pinned message">
+                  <PinIcon size={12} />
+                </span>
+              )}
             </div>
           )}
 
@@ -764,6 +890,19 @@ function MessageRow({
               />
             )}
 
+            {canReply && (
+              <Tooltip content="Reply">
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  onClick={() => onReply(message, name)}
+                  aria-label="Reply to message"
+                >
+                  <ReplyIcon size={15} />
+                </button>
+              </Tooltip>
+            )}
+
             <Menu
               align="end"
               trigger={
@@ -777,9 +916,14 @@ function MessageRow({
                 Separator: MenuSeparator,
                 isOwn,
                 canDelete,
+                canModerate,
+                isPinned,
                 onCopy: copyText,
                 onEdit: beginEdit,
                 onDelete: () => onDelete(message.id),
+                onReply: canReply ? () => onReply(message, name) : undefined,
+                onPin: () => onPin(message.id),
+                onUnpin: () => onUnpin(message.id),
               })}
             </Menu>
           </div>
@@ -801,23 +945,48 @@ function messageActions({
   Separator,
   isOwn,
   canDelete,
+  canModerate,
+  isPinned,
   onCopy,
   onEdit,
   onDelete,
+  onReply,
+  onPin,
+  onUnpin,
 }: {
   Item: typeof MenuItem | typeof ContextMenuItem
   Separator: typeof MenuSeparator | typeof ContextMenuSeparator
   isOwn: boolean
   canDelete: boolean
+  canModerate?: boolean
+  isPinned?: boolean
   onCopy: () => void
   onEdit: () => void
   onDelete: () => void
+  onReply?: () => void
+  onPin?: () => void
+  onUnpin?: () => void
 }) {
   return (
     <>
+      {onReply && (
+        <Item icon={<ReplyIcon size={15} />} onClick={onReply}>
+          Reply
+        </Item>
+      )}
+
       <Item icon={<CopyIcon size={15} />} onClick={onCopy}>
         Copy text
       </Item>
+
+      {canModerate && (
+        <Item
+          icon={isPinned ? <PinOffIcon size={15} /> : <PinIcon size={15} />}
+          onClick={isPinned ? onUnpin : onPin}
+        >
+          {isPinned ? 'Unpin message' : 'Pin message'}
+        </Item>
+      )}
 
       {isOwn && (
         <Item icon={<PencilIcon size={15} />} onClick={onEdit}>

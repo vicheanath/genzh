@@ -21,6 +21,7 @@ import { HomeRoute } from './routes/HomeRoute'
 import { NotificationsRoute } from './routes/NotificationsRoute'
 import { RoomRoute } from './routes/RoomRoute'
 import { InfoPage } from './routes/InfoPages'
+import { InviteRoute } from './routes/InviteRoute'
 import { SignInRoute } from './routes/SignInRoute'
 
 export function App() {
@@ -87,6 +88,8 @@ function Router() {
         <Route path="/contact" element={<InfoPage page="contact" />} />
         <Route path="/report" element={<InfoPage page="report" />} />
         <Route path="/report-abuse" element={<InfoPage page="report" />} />
+        <Route path="/invite/:code" element={<InviteRoute />} />
+        <Route path="/invites/:code" element={<InviteRoute />} />
         <Route path="*" element={<SignInRoute />} />
       </Routes>
     )
@@ -104,6 +107,8 @@ function Router() {
       <Route path="/contact" element={<InfoPage page="contact" />} />
       <Route path="/report" element={<InfoPage page="report" />} />
       <Route path="/report-abuse" element={<InfoPage page="report" />} />
+      <Route path="/invite/:code" element={<InviteRoute />} />
+      <Route path="/invites/:code" element={<InviteRoute />} />
 
       <Route element={<AppShell />}>
         <Route path="/" element={<HomeRoute />} />

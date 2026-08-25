@@ -1,6 +1,7 @@
 import { Avatar } from '@/components/Avatar'
-import { MessageSquareIcon } from '@/components/Icons'
-import type { UserRoom } from '@/lib/api'
+import { Badge } from '@/components/Badge'
+import { BellOffIcon, MessageSquareIcon } from '@/components/Icons'
+import type { RoomUnread, UserRoom } from '@/lib/api'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 
@@ -17,7 +18,13 @@ import styles from './shell.module.css'
  * display name, and falls back to the stored name only when a room predates
  * the field or the profile has not loaded yet.
  */
-export function DirectMessageList({ rooms }: { rooms: UserRoom[] }) {
+export function DirectMessageList({
+  rooms,
+  unreadMap,
+}: {
+  rooms: UserRoom[]
+  unreadMap?: Map<string, RoomUnread>
+}) {
   const peerIds = rooms.flatMap((room) => (room.dm_peer_id ? [room.dm_peer_id] : []))
   const lookup = useProfiles(peerIds)
   const { isOnline } = usePresence()
@@ -27,6 +34,9 @@ export function DirectMessageList({ rooms }: { rooms: UserRoom[] }) {
       {rooms.map((dm) => {
         const peer = dm.dm_peer_id ? lookup(dm.dm_peer_id) : null
         const label = peer?.display_name ?? dm.name.replace(/^DM:\s*/, '')
+        const unreadEntry = unreadMap?.get(dm.id)
+        const count = unreadEntry?.unread ?? 0
+        const muted = unreadEntry?.muted ?? false
 
         return (
           <NavItem
@@ -47,6 +57,16 @@ export function DirectMessageList({ rooms }: { rooms: UserRoom[] }) {
               ) : (
                 <MessageSquareIcon size={16} className={styles.navIcon} />
               )
+            }
+            trailing={
+              count > 0 || muted ? (
+                <div className={styles.navTrailing}>
+                  {muted && <BellOffIcon size={12} className={styles.navMutedIcon} />}
+                  {count > 0 && (
+                    <Badge tone={muted ? 'neutral' : 'accent'}>{count}</Badge>
+                  )}
+                </div>
+              ) : undefined
             }
           />
         )

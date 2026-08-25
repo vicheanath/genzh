@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
-
+import { Badge } from '@/components/Badge'
 import {
+  BellOffIcon,
   CompassIcon,
   FlameIcon,
   GamepadIcon,
@@ -17,6 +18,7 @@ import {
   ZapIcon,
 } from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
+import { useUnreadOverviewQuery } from '@/features/api'
 import type { Community, Room, UserRoom } from '@/lib/api'
 import { cx } from '@/lib/cx'
 
@@ -75,6 +77,9 @@ export function ChannelSidebar({
   loading: boolean
   onOpenSettings: () => void
 }) {
+  const unreadOverview = useUnreadOverviewQuery()
+  const unreadMap = new Map((unreadOverview.data ?? []).map((u) => [u.room_id, u]))
+
   return (
     <div className={styles.sidebar}>
       <header className={styles.sidebarHeader}>
@@ -119,7 +124,7 @@ export function ChannelSidebar({
 
             {directRooms.length > 0 && (
               <NavGroup heading="Direct Messages">
-                <DirectMessageList rooms={directRooms} />
+                <DirectMessageList rooms={directRooms} unreadMap={unreadMap} />
               </NavGroup>
             )}
           </>
@@ -143,12 +148,26 @@ export function ChannelSidebar({
                 <NavGroup key={heading} heading={heading}>
                   {inGroup.map((room) => {
                     const Icon = ROOM_ICONS[room.room_type] ?? HashIcon
+                    const unreadEntry = unreadMap.get(room.id)
+                    const count = unreadEntry?.unread ?? 0
+                    const muted = unreadEntry?.muted ?? false
+
                     return (
                       <NavItem
                         key={room.id}
                         to={`/c/${communityId}/r/${room.id}`}
                         label={room.name}
                         leading={<Icon size={17} className={styles.navIcon} />}
+                        trailing={
+                          count > 0 || muted ? (
+                            <div className={styles.navTrailing}>
+                              {muted && <BellOffIcon size={12} className={styles.navMutedIcon} />}
+                              {count > 0 && (
+                                <Badge tone={muted ? 'neutral' : 'accent'}>{count}</Badge>
+                              )}
+                            </div>
+                          ) : undefined
+                        }
                       />
                     )
                   })}

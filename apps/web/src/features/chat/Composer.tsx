@@ -7,9 +7,9 @@ import {
 } from 'react'
 
 import { Button } from '@/components/Button'
-import { AtSignIcon, LockIcon, SendIcon, SmileIcon, UsersIcon } from '@/components/Icons'
+import { AtSignIcon, LockIcon, ReplyIcon, SendIcon, SmileIcon, UsersIcon, XIcon } from '@/components/Icons'
 import { Tooltip } from '@/components/Tooltip'
-import type { RoomWithPermissions } from '@/lib/api'
+import type { RoomWithPermissions, Uuid } from '@/lib/api'
 import { cx } from '@/lib/cx'
 
 import { contentProblem, MAX_LENGTH } from './limits'
@@ -30,14 +30,22 @@ const COUNTER_FROM = 200
 /** Tall enough for a paragraph, short enough to leave the transcript readable. */
 const MAX_HEIGHT = 180
 
+export interface ReplyTarget {
+  id: Uuid
+  authorName: string
+  content: string
+}
+
 export interface ComposerProps {
   room: RoomWithPermissions
-  onSend: (content: string) => Promise<void>
+  onSend: (content: string, replyToId?: Uuid) => Promise<void>
   onTyping?: () => void
   isAnonymous?: boolean
   onTogglePersona?: (isAnon: boolean) => void
   anonAlias?: string
   publicName: string
+  replyingTo?: ReplyTarget | null
+  onCancelReply?: () => void
 }
 
 /**
@@ -60,6 +68,8 @@ export function Composer({
   onTogglePersona,
   anonAlias,
   publicName,
+  replyingTo,
+  onCancelReply,
 }: ComposerProps) {
   const [draft, setDraft] = useState('')
   // Tracked separately from the value: the mention being completed is decided
@@ -136,12 +146,14 @@ export function Composer({
   function submit() {
     const content = draft.trim()
     if (!content || contentProblem(content)) return
+    const replyId = replyingTo?.id
     setDraft('')
     setCaret(0)
     // Otherwise the next message's first `@` — at the same offset as the one
     // Escape closed — would open dismissed.
     setDismissedAt(null)
-    void onSend(content)
+    onCancelReply?.()
+    void onSend(content, replyId)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -171,6 +183,12 @@ export function Composer({
         setDismissedAt(query.start)
         return
       }
+    }
+
+    if (event.key === 'Escape' && replyingTo && !open) {
+      event.preventDefault()
+      onCancelReply?.()
+      return
     }
 
     // Enter sends, Shift+Enter breaks the line — the convention everywhere, and
@@ -211,11 +229,33 @@ export function Composer({
           </div>
         )}
 
+        {replyingTo && (
+          <div className={styles.replyBanner}>
+            <div className={styles.replyInfo}>
+              <ReplyIcon size={14} className={styles.replyIcon} />
+              <span className={styles.replyText}>
+                Replying to <strong>{replyingTo.authorName}</strong>
+                <span className={styles.replySnippet}>: {replyingTo.content}</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              className={styles.replyCancel}
+              onClick={onCancelReply}
+              aria-label="Cancel reply"
+              title="Cancel reply (Esc)"
+            >
+              <XIcon size={14} />
+            </button>
+          </div>
+        )}
+
         <div
           className={cx(
             styles.field,
             isAnonymous && styles.fieldAnonymous,
             problem && styles.fieldProblem,
+            replyingTo && styles.fieldWithReply,
           )}
         >
           <textarea
