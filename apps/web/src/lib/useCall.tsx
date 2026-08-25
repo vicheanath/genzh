@@ -226,6 +226,27 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, [activeRoomId, notify])
 
+  // Play ring sound for incoming and outgoing ringing states
+  const isRinging = Boolean(incoming || outgoing)
+  useEffect(() => {
+    if (!isRinging) return
+
+    const audio = new Audio('/call-sound.mp3')
+    audio.loop = true
+
+    const playPromise = audio.play()
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // Browser autoplay policy: ignore if audio playback cannot start unprompted
+      })
+    }
+
+    return () => {
+      audio.pause()
+      audio.currentTime = 0
+    }
+  }, [isRinging])
+
   const value = useMemo<CallValue>(
     () => ({ incoming, outgoing, start, accept, decline, cancel }),
     [incoming, outgoing, start, accept, decline, cancel],

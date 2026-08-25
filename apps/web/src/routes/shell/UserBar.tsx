@@ -1,11 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
-import { Button } from '@/components/Button'
 import {
   CheckIcon,
   HeadphonesIcon,
-  MenuIcon,
   MicIcon,
   MicOffIcon,
   MonitorIcon,
@@ -17,9 +15,11 @@ import {
   SunIcon,
 } from '@/components/Icons'
 import { Menu, MenuItem, MenuSeparator } from '@/components/Menu'
+import { Tooltip } from '@/components/Tooltip'
 import { useIsStaff } from '@/features/api'
 import { NotificationBell } from '@/features/notifications'
 import { useAuth } from '@/lib/auth'
+import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { useTheme, type Theme } from '@/lib/useTheme'
@@ -33,11 +33,10 @@ const THEME_ITEMS: ReadonlyArray<{ value: Theme; label: string; icon: typeof Sun
 ]
 
 /**
- * You, at the foot of the sidebar: who you are and the controls you reach for
- * mid-call.
+ * Discord-style User Bar at the bottom of the channel sidebar.
  *
- * The desktop half of a pair — on a phone the same information is the `/me`
- * screen, because a strip inside a drawer is not somewhere anyone looks.
+ * Left: Interactive user profile button that opens the account & status menu.
+ * Right: Quick controls trio: Mute, Deafen, and User Settings (with tooltips).
  */
 export function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { user, logout } = useAuth()
@@ -52,73 +51,33 @@ export function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
 
   return (
     <div className={styles.userBar}>
-      {/* Your own dot is genuinely online whenever this renders — the shell
-          holds the socket, so a signed-in session is a connected one. */}
-      <Avatar
-        name={user?.profile.display_name ?? '?'}
-        src={user?.profile.avatar_url}
-        color={user?.profile.accent_color}
-        size="sm"
-        presence="online"
-      />
-      <div className={styles.identity}>
-        <div className={styles.identityName}>{user?.profile.display_name}</div>
-        <div className={styles.identityHandle}>@{user?.handle}</div>
-      </div>
-
-      {/* Desktop only. The sidebar is a drawer on a phone, and a popover
-          inside it would be wider than the drawer holding it — mobile reaches
-          notifications through the bottom bar instead. */}
-      {!isMobile && <NotificationBell />}
-
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        onClick={toggleMute}
-        aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-        style={isMuted ? { color: 'var(--color-danger)' } : undefined}
-      >
-        {isMuted ? <MicOffIcon size={16} /> : <MicIcon size={16} />}
-      </Button>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        onClick={toggleDeafen}
-        aria-label={isDeafened ? 'Undeafen audio' : 'Deafen audio'}
-        style={isDeafened ? { color: 'var(--color-danger)' } : undefined}
-      >
-        {isDeafened ? <PhoneOffIcon size={16} /> : <HeadphonesIcon size={16} />}
-      </Button>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        onClick={onOpenSettings}
-        aria-label="User settings"
-      >
-        <SettingsIcon size={16} />
-      </Button>
-
       <Menu
         side="top"
-        align="end"
+        align="start"
         trigger={
-          <Button variant="ghost" size="sm" iconOnly aria-label="Account menu">
-            <MenuIcon size={16} />
-          </Button>
+          <button
+            type="button"
+            className={styles.userCardBtn}
+            aria-label="Account and status menu"
+          >
+            <Avatar
+              name={user?.profile.display_name ?? '?'}
+              src={user?.profile.avatar_url}
+              color={user?.profile.accent_color}
+              size="sm"
+              presence="online"
+            />
+            <div className={styles.identity}>
+              <span className={styles.identityName}>{user?.profile.display_name}</span>
+              <span className={styles.identityHandle}>@{user?.handle}</span>
+            </div>
+          </button>
         }
       >
         <MenuItem icon={<SettingsIcon size={15} />} onClick={onOpenSettings}>
           User settings
         </MenuItem>
 
-        {/* Only staff are shown the way in. The route redirects and every
-            endpoint behind it refuses regardless, so this is discoverability
-            rather than a gate. */}
         {isStaff && (
           <MenuItem icon={<ShieldIcon size={15} />} onClick={() => void navigate('/admin')}>
             Platform console
@@ -144,6 +103,45 @@ export function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
           Sign out
         </MenuItem>
       </Menu>
+
+      <div className={styles.userBarActions}>
+        {!isMobile && <NotificationBell />}
+
+        <Tooltip content={isMuted ? 'Unmute' : 'Mute'}>
+          <button
+            type="button"
+            className={cx(styles.userActionBtn, isMuted && styles.userActionBtnActive)}
+            onClick={toggleMute}
+            aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+            aria-pressed={!isMuted}
+          >
+            {isMuted ? <MicOffIcon size={16} /> : <MicIcon size={16} />}
+          </button>
+        </Tooltip>
+
+        <Tooltip content={isDeafened ? 'Undeafen' : 'Deafen'}>
+          <button
+            type="button"
+            className={cx(styles.userActionBtn, isDeafened && styles.userActionBtnActive)}
+            onClick={toggleDeafen}
+            aria-label={isDeafened ? 'Undeafen audio' : 'Deafen audio'}
+            aria-pressed={!isDeafened}
+          >
+            {isDeafened ? <PhoneOffIcon size={16} /> : <HeadphonesIcon size={16} />}
+          </button>
+        </Tooltip>
+
+        <Tooltip content="User Settings">
+          <button
+            type="button"
+            className={styles.userActionBtn}
+            onClick={onOpenSettings}
+            aria-label="User Settings"
+          >
+            <SettingsIcon size={16} />
+          </button>
+        </Tooltip>
+      </div>
     </div>
   )
 }

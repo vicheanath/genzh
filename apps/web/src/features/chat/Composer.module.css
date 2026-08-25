@@ -1,19 +1,21 @@
 /*
  * The message box.
  *
- * One card rather than a field with a banner floating above it: the text, the
- * tools, and the persona chips are all part of the same message, so they share
- * a border and light up together on focus.
+ * One unified card: the textarea, the tools (emoji, mention), persona switches,
+ * and the send button share a rich container with default background, border,
+ * smooth hover, and focused accent ring.
  */
 
 .composer {
   flex-shrink: 0;
-  padding: var(--space-2) var(--space-5) var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-3);
   background: var(--color-bg);
 }
 
 /* Positioning context for the mention picker, which hangs off the top edge. */
-.anchor { position: relative; }
+.anchor {
+  position: relative;
+}
 
 .suggestions {
   position: absolute;
@@ -34,7 +36,7 @@
   border-bottom: none;
   border-top-left-radius: var(--radius-xl);
   border-top-right-radius: var(--radius-xl);
-  background: var(--color-surface-muted);
+  background: var(--color-sunken);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
@@ -88,20 +90,35 @@
   color: var(--color-text);
 }
 
+/* ── the main composer field container ─────────────────────────────────── */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.field:hover {
+  border-color: var(--color-border-strong);
+}
+
+.field:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-ring);
+}
+
 .fieldWithReply {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
 
-/* The ring goes on the wrapper, not the textarea, so the whole field lights up
-   as one control. */
-.field:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-ring);
-}
-
-/* Posting under a mask is the one state worth seeing before you hit Enter, so
-   the field itself carries it rather than a label somewhere else. */
 .fieldAnonymous {
   border-color: var(--color-border-strong);
   background: var(--color-surface-muted);
@@ -111,40 +128,56 @@
   width: 100%;
   min-width: 0;
   max-height: 11.25rem;
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2);
-  border: none;
+  padding: 0.75rem 0.85rem 0.35rem;
+  border: none !important;
   background: transparent;
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--text-sm);
   line-height: 1.5;
   resize: none;
-  outline: none;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.input::placeholder { color: var(--color-text-subtle); }
+.input:focus,
+.input:focus-visible,
+.input:active {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.input::placeholder {
+  color: var(--color-text-subtle);
+}
 
 /* ── the action bar ─────────────────────────────────────────────────────── */
 
 .bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
-  padding: 0 var(--space-1) var(--space-1) var(--space-1);
+  padding: 0.2rem 0.5rem 0.45rem;
 }
 
 .tools {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 0.2rem;
   min-width: 0;
 }
 
 .tool {
   display: grid;
   place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.85rem;
+  height: 1.85rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-md);
@@ -164,8 +197,6 @@
 
 /* ── persona ────────────────────────────────────────────────────────────── */
 
-/* A segmented control, not two independent chips: the two are one choice, and
-   the shared shell says so without a label spelling it out. */
 .persona {
   display: flex;
   align-items: center;
@@ -174,7 +205,8 @@
   margin-left: var(--space-1);
   padding: 2px;
   border-radius: var(--radius-full);
-  background: var(--color-surface-muted);
+  background: var(--color-sunken);
+  border: 1px solid var(--color-border);
 }
 
 .chip {
@@ -202,7 +234,9 @@
   text-overflow: ellipsis;
 }
 
-.chip:hover { color: var(--color-text); }
+.chip:hover {
+  color: var(--color-text);
+}
 
 .chipActive {
   background: var(--color-surface);
@@ -225,13 +259,16 @@
   color: var(--color-text-subtle);
 }
 
-.counterFull { color: var(--color-danger); font-weight: 700; }
+.counterFull {
+  color: var(--color-danger);
+  font-weight: 700;
+}
 
 /* ── hint ───────────────────────────────────────────────────────────────── */
 
 .hint {
   margin-top: var(--space-1);
-  padding-left: var(--space-3);
+  padding-left: var(--space-2);
   font-size: var(--text-2xs);
   color: var(--color-text-subtle);
 }
@@ -246,28 +283,31 @@
 }
 
 @media (max-width: 900px) {
-  .composer { padding-inline: var(--space-3); }
-  /* The keyboard hints are about keys a phone does not have. */
-  .hint { display: none; }
-  .chip { max-width: 6rem; }
+  .composer {
+    padding-inline: var(--space-3);
+  }
+  .hint {
+    display: none;
+  }
+  .chip {
+    max-width: 6rem;
+  }
 }
 
 /* ── a draft that would be refused ──────────────────────────────────────── */
 
-/* The field itself carries it, so the warning below reads as being *about*
-   this message rather than as a notice that happens to sit under it. */
 .fieldProblem {
   border-color: var(--color-warning);
 }
 
 .fieldProblem:focus-within {
   border-color: var(--color-warning);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-warning) 28%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-warning) 28%, transparent);
 }
 
 .problem {
   margin-top: var(--space-1);
-  padding-left: var(--space-3);
+  padding-left: var(--space-2);
   font-size: var(--text-2xs);
   color: var(--color-warning);
 }

@@ -8,10 +8,10 @@ import { useVoice } from '@/lib/media'
 import styles from './shell.module.css'
 
 /**
- * "You are still in a call", above the user bar.
+ * Discord-style Voice Connection Bar displayed directly above the user controls.
  *
- * Renders nothing when there is no call, so a caller can mount it
- * unconditionally in any frame that has room for it.
+ * Shows RTC connection state ("Voice Connected"), room name with direct navigation,
+ * and quick in-call controls (Mute / Disconnect).
  */
 export function VoiceConnectionBar() {
   const voice = useVoice()
@@ -32,20 +32,20 @@ export function VoiceConnectionBar() {
         type="button"
         className={styles.voiceBarInfo}
         onClick={() => void navigate(targetUrl)}
-        title="Go to the room you are connected to"
+        title="Jump to active voice room"
       >
-        <span className={styles.voiceBarStatus}>
+        <div className={styles.voiceBarStatus}>
           <span
             className={cx(styles.voiceDot, isConnected && styles.voiceDotConnected)}
             aria-hidden
           />
           <span className={styles.voiceStatusText}>
-            {isConnected ? 'Voice connected' : isConnecting ? 'Connecting…' : 'Disconnected'}
+            {isConnected ? 'Voice Connected' : isConnecting ? 'RTC Connecting…' : 'Disconnected'}
           </span>
-        </span>
-        <span className={styles.voiceRoomName}>
-          {voice.activeRoomName || 'Voice channel'}
-        </span>
+        </div>
+        <div className={styles.voiceRoomName}>
+          {voice.activeRoomName ? `${voice.activeRoomName} / Voice` : 'Voice Channel'}
+        </div>
       </button>
 
       <div className={styles.voiceBarActions}>
@@ -57,7 +57,7 @@ export function VoiceConnectionBar() {
             aria-label={voice.muted ? 'Unmute microphone' : 'Mute microphone'}
             aria-pressed={!voice.muted}
           >
-            {voice.muted ? <MicOffIcon size={15} /> : <MicIcon size={15} />}
+            {voice.muted ? <MicOffIcon size={16} /> : <MicIcon size={16} />}
           </button>
         </Tooltip>
 
@@ -68,7 +68,7 @@ export function VoiceConnectionBar() {
             onClick={() => void voice.leave()}
             aria-label="Disconnect from voice"
           >
-            <PhoneOffIcon size={15} />
+            <PhoneOffIcon size={16} />
           </button>
         </Tooltip>
       </div>

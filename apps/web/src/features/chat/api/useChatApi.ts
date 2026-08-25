@@ -86,18 +86,41 @@ export function useReactionMutation() {
     onSuccess: (reactions, { messageId }) => {
       // The call answers with the message's whole new tally, so the sender sees
       // it land without waiting for the broadcast to come back around.
-      queryClient.setQueriesData<{ pages: MessagePage[] }>(
+      queryClient.setQueriesData<unknown>(
         { queryKey: chatKeys.all },
-        (cached) =>
-          cached && {
-            ...cached,
-            pages: cached.pages.map((page) => ({
-              ...page,
-              messages: page.messages.map((message) =>
-                message.id === messageId ? { ...message, reactions } : message,
-              ),
-            })),
-          },
+        (cached: unknown) => {
+          if (!cached) return cached
+
+          // Transcript pages: InfiniteData<MessagePage>
+          if (
+            typeof cached === 'object' &&
+            cached !== null &&
+            'pages' in cached &&
+            Array.isArray((cached as { pages: unknown[] }).pages)
+          ) {
+            const transcript = cached as { pages: MessagePage[] }
+            return {
+              ...transcript,
+              pages: transcript.pages.map((page) => ({
+                ...page,
+                messages: (page.messages ?? []).map((message) =>
+                  message.id === messageId ? { ...message, reactions } : message,
+                ),
+              })),
+            }
+          }
+
+          // Array of messages (e.g. pinned messages)
+          if (Array.isArray(cached)) {
+            return cached.map((item) =>
+              item && typeof item === 'object' && 'id' in item && item.id === messageId
+                ? { ...item, reactions }
+                : item,
+            )
+          }
+
+          return cached
+        },
       )
     },
   })

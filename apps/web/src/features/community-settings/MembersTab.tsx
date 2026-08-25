@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
@@ -35,7 +35,6 @@ export function MembersTab({
   abilities: CommunityAbilities
 }) {
   const confirm = useConfirm()
-
   const toast = useToast()
   const { isOnline } = usePresence()
 
@@ -44,18 +43,18 @@ export function MembersTab({
   const removeRoleMutation = useRemoveRoleMutation(community.id)
   const leaveCommunity = useLeaveCommunityMutation()
 
-  // Only fetched when there is something to do with it. Someone who cannot
-  // assign roles has no reason to pay for the list.
-  const roles = useCommunityRoles(abilities.roles ? community.id : null)
+  // Only fetched when permitted.
+  const roles = useCommunityRoles(community.id)
 
   const [search, setSearch] = useState('')
-  const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? [])
+  const [roleFilter, setRoleFilter] = useState<string>('all')
+
+  const memberList = members.data ?? []
+  const userIds = useMemo(() => memberList.map((m) => m.user_id), [memberList])
+  const lookup = useProfiles(userIds)
 
   async function assignRole(userId: Uuid, roleId: Uuid) {
     try {
-      // The mutation invalidates the member list, so the row redraws with the
-      // new role: the assignment used to succeed silently and leave the row
-      // exactly as it was, which is indistinguishable from having done nothing.
       await assignRoleMutation.mutateAsync({ userId, roleId })
       toast.success('Role assigned')
     } catch (cause) {
@@ -99,45 +98,108 @@ export function MembersTab({
   }
 
   const needle = search.trim().toLowerCase()
-  const filtered = (members.data ?? []).filter((member) => {
-    if (!needle) return true
-    const profile = lookup(member.user_id)
-    return (
-      profile?.display_name.toLowerCase().includes(needle) ||
-      profile?.handle.toLowerCase().includes(needle) ||
-      member.nickname?.toLowerCase().includes(needle)
-    )
-  })
+  const filtered = useMemo(() => {
+    return memberList.filter((member) => {
+      // Role filter check
+      if (roleFilter !== 'all') {
+        const hasRole = member.roles.some((r) => r.id === roleFilter)
+        if (!hasRole) return false
+      }
 
-  const total = members.data?.length ?? 0
+      if (!needle) return true
+      const profile = lookup(member.user_id)
+      return (
+        profile?.display_name.toLowerCase().includes(needle) ||
+        profile?.handle.toLowerCase().includes(needle) ||
+        member.nickname?.toLowerCase().includes(needle)
+      )
+    })
+  }, [memberList, roleFilter, needle, lookup])
+
+  const total = memberList.length
+  const onlineCount = useMemo(() => {
+    return memberList.filter((m) => isOnline(m.user_id)).length
+  }, [memberList, isOnline])
+  const roleCount = roles.data?.length ?? 0
+
+  const roleFilterOptions = useMemo(() => {
+    const opts = [{ value: 'all', label: 'All Roles' }]
+    for (const r of roles.data ?? []) {
+      if (!r.is_default) {
+        opts.push({ value: r.id, label: `@${r.name}` })
+      }
+    }
+    return opts
+  }, [roles.data])
 
   return (
     <>
       <h2 className={styles.panelTitle}>Members</h2>
       <p className={styles.panelDescription}>
-        {total === 0 ? 'Nobody here yet.' : `${total} ${total === 1 ? 'person' : 'people'} in this server.`}
+        Manage server members and their assigned roles and permissions.
       </p>
 
-      {total > 0 && (
-        <Input
-          label="Search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Name or handle"
-        />
-      )}
+      {/* Member Statistics */}
+      <div className={styles.statsRow}>
+        <div className={styles.statCard}>
+          <span className={styles.statValue}>{total}</span>
+          <span className={styles.statLabel}>Total Members</span>
+        </div>
+        <div className={styles.statCard}>
+          <span className={styles.statValue} style={{ color: 'var(--color-mint)' }}>
+            {onlineCount}
+          </span>
+          <span className={styles.statLabel}>Online Now</span>
+        </div>
+        <div className={styles.statCard}>
+          <span className={styles.statValue}>{roleCount}</span>
+          <span className={styles.statLabel}>Configured Roles</span>
+        </div>
+      </div>
+
+      {/* Search and Filters */}
+      <div className={styles.filterRow}>
+        <div style={{ flex: 1 }}>
+          <Input
+            label="Search members"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by name, handle, or nickname..."
+          />
+        </div>
+
+        {roleFilterOptions.length > 1 && (
+          <div style={{ minWidth: '11rem' }}>
+            <Select
+              aria-label="Filter by role"
+              value={roleFilter}
+              onValueChange={setRoleFilter}
+              options={roleFilterOptions}
+            />
+          </div>
+        )}
+      </div>
+
+      <h3 className={styles.listHeading}>
+        {filtered.length} {filtered.length === 1 ? 'member' : 'members'}
+      </h3>
 
       {members.error && <Callout tone="danger">{errorText(members.error, 'Could not load members')}</Callout>}
       {members.isLoading && <PanelSkeleton rows={4} />}
 
       <PanelList
         empty={!members.isLoading && filtered.length === 0}
-        emptyText={needle ? `Nobody matches “${search.trim()}”.` : 'No members yet.'}
+        emptyText={
+          needle || roleFilter !== 'all'
+            ? 'No members match the selected filters.'
+            : 'No members in this server yet.'
+        }
       >
         {filtered.map((member) => {
           const profile = lookup(member.user_id)
           const name = member.nickname ?? profile?.display_name ?? 'Loading…'
           const isOwner = member.user_id === community.owner_id
+          const availableRoles = assignable(member.user_id)
 
           return (
             <li key={member.user_id} className={styles.listItem}>
@@ -145,23 +207,28 @@ export function MembersTab({
                 name={name}
                 src={profile?.avatar_url}
                 color={profile?.accent_color}
-                size="sm"
+                size="md"
                 presence={isOnline(member.user_id) ? 'online' : undefined}
               />
 
-              <span className={styles.listText}>
-                <span className={styles.listLabel}>
-                  {name}
+              <div className={styles.listText}>
+                <div className={styles.listLabel}>
+                  <span>{name}</span>
                   {isOwner && (
-                    <CrownIcon size={13} className={styles.ownerMark} aria-label="Owner" />
+                    <span title="Server Owner">
+                      <CrownIcon size={14} className={styles.ownerMark} aria-label="Server Owner" />
+                    </span>
                   )}
-                </span>
-                <span className={styles.listHint}>
+                </div>
+                <div className={styles.listHint}>
                   @{profile?.handle ?? member.user_id.slice(0, 8)}
-                </span>
+                  {member.nickname && profile?.display_name && (
+                    <span> · {profile.display_name}</span>
+                  )}
+                </div>
 
                 {member.roles.length > 0 && (
-                  <span className={styles.roleChips}>
+                  <div className={styles.roleChips}>
                     {member.roles.map((role) => (
                       <span
                         key={role.id}
@@ -177,28 +244,26 @@ export function MembersTab({
                               void removeRole(member.user_id, role.id, role.name, name)
                             }
                             aria-label={`Remove ${role.name} from ${name}`}
+                            title={`Remove ${role.name}`}
                           >
                             <XIcon size={11} />
                           </button>
                         )}
                       </span>
                     ))}
-                  </span>
+                  </div>
                 )}
-              </span>
+              </div>
 
-              <span className={styles.listActions}>
-                {/* Only what they do not already hold, and never `@everyone`,
-                    which is not assignable — offering either would be a menu
-                    item whose only outcome is a no-op or an error. */}
-                {abilities.roles && assignable(member.user_id).length > 0 && (
+              <div className={styles.listActions}>
+                {abilities.roles && availableRoles.length > 0 && (
                   <Select
-                    aria-label={`Assign a role to ${name}`}
+                    aria-label={`Assign role to ${name}`}
                     value=""
                     onValueChange={(roleId) => roleId && void assignRole(member.user_id, roleId)}
                     options={[
-                      { value: '', label: 'Assign role…' },
-                      ...assignable(member.user_id).map((role) => ({
+                      { value: '', label: '+ Add Role' },
+                      ...availableRoles.map((role) => ({
                         value: role.id,
                         label: role.name,
                       })),
@@ -206,8 +271,6 @@ export function MembersTab({
                   />
                 )}
 
-                {/* The owner cannot be removed — the server would be left
-                    without one, and the API refuses it anyway. */}
                 {abilities.members && !isOwner && (
                   <Button
                     size="sm"
@@ -215,11 +278,12 @@ export function MembersTab({
                     iconOnly
                     onClick={() => void remove(member.user_id, name)}
                     aria-label={`Remove ${name}`}
+                    title="Remove from server"
                   >
                     <UserMinusIcon size={16} />
                   </Button>
                 )}
-              </span>
+              </div>
             </li>
           )
         })}

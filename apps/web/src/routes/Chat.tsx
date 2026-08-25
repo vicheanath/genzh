@@ -842,7 +842,13 @@ function MessageRow({
                   title="Add a reaction"
                   verb="React with"
                   align="end"
-                  onPick={(emoji) => onToggleReaction(message.id, emoji, false)}
+                  onPick={(emoji) =>
+                    onToggleReaction(
+                      message.id,
+                      emoji,
+                      message.reactions.some((r) => r.reaction === emoji && r.me),
+                    )
+                  }
                   trigger={
                     <button type="button" className={styles.addReaction} aria-label="Add a reaction">
                       <SmileIcon size={14} />
@@ -881,7 +887,13 @@ function MessageRow({
                 title="Add a reaction"
                 verb="React with"
                 align="end"
-                onPick={(emoji) => onToggleReaction(message.id, emoji, false)}
+                onPick={(emoji) =>
+                  onToggleReaction(
+                    message.id,
+                    emoji,
+                    message.reactions.some((r) => r.reaction === emoji && r.me),
+                  )
+                }
                 trigger={
                   <button type="button" className={styles.actionButton} aria-label="Add a reaction">
                     <SmileIcon size={15} />
