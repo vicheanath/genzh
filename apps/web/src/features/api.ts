@@ -130,3 +130,19 @@ export type {
   PollData,
   PollOption,
 } from './experiences/api'
+
+// Composite screen views (the BFF layer)
+export {
+  bffApi,
+  bffKeys,
+  useMeOverviewQuery,
+  useCommunityOverviewQuery,
+  useRoomSessionQuery,
+  useSocialOverviewQuery,
+} from './bff/api'
+export type {
+  MeOverviewResponse,
+  CommunityOverviewResponse,
+  RoomSessionResponse,
+  SocialOverviewResponse,
+} from './bff/api'

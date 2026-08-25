@@ -22,6 +22,10 @@ import type {
   RoomType,
   RoomVisibility,
   RoomWithPermissions,
+  MeOverviewResponse,
+  CommunityOverviewResponse,
+  RoomSessionResponse,
+  SocialOverviewResponse,
   TokenPair,
   NotificationPage,
   Timestamp,
@@ -66,6 +70,14 @@ export const auth = {
 
   updateProfile: (token: string, input: UpdateProfileInput) =>
     request<Profile>('/api/v1/me', { method: 'PATCH', body: input, token }),
+
+  /**
+   * The whole app shell in one call: the account, its communities and rooms,
+   * friends, presence, unread counts and the auth config.
+   *
+   * The server composes it, so booting costs one round-trip instead of seven.
+   */
+  overview: (token: string) => request<MeOverviewResponse>('/api/v1/me/overview', { token }),
 }
 
 // ── users ─────────────────────────────────────────────────────────────────
@@ -161,6 +173,13 @@ export const communities = {
       body: { role_id: roleId },
       token,
     }),
+
+  /**
+   * The community screen in one call: the community and the caller's
+   * permissions, its rooms, its members with their roles, and the role table.
+   */
+  overview: (token: string, id: Uuid) =>
+    request<CommunityOverviewResponse>(`/api/v1/communities/${id}/overview`, { token }),
 }
 
 // ── rooms ─────────────────────────────────────────────────────────────────
@@ -292,6 +311,19 @@ export const rooms = {
       method: 'POST',
       token,
     }),
+
+  /**
+   * Open a session in the room: metadata, participants, the first page of
+   * history, and — for a voice/video/stage room — the SFU token.
+   *
+   * A POST, not a read: entering a media room mints a credential. Use `get`
+   * when you only want to look at the room.
+   */
+  session: (token: string, id: Uuid) =>
+    request<RoomSessionResponse>(`/api/v1/rooms/${id}/session`, {
+      method: 'POST',
+      token,
+    }),
 }
 
 // ── messages ──────────────────────────────────────────────────────────────
@@ -408,6 +440,15 @@ export const presence = {
     const query = ids && ids.length > 0 ? `?ids=${ids.join(',')}` : ''
     return request<{ online: Uuid[] }>(`/api/v1/presence${query}`, { token })
   },
+}
+
+export const social = {
+  /**
+   * The social screen in one call: friends, which of them are online, requests
+   * in both directions, and the blocklist — five endpoints' worth.
+   */
+  overview: (token: string) =>
+    request<SocialOverviewResponse>('/api/v1/me/social', { token }),
 }
 
 export const blocks = {

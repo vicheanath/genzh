@@ -305,3 +305,46 @@ export interface AuthConfig {
     discord: boolean
   }
 }
+
+// ── Composite view payloads ───────────────────────────────────────────────
+//
+// One response per *screen* rather than per table. The server composes these
+// (its BFF layer) so a screen costs one round-trip instead of a waterfall.
+
+/** `GET /api/v1/me/overview` — everything the app shell renders at boot. */
+export interface MeOverviewResponse {
+  me: CurrentUser
+  communities: Community[]
+  rooms: UserRoom[]
+  friends: Uuid[]
+  online_friends: Uuid[]
+  pending_requests_count: number
+  unread_notifications: number
+  config: AuthConfig
+}
+
+/** `GET /api/v1/communities/{id}/overview` — a whole community screen. */
+export interface CommunityOverviewResponse {
+  community: CommunityWithPermissions
+  rooms: Room[]
+  members: CommunityMember[]
+  roles: RoleWithPermissions[]
+}
+
+/** `POST /api/v1/rooms/{id}/session` — an opened room, media token included. */
+export interface RoomSessionResponse {
+  room: RoomWithPermissions
+  participants: RoomParticipant[]
+  recent_messages: MessagePage
+  media_session: MediaJoinResponse | null
+}
+
+/** `GET /api/v1/me/social` — the caller's social graph in one payload. */
+export interface SocialOverviewResponse {
+  friends: Uuid[]
+  online_friends: Uuid[]
+  incoming_requests: Friendship[]
+  outgoing_requests: Friendship[]
+  blocked: Uuid[]
+}
+

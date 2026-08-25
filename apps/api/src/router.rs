@@ -34,6 +34,9 @@ pub fn build(state: AppState) -> Router {
             "/me",
             get(routes::auth::me).patch(routes::auth::update_profile),
         )
+        // Composite views: one round-trip for a whole screen (see routes::bff).
+        .route("/me/overview", get(routes::bff::me_overview))
+        .route("/me/social", get(routes::bff::social_overview))
         // ---- communities ----
         .route(
             "/communities",
@@ -44,6 +47,10 @@ pub fn build(state: AppState) -> Router {
             get(routes::communities::get)
                 .patch(routes::communities::update)
                 .delete(routes::communities::delete),
+        )
+        .route(
+            "/communities/{id}/overview",
+            get(routes::bff::community_overview),
         )
         // ---- members ----
         .route(
@@ -94,6 +101,7 @@ pub fn build(state: AppState) -> Router {
                 .patch(routes::rooms::update)
                 .delete(routes::rooms::delete),
         )
+        .route("/rooms/{id}/session", post(routes::bff::open_room_session))
         .route("/rooms/{id}/join", post(routes::rooms::join))
         .route("/rooms/{id}/leave", post(routes::rooms::leave))
         .route("/rooms/{id}/persona", patch(routes::rooms::set_persona))

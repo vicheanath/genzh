@@ -325,6 +325,34 @@ Requesting somebody who already requested you accepts, rather than creating a
 second row. A block is refused with the same error as any other rejection, so a
 block is not observable from the outside, and blocking ends any friendship.
 
+## Composite views
+
+Four endpoints answer a whole *screen* instead of a single table. The server
+composes them from the same services the granular endpoints use — this is the
+backend-for-frontend layer — so a client renders a screen from one response
+instead of walking a waterfall of six.
+
+| Method | Path                            | Returns                                                                         |
+| ------ | ------------------------------- | ------------------------------------------------------------------------------- |
+| `GET`  | `/me/overview`                  | account, communities, rooms and DMs, friends, online friends, pending request count, unread notifications, auth config |
+| `GET`  | `/me/social`                    | friends, online friends, incoming and outgoing requests, blocklist               |
+| `GET`  | `/communities/{id}/overview`    | community with `your_permissions`, its rooms, its members with roles, its roles  |
+| `POST` | `/rooms/{id}/session`           | room with `your_permissions` and persona, participants, the last 50 messages, and a media token for a voice/video/stage room |
+
+Every one of these enforces exactly the same authorization as the granular
+endpoint it stands in for; composing changes the number of requests, never who
+may see what.
+
+`/rooms/{id}/session` is a `POST` because it is not a safe read: opening a media
+room mints an SFU credential, the same one `POST /rooms/{id}/media/join` issues.
+Use `GET /rooms/{id}` when you only want to look at a room.
+
+There is no composite discovery endpoint — `GET /rooms/discovery` is already
+one, and it takes `category` and `limit` besides.
+
+Nothing forces a client to use these. The granular endpoints remain the
+contract; the composite ones are an optimization a client opts into.
+
 ## Health
 
 `GET /health` — liveness. Touches nothing, so a slow database cannot get the

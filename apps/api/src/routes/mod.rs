@@ -6,6 +6,7 @@
 //! without a socket.
 
 pub mod auth;
+pub mod bff;
 pub mod communities;
 pub mod health;
 pub mod media;

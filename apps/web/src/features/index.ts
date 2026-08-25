@@ -1,5 +1,6 @@
 export * from './api'
 export * as authFeature from './auth'
+export * as bffFeature from './bff'
 export * as chatFeature from './chat'
 export * as communitiesFeature from './communities'
 export * as communitySettingsFeature from './community-settings'
