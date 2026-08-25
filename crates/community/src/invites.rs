@@ -269,7 +269,23 @@ impl InviteService {
         .map_err(RepositoryError::from)?
         .ok_or_else(|| ServiceError::not_found("invite"))
     }
+
+    /// Prune invites that expired, were revoked, or reached max uses over 7 days ago.
+    pub async fn prune_expired(&self) -> ServiceResult<u64> {
+        let result = sqlx::query(
+            "DELETE FROM community_invites
+              WHERE (expires_at IS NOT NULL AND expires_at < now() - INTERVAL '7 days')
+                 OR (revoked_at IS NOT NULL AND revoked_at < now() - INTERVAL '7 days')
+                 OR (max_uses IS NOT NULL AND uses >= max_uses AND created_at < now() - INTERVAL '7 days')",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        Ok(result.rows_affected())
+    }
 }
+
 
 /// A short, unambiguous code.
 fn generate_code() -> String {

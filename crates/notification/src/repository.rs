@@ -172,4 +172,26 @@ impl NotificationRepository {
         .await?;
         Ok(result.rows_affected())
     }
+
+    /// Prune read notifications older than `read_age` and unread notifications older than `unread_age`.
+    pub async fn prune_stale(
+        &self,
+        read_age: std::time::Duration,
+        unread_age: std::time::Duration,
+    ) -> RepositoryResult<u64> {
+        let read_secs = read_age.as_secs() as i64;
+        let unread_secs = unread_age.as_secs() as i64;
+
+        let result = sqlx::query(
+            "DELETE FROM notifications
+              WHERE (read_at IS NOT NULL AND read_at < now() - make_interval(secs => $1))
+                 OR (read_at IS NULL AND created_at < now() - make_interval(secs => $2))",
+        )
+        .bind(read_secs)
+        .bind(unread_secs)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
 }

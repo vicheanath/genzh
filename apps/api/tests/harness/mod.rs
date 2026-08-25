@@ -273,6 +273,14 @@ fn api_config(database_url: String) -> api::Config {
         cron: api::config::CronConfig {
             session_prune_interval: Duration::from_secs(3600),
             store_sweep_interval: Duration::from_secs(3600),
+            ephemeral_room_expire_interval: Duration::from_secs(3600),
+            invite_prune_interval: Duration::from_secs(3600),
+            notification_prune_interval: Duration::from_secs(3600),
+            notification_read_retention: Duration::from_secs(30 * 86400),
+            notification_unread_retention: Duration::from_secs(90 * 86400),
+            security_prune_interval: Duration::from_secs(3600),
+            support_cleanup_interval: Duration::from_secs(3600),
+            support_stale_after: Duration::from_secs(14 * 86400),
         },
     }
 }

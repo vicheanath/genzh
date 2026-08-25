@@ -353,4 +353,23 @@ impl SupportService {
         .map_err(RepositoryError::from)?
         .ok_or_else(|| ServiceError::not_found("ticket"))
     }
+
+    /// Auto-close tickets that have been marked resolved without further activity for `stale_after`.
+    pub async fn auto_close_stale(&self, stale_after: std::time::Duration) -> ServiceResult<u64> {
+        let secs = stale_after.as_secs() as i64;
+        let result = sqlx::query(
+            "UPDATE support_tickets
+              SET status = 'closed',
+                  updated_at = now()
+              WHERE status = 'resolved'
+                AND updated_at < now() - make_interval(secs => $1)",
+        )
+        .bind(secs)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        Ok(result.rows_affected())
+    }
 }
+

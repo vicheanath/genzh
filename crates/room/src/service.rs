@@ -441,4 +441,10 @@ impl RoomService {
             .prune_stale_participants(stale_after, empty_grace)
             .await?)
     }
+
+    /// End rooms whose duration has elapsed (`expires_at <= now()`).
+    pub async fn expire_ephemeral_rooms(&self) -> ServiceResult<u64> {
+        Ok(self.rooms.expire_ephemeral_rooms().await?)
+    }
 }
+

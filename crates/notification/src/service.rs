@@ -85,4 +85,14 @@ impl NotificationService {
     pub async fn mark_all_read(&self, user_id: UserId) -> ServiceResult<u64> {
         Ok(self.repository.mark_all_read(user_id).await?)
     }
+
+    /// Prune read notifications older than `read_age` and unread notifications older than `unread_age`.
+    pub async fn prune_stale(
+        &self,
+        read_age: std::time::Duration,
+        unread_age: std::time::Duration,
+    ) -> ServiceResult<u64> {
+        Ok(self.repository.prune_stale(read_age, unread_age).await?)
+    }
 }
+

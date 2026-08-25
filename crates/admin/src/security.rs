@@ -234,4 +234,18 @@ impl SecurityService {
 
         Ok(())
     }
+
+    /// Prune IP bans that have reached their expiration time.
+    pub async fn prune_expired_bans(&self) -> ServiceResult<u64> {
+        let result = sqlx::query(
+            "DELETE FROM ip_bans
+              WHERE expires_at IS NOT NULL AND expires_at <= now()",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        Ok(result.rows_affected())
+    }
 }
+

@@ -9,7 +9,12 @@
 //! [`register`] is the one place that knows the full list, and it is called
 //! from `main` after the state is built and before the scheduler starts.
 
+pub mod ephemeral;
+pub mod invites;
+pub mod notifications;
+pub mod security;
 pub mod sessions;
+pub mod support;
 pub mod sweep;
 
 use std::sync::Arc;
@@ -17,7 +22,12 @@ use std::sync::Arc;
 use genzh_cron::{CronJob, CronSchedulerError, CronSchedulerResult};
 use genzh_infrastructure::Sweep;
 
+pub use ephemeral::ExpireEphemeralRooms;
+pub use invites::PruneExpiredInvites;
+pub use notifications::PruneOldNotifications;
+pub use security::PruneExpiredBans;
 pub use sessions::PruneExpiredSessions;
+pub use support::AutoCloseStaleTickets;
 pub use sweep::SweepVolatileStores;
 
 use crate::state::AppState;
@@ -32,7 +42,15 @@ use crate::state::AppState;
 /// Sorted, because that is how [`CronScheduler::job_names`] returns them.
 ///
 /// [`CronScheduler::job_names`]: genzh_cron::CronScheduler::job_names
-pub const EXPECTED_JOBS: &[&str] = &["auth.prune_expired_sessions", "stores.sweep_volatile"];
+pub const EXPECTED_JOBS: &[&str] = &[
+    "auth.prune_expired_sessions",
+    "invites.prune_expired",
+    "notifications.prune_old",
+    "rooms.expire_ephemeral",
+    "security.prune_expired_bans",
+    "stores.sweep_volatile",
+    "support.auto_close_stale",
+];
 
 /// Register every background job against the state's scheduler.
 ///
@@ -59,6 +77,29 @@ pub async fn register(state: &AppState) -> CronSchedulerResult<()> {
         Arc::new(SweepVolatileStores::new(
             stores,
             timings.store_sweep_interval,
+        )),
+        Arc::new(ExpireEphemeralRooms::new(
+            state.rooms.clone(),
+            timings.ephemeral_room_expire_interval,
+        )),
+        Arc::new(PruneExpiredInvites::new(
+            state.invites.clone(),
+            timings.invite_prune_interval,
+        )),
+        Arc::new(PruneOldNotifications::new(
+            state.notifications.clone(),
+            timings.notification_prune_interval,
+            timings.notification_read_retention,
+            timings.notification_unread_retention,
+        )),
+        Arc::new(PruneExpiredBans::new(
+            state.security.clone(),
+            timings.security_prune_interval,
+        )),
+        Arc::new(AutoCloseStaleTickets::new(
+            state.support.clone(),
+            timings.support_cleanup_interval,
+            timings.support_stale_after,
         )),
     ];
 
@@ -95,3 +136,4 @@ mod tests {
         assert_eq!(sorted.as_slice(), EXPECTED_JOBS);
     }
 }
+

@@ -717,26 +717,45 @@ impl RoomRepository {
         .execute(&mut *tx)
         .await?;
 
-        let ended = sqlx::query(
-            "UPDATE rooms
-                SET status = 'ended',
-                    ended_at = now()
-              WHERE status = 'active'
-                AND current_participants = 0
-                AND emptied_at IS NOT NULL
-                AND emptied_at < now() - make_interval(secs => $1)",
-        )
-        .bind(as_seconds(empty_grace))
-        .execute(&mut *tx)
-        .await?;
-
+        // Inactive rooms are no longer ended automatically so that chat history and room state are preserved.
         tx.commit().await?;
 
         Ok(PruneOutcome {
             participants_removed: departed.rows_affected(),
-            rooms_ended: ended.rows_affected(),
+            rooms_ended: 0,
         })
     }
+
+    /// End rooms whose duration has elapsed (`expires_at <= now()`).
+    pub async fn expire_ephemeral_rooms(&self) -> RepositoryResult<u64> {
+        let mut tx = self.pool.begin().await?;
+
+        let expired = sqlx::query(
+            "UPDATE rooms
+                SET status = 'ended',
+                    ended_at = COALESCE(ended_at, now())
+              WHERE status = 'active'
+                AND expires_at IS NOT NULL
+                AND expires_at <= now()",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        if expired.rows_affected() > 0 {
+            sqlx::query(
+                "DELETE FROM room_participants
+                  WHERE room_id IN (
+                    SELECT id FROM rooms WHERE status = 'ended'
+                  )",
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(expired.rows_affected())
+    }
+
 
     // ── Overrides ─────────────────────────────────────────────────────────────
 

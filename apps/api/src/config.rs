@@ -98,13 +98,28 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct CronConfig {
     /// How often expired refresh sessions are deleted.
-    ///
-    /// Nothing depends on this being prompt — an expired session is already
-    /// refused on presentation, so this only reclaims rows.
     pub session_prune_interval: Duration,
 
     /// How often the in-process rate-limit and flood maps are swept.
     pub store_sweep_interval: Duration,
+
+    /// How often expired ephemeral rooms are ended.
+    pub ephemeral_room_expire_interval: Duration,
+
+    /// How often expired community invites are deleted.
+    pub invite_prune_interval: Duration,
+
+    /// How often old notifications are pruned.
+    pub notification_prune_interval: Duration,
+    pub notification_read_retention: Duration,
+    pub notification_unread_retention: Duration,
+
+    /// How often expired IP bans are pruned.
+    pub security_prune_interval: Duration,
+
+    /// How often stale resolved tickets are auto-closed.
+    pub support_cleanup_interval: Duration,
+    pub support_stale_after: Duration,
 }
 
 impl CronConfig {
@@ -112,9 +127,23 @@ impl CronConfig {
         Ok(Self {
             session_prune_interval: seconds("CRON_SESSION_PRUNE_SECONDS", 3600)?,
             store_sweep_interval: seconds("CRON_STORE_SWEEP_SECONDS", 300)?,
+
+            ephemeral_room_expire_interval: seconds("CRON_EPHEMERAL_ROOM_EXPIRE_SECONDS", 30)?,
+
+            invite_prune_interval: seconds("CRON_INVITE_PRUNE_SECONDS", 3600)?,
+
+            notification_prune_interval: seconds("CRON_NOTIFICATION_PRUNE_SECONDS", 86400)?,
+            notification_read_retention: seconds("CRON_NOTIFICATION_READ_RETENTION_SECONDS", 30 * 86400)?,
+            notification_unread_retention: seconds("CRON_NOTIFICATION_UNREAD_RETENTION_SECONDS", 90 * 86400)?,
+
+            security_prune_interval: seconds("CRON_SECURITY_PRUNE_SECONDS", 300)?,
+
+            support_cleanup_interval: seconds("CRON_SUPPORT_CLEANUP_SECONDS", 21600)?,
+            support_stale_after: seconds("CRON_SUPPORT_STALE_SECONDS", 14 * 86400)?,
         })
     }
 }
+
 
 /// A configuration value that is missing or unusable.
 #[derive(Debug, thiserror::Error)]
