@@ -23,20 +23,26 @@ import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { Switch } from '@/components/Switch'
-import { ApiError, type CurrentUser, type Uuid } from '@/lib/api'
-import { authApi } from '@/features/auth'
-import { friendsApi, friendsApi as blocksApi } from '@/features/friends'
-import { roomsApi } from '@/features/rooms'
-import { settingsApi as usersApi } from '@/features/settings'
+import type { CurrentUser, Uuid } from '@/lib/api'
+import {
+  useBlockUserMutation,
+  useOpenDMMutation,
+  usePublicProfileQuery,
+  useRemoveFriendMutation,
+  useRespondFriendRequestMutation,
+  useSendFriendRequestMutation,
+  useUnblockUserMutation,
+  useUpdateProfileMutation,
+} from '@/features/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
-import { useAsync } from '@/lib/useAsync'
+import { errorText } from '@/lib/errors'
 import { useCall } from '@/lib/useCall'
 import { usePresence } from '@/lib/usePresence'
 import { useSocialGraph } from '@/lib/useSocialGraph'
 import { ACCENT_COLORS as ACCENTS } from '@/lib/palette'
-import { primeProfile } from '@/lib/useProfiles'
+import { usePrimeProfile } from '@/lib/useProfiles'
 
 import styles from './ProfileDialog.module.css'
 
@@ -104,19 +110,30 @@ function PublicProfileCard({
   userId: Uuid
   onClose: () => void
 }) {
-  const { getToken } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
   const { isOnline } = usePresence()
-  const { relationship, refresh: refreshGraph } = useSocialGraph()
+  const { relationship } = useSocialGraph()
   const call = useCall()
 
-  const publicProfile = useAsync(
-    async () => usersApi.get(await getToken(), userId),
-    [getToken, userId],
-  )
+  const publicProfile = usePublicProfileQuery(userId)
 
-  const [busy, setBusy] = useState(false)
+  const openDM = useOpenDMMutation()
+  const sendRequest = useSendFriendRequestMutation()
+  const respondRequest = useRespondFriendRequestMutation()
+  const removeFriend = useRemoveFriendMutation()
+  const blockUser = useBlockUserMutation()
+  const unblockUser = useUnblockUserMutation()
+
+  // Every button on this card is one of the mutations above, and they all
+  // invalidate the friend graph, so `relationship` re-answers on its own.
+  const busy =
+    openDM.isPending ||
+    sendRequest.isPending ||
+    respondRequest.isPending ||
+    removeFriend.isPending ||
+    blockUser.isPending ||
+    unblockUser.isPending
 
   // What this card offers depends on what you already are to each other. It
   // used to offer "Add Friend" unconditionally — to people you had been friends
@@ -128,33 +145,27 @@ function PublicProfileCard({
   /** Open the conversation, creating it if this is the first word between you. */
   async function openDMRoom(): Promise<Uuid | null> {
     try {
-      const dmRoom = await roomsApi.openDM(await getToken(), userId)
+      const dmRoom = await openDM.mutateAsync(userId)
       return dmRoom.id
     } catch (cause) {
       toast.error(
         'Could not open the conversation',
-        cause instanceof ApiError ? cause.message : undefined,
+        errorText(cause),
       )
       return null
     }
   }
 
   async function handleOpenDM() {
-    setBusy(true)
     const roomId = await openDMRoom()
-    setBusy(false)
     if (!roomId) return
     onClose()
     void navigate(`/rooms/${roomId}`)
   }
 
   async function handleCall(video: boolean) {
-    setBusy(true)
     const roomId = await openDMRoom()
-    if (!roomId) {
-      setBusy(false)
-      return
-    }
+    if (!roomId) return
 
     try {
       // Navigate first: the call's controls live in the conversation, so
@@ -164,76 +175,54 @@ function PublicProfileCard({
       void navigate(`/rooms/${roomId}`)
       await call.start(roomId, userId, name, video)
     } catch (cause) {
-      toast.error('Could not start the call', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setBusy(false)
+      toast.error('Could not start the call', errorText(cause))
     }
   }
 
   async function handleSendFriendRequest() {
-    setBusy(true)
     try {
-      await friendsApi.request(await getToken(), userId)
+      await sendRequest.mutateAsync(userId)
       toast.success('Friend request sent!')
-      refreshGraph()
     } catch (cause) {
-      toast.error('Could not send request', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setBusy(false)
+      toast.error('Could not send request', errorText(cause))
     }
   }
 
   async function handleRespond(accept: boolean) {
-    setBusy(true)
     try {
-      await friendsApi.respond(await getToken(), userId, accept)
+      await respondRequest.mutateAsync({ requesterId: userId, accept })
       toast.success(accept ? `You and ${name} are now friends!` : 'Friend request declined')
-      refreshGraph()
     } catch (cause) {
-      toast.error('Could not answer the request', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setBusy(false)
+      toast.error('Could not answer the request', errorText(cause))
     }
   }
 
   /** Withdrawing a request and unfriending are the same call: the row goes. */
   async function handleRemoveFriend(message: string) {
-    setBusy(true)
     try {
-      await friendsApi.remove(await getToken(), userId)
+      await removeFriend.mutateAsync(userId)
       toast.success(message)
-      refreshGraph()
     } catch (cause) {
-      toast.error('Could not update the friendship', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setBusy(false)
+      toast.error('Could not update the friendship', errorText(cause))
     }
   }
 
   async function handleBlockUser() {
-    setBusy(true)
     try {
-      await blocksApi.block(await getToken(), userId)
+      await blockUser.mutateAsync(userId)
       toast.success('User blocked', 'They can no longer message or interact with you.')
-      refreshGraph()
       onClose()
     } catch (cause) {
-      toast.error('Could not block user', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setBusy(false)
+      toast.error('Could not block user', errorText(cause))
     }
   }
 
   async function handleUnblockUser() {
-    setBusy(true)
     try {
-      await blocksApi.unblock(await getToken(), userId)
+      await unblockUser.mutateAsync(userId)
       toast.success('User unblocked')
-      refreshGraph()
     } catch (cause) {
-      toast.error('Could not unblock user', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setBusy(false)
+      toast.error('Could not unblock user', errorText(cause))
     }
   }
 
@@ -244,7 +233,7 @@ function PublicProfileCard({
       .catch(() => toast.error('Could not copy User ID'))
   }
 
-  if (publicProfile.loading) {
+  if (publicProfile.isLoading) {
     return (
       <div style={{ padding: '1rem' }}>
         <Skeleton height="70px" />
@@ -418,8 +407,10 @@ function PublicProfileCard({
 }
 
 function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }) {
-  const { getToken, applyProfile } = useAuth()
+  const { applyProfile } = useAuth()
   const toast = useToast()
+  const updateProfile = useUpdateProfileMutation()
+  const primeProfile = usePrimeProfile()
 
   const [tab, setTab] = useState<'public' | 'anonymous'>('public')
 
@@ -448,7 +439,7 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
     setError(null)
     setSaving(true)
     try {
-      const profile = await authApi.updateProfile(await getToken(), {
+      const profile = await updateProfile.mutateAsync({
         display_name: displayName.trim(),
         bio: bio.trim(),
         avatar_url: avatarUrl.trim(),
@@ -466,7 +457,7 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
       toast.success('Public profile saved')
       onDone()
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not save your profile')
+      setError(errorText(cause, 'Could not save your profile'))
     } finally {
       setSaving(false)
     }

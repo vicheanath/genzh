@@ -7,12 +7,11 @@ import { CopyIcon, TrashIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
+import { useDeleteCommunityMutation, useUpdateCommunityMutation } from '@/features/api'
+import { errorText } from '@/lib/errors'
 import {
-  ApiError,
   type CommunityWithPermissions,
 } from '@/lib/api'
-import { communitiesApi } from '@/features/communities'
-import { useAuth } from '@/lib/auth'
 
 import type { CommunityAbilities } from './tabs'
 import styles from './communitySettings.module.css'
@@ -38,7 +37,8 @@ export function OverviewTab({
   onDeleted?: () => void
 }) {
   const confirm = useConfirm()
-  const { getToken } = useAuth()
+  const updateCommunity = useUpdateCommunityMutation(community.id)
+  const deleteCommunity = useDeleteCommunityMutation()
   const toast = useToast()
 
   const [name, setName] = useState(community.name)
@@ -54,7 +54,7 @@ export function OverviewTab({
     setError(null)
     setSaving(true)
     try {
-      await communitiesApi.update(await getToken(), community.id, {
+      await updateCommunity.mutateAsync({
         name: name.trim() || undefined,
         description: description.trim() || undefined,
         icon_url: iconUrl.trim() || undefined,
@@ -62,7 +62,7 @@ export function OverviewTab({
       toast.success('Server settings saved')
       onUpdated?.()
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not save server settings')
+      setError(errorText(cause, 'Could not save server settings'))
     } finally {
       setSaving(false)
     }
@@ -77,11 +77,11 @@ export function OverviewTab({
     })
     if (!ok) return
     try {
-      await communitiesApi.delete(await getToken(), community.id)
+      await deleteCommunity.mutateAsync(community.id)
       toast.success('Server deleted')
       onDeleted?.()
     } catch (cause) {
-      toast.error('Could not delete server', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not delete server', errorText(cause))
     }
   }
 

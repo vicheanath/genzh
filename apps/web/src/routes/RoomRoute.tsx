@@ -25,12 +25,16 @@ import {
 import { LoadingPanel } from '@/components/Spinner'
 import { Tooltip } from '@/components/Tooltip'
 import { type RoomType, type RoomWithPermissions, type Uuid } from '@/lib/api'
-import { roomsApi } from '@/features/rooms'
+import {
+  useJoinedRoomQuery,
+  useRoomParticipantsQuery,
+  useSetPersonaMutation,
+} from '@/features/api'
+import { errorText } from '@/lib/errors'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useVoiceRoom } from '@/lib/media'
 import { useAppStore } from '@/lib/store'
-import { useAsync } from '@/lib/useAsync'
 import { useCall } from '@/lib/useCall'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { usePresence } from '@/lib/usePresence'
@@ -64,23 +68,16 @@ const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
 
 export function RoomRoute() {
   const { roomId = '' } = useParams<{ roomId: string }>()
-  const { getToken } = useAuth()
 
-  const room = useAsync(
-    async () => {
-      const token = await getToken()
-      // Automatically join room to establish presence and anonymous identity
-      const joined = await roomsApi.join(token, roomId)
-      return joined
-    },
-    [getToken, roomId],
-  )
+  // Joining is how presence and the anonymous identity are established, so it
+  // is the read that opens the screen rather than an effect beside it.
+  const room = useJoinedRoomQuery(roomId)
 
-  if (room.loading) return <LoadingPanel />
+  if (room.isLoading) return <LoadingPanel />
   if (room.error) {
     return (
       <div className={styles.errorPage}>
-        <Callout tone="danger">{room.error}</Callout>
+        <Callout tone="danger">{errorText(room.error, 'Could not open this room')}</Callout>
       </div>
     )
   }
@@ -90,7 +87,7 @@ export function RoomRoute() {
 }
 
 function RoomView({ room }: { room: RoomWithPermissions }) {
-  const { user, getToken } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const { isOnline } = usePresence()
@@ -108,10 +105,7 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const Icon = ROOM_ICONS[room.room_type] ?? HashIcon
 
   // Resolve DM partner
-  const participants = useAsync(
-    async () => roomsApi.participants(await getToken(), room.id),
-    [getToken, room.id],
-  )
+  const participants = useRoomParticipantsQuery(room.id)
 
   const otherParticipant = participants.data?.find((p) => p.user_id !== user?.id)
   const partnerId = otherParticipant?.user_id ?? (room.owner_id !== user?.id ? room.owner_id : null)
@@ -120,6 +114,7 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
 
   // A direct conversation is its own call: the media session belongs to this
   // room, so calling somebody is joining the room you are already reading.
+  const setPersona = useSetPersonaMutation(room.id)
   const voice = useVoiceRoom(room.id)
   const call = useCall()
   const inCall = isDM && voice.isCurrent && voice.status !== 'idle'
@@ -147,7 +142,7 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   async function handleTogglePersona(nextIsAnon: boolean) {
     setIsAnonymous(nextIsAnon)
     try {
-      await roomsApi.setPersona(await getToken(), room.id, nextIsAnon)
+      await setPersona.mutateAsync(nextIsAnon)
     } catch {
       // transient failures keep local choice
     }

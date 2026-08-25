@@ -55,3 +55,4 @@ export interface GameState {
   status: 'waiting' | 'in_progress' | 'finished'
   boardState?: Record<string, unknown>
 }
+export type { Uuid }

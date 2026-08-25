@@ -1,19 +1,41 @@
 /**
- * Unified Backend-for-Frontend (BFF) Feature API layer for Web.
- * Exports modular, typed APIs and hooks organized per feature domain.
+ * The web app's server-state surface, one module per feature domain.
+ *
+ * Everything here is a React Query hook. There is no imperative API client
+ * exported alongside them on purpose: a screen that calls an endpoint directly
+ * owns a copy of the response that nothing can invalidate, and the two copies
+ * disagree the moment anything writes. Fetching goes through a query, writing
+ * goes through a mutation, and live updates arrive over the socket bridge —
+ * all three meeting in the same cache.
+ *
+ * None of these take an access token. The API client resolves it through the
+ * provider `AuthProvider` registers, so a session is ambient rather than an
+ * argument threaded through every call site.
  */
 
-// Auth Feature API
-export { authApi, authKeys, useAuthConfig, useCurrentUser, useLoginMutation, useRegisterMutation, useLogoutMutation, useUpdateProfileMutation } from './auth/api'
-export type { AuthConfig, AuthResponse, AuthSessionState, CurrentUser, LoginInput, RegisterInput, UpdateProfileInput } from './auth/api'
+// Auth
+export { authKeys, useAuthConfig, useCurrentUser, useLoginMutation, useRegisterMutation, useUpdateProfileMutation } from './auth/api'
+export type { AuthConfig, AuthResponse, CurrentUser, LoginInput, RegisterInput, UpdateProfileInput } from './auth/api'
 
-// Chat Feature API
-export { chatApi, chatKeys, useRoomMessagesInfinite, useSendMessageMutation, useEditMessageMutation, useDeleteMessageMutation, useReactionMutation } from './chat/api'
-export type { EditMessagePayload, Message, MessageHistoryParams, MessagePage, ReactionPayload, ReactionSummary, SendMessagePayload } from './chat/api'
-
-// Communities Feature API
+// Chat
 export {
-  communitiesApi,
+  chatKeys,
+  mergeMessages,
+  applyMessageCreated,
+  applyMessageUpdated,
+  applyMessageDeleted,
+  applyReactionsUpdated,
+  applyLocalReaction,
+  useRoomMessagesInfinite,
+  useSendMessageMutation,
+  useEditMessageMutation,
+  useDeleteMessageMutation,
+  useReactionMutation,
+} from './chat/api'
+export type { EditMessagePayload, Message, MessagePage, ReactionPayload, ReactionSummary, SendMessagePayload } from './chat/api'
+
+// Communities
+export {
   communityKeys,
   useCommunitiesList,
   useCommunityDetail,
@@ -27,6 +49,7 @@ export {
   useCreateRoleMutation,
   useUpdateRoleMutation,
   useAssignRoleMutation,
+  useRemoveRoleMutation,
 } from './communities/api'
 export type {
   Community,
@@ -41,9 +64,8 @@ export type {
   UpdateRoleInput,
 } from './communities/api'
 
-// Rooms & Discovery Feature API
+// Rooms & discovery
 export {
-  roomsApi,
   roomKeys,
   useDiscoveryRooms,
   useTrendingRooms,
@@ -51,15 +73,23 @@ export {
   useCommunityRoomsQuery,
   useMyRoomsQuery,
   useRoomDetailQuery,
+  useJoinedRoomQuery,
   useRoomParticipantsQuery,
   useCreateStandaloneRoomMutation,
   useCreateCommunityRoomMutation,
   useJoinRoomMutation,
   useLeaveRoomMutation,
   useUpdateRoomMutation,
+  useDeleteRoomMutation,
+  useSetPersonaMutation,
   useOpenDMMutation,
+  useRandomRoomMutation,
+  useJoinMediaSessionMutation,
+  useRingMutation,
+  useEndCallMutation,
 } from './rooms/api'
 export type {
+  CallEndReason,
   CreateCommunityRoomInput,
   CreateStandaloneRoomInput,
   DiscoveryResponse,
@@ -76,47 +106,39 @@ export type {
   UserRoom,
 } from './rooms/api'
 
-// Friends & Social Feature API
+// Friends, blocks & presence
 export {
-  friendsApi,
   friendKeys,
+  socialGraphKeys,
   useFriendsList,
   usePendingFriendRequests,
   useSentFriendRequests,
   useBlockedUsers,
+  useOnlineUsers,
   useSendFriendRequestMutation,
   useRespondFriendRequestMutation,
   useRemoveFriendMutation,
   useBlockUserMutation,
   useUnblockUserMutation,
 } from './friends/api'
-export type { FriendSummary, Friendship, FriendshipStatus, PublicProfile } from './friends/api'
+export type { Friendship, FriendshipStatus, PublicProfile } from './friends/api'
 
-// Notifications Feature API
+// Notifications
 export {
-  notificationsApi,
   notificationKeys,
+  applyNotificationCreated,
   useNotificationsInfinite,
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
 } from './notifications/api'
 export type { AppNotification, NotificationKind, NotificationPage, NotificationQueryParams } from './notifications/api'
 
-// Settings Feature API
-export {
-  settingsApi,
-  settingsKeys,
-  useUserSettingsQuery,
-  usePublicProfileQuery,
-  useBlockedUsersSettingsQuery,
-  useUpdateProfileSettingsMutation,
-  useUnblockSettingMutation,
-} from './settings/api'
+// Profiles
+export { settingsKeys, usePublicProfileQuery, usePublicProfiles } from './settings/api'
 export type { UserPreferences } from './settings/api'
 
-// Experiences Feature API
+// Experiences
 export {
-  experiencesApi,
   useVotePollMutation,
   useCreatePollMutation,
   useSubmitConfessionMutation,
@@ -133,7 +155,6 @@ export type {
 
 // Composite screen views (the BFF layer)
 export {
-  bffApi,
   bffKeys,
   useMeOverviewQuery,
   useCommunityOverviewQuery,

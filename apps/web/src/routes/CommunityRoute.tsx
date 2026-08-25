@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
@@ -29,22 +29,21 @@ import { Select } from '@/components/Select'
 import { LoadingPanel, Spinner } from '@/components/Spinner'
 import { Tooltip } from '@/components/Tooltip'
 import { useToast } from '@/components/Toast'
+import type { RoomType } from '@/lib/api'
 import {
-  ApiError,
-  type RoomType,
-} from '@/lib/api'
-import { communitiesApi } from '@/features/communities'
-import { roomsApi } from '@/features/rooms'
-import { useAuth } from '@/lib/auth'
+  useCommunityDetail,
+  useCommunityMembers,
+  useCommunityRoomsQuery,
+  useCreateCommunityRoomMutation,
+} from '@/features/api'
 import { cx } from '@/lib/cx'
-import { useAsync } from '@/lib/useAsync'
+import { errorText } from '@/lib/errors'
 import { can } from '@/lib/permissions'
 
 import { CommunitySettingsModal } from '@/features/community-settings'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { hueFor } from '@/lib/palette'
 
-import type { ShellContext } from './AppShell'
 import { MemberList } from './MemberList'
 
 import styles from './CommunityRoute.module.css'
@@ -79,8 +78,6 @@ const ROOM_ICONS: Record<string, typeof HashIcon> = {
 
 export function CommunityRoute() {
   const { communityId = '' } = useParams<{ communityId: string }>()
-  const { getToken } = useAuth()
-  const { reloadRooms, reloadCommunities } = useOutletContext<ShellContext>()
   const navigate = useNavigate()
   const toast = useToast()
 
@@ -95,25 +92,15 @@ export function CommunityRoute() {
   )
   const [showCreateRoom, setShowCreateRoom] = useState(false)
 
-  const community = useAsync(
-    async () => communitiesApi.get(await getToken(), communityId),
-    [getToken, communityId],
-  )
-
-  const rooms = useAsync(
-    async () => roomsApi.list(await getToken(), communityId),
-    [getToken, communityId],
-  )
-
-  const members = useAsync(
-    async () => communitiesApi.members(await getToken(), communityId),
-    [getToken, communityId],
-  )
+  const community = useCommunityDetail(communityId)
+  const rooms = useCommunityRoomsQuery(communityId)
+  const members = useCommunityMembers(communityId)
+  const createRoomMutation = useCreateCommunityRoomMutation(communityId)
 
   const [name, setName] = useState('')
   const [roomType, setRoomType] = useState<RoomType>('text')
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const busy = createRoomMutation.isPending
 
   const canManageRooms = can(community.data?.your_permissions ?? [], 'manage_room')
   const canManageCommunity =
@@ -126,22 +113,17 @@ export function CommunityRoute() {
   async function createRoom(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    setBusy(true)
     try {
-      const room = await roomsApi.create(await getToken(), communityId, {
+      const room = await createRoomMutation.mutateAsync({
         name: name.trim().toLowerCase().replace(/\s+/g, '-'),
         room_type: roomType,
       })
       setName('')
       setShowCreateRoom(false)
-      reloadRooms()
-      rooms.reload()
       toast.success(`#${room.name} created!`)
       void navigate(`/c/${communityId}/r/${room.id}`)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not create the room')
-    } finally {
-      setBusy(false)
+      setError(errorText(cause, 'Could not create the room'))
     }
   }
 
@@ -153,12 +135,12 @@ export function CommunityRoute() {
       .catch(() => toast.error('Could not copy invite code'))
   }
 
-  if (community.loading) return <LoadingPanel />
+  if (community.isLoading) return <LoadingPanel />
   if (community.error) {
     return (
       <div className={styles.scroll}>
         <div className={styles.page}>
-          <Callout tone="danger">{community.error}</Callout>
+          <Callout tone="danger">{errorText(community.error, 'Could not load this server')}</Callout>
         </div>
       </div>
     )
@@ -463,15 +445,10 @@ export function CommunityRoute() {
           open={settingsOpen}
           community={community.data}
           onClose={() => setSettingsOpen(false)}
-          onCommunityUpdated={() => {
-            community.reload()
-            reloadCommunities()
-            reloadRooms()
-          }}
-          onCommunityDeleted={() => {
-            reloadCommunities()
-            void navigate('/')
-          }}
+          // The settings tabs mutate through the same cache this screen reads,
+          // so the rename is on the page before the dialog has finished closing.
+          onCommunityUpdated={() => {}}
+          onCommunityDeleted={() => void navigate('/')}
         />
       )}
     </div>

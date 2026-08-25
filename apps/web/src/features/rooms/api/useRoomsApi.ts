@@ -1,8 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { roomsApi } from './roomsApi'
+
+import { media, rooms } from '@/lib/api'
+import { useIsSignedIn } from '@/lib/auth'
+
 import type {
+  CallEndReason,
   CreateCommunityRoomInput,
   CreateStandaloneRoomInput,
+  RoomType,
   UpdateRoomInput,
   Uuid,
 } from './types'
@@ -18,92 +23,116 @@ export const roomKeys = {
   participants: (id: Uuid) => [...roomKeys.detail(id), 'participants'] as const,
 }
 
-export function useDiscoveryRooms(token: string | null, category?: string, limit?: number) {
+/**
+ * A key for a query that cannot run yet.
+ *
+ * `enabled: false` keeps the fetch from firing, but the key is still read, and
+ * two disabled queries sharing one key would collide the moment either became
+ * enabled. Naming the missing argument keeps them apart.
+ */
+const idle = (...parts: string[]) => [...roomKeys.all, 'idle', ...parts] as const
+
+export function useDiscoveryRooms(category?: string, limit?: number) {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: roomKeys.discovery(category),
-    queryFn: () => (token ? roomsApi.getDiscovery(token, category, limit) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => rooms.discovery(null, category, limit),
+    enabled: signedIn,
+    // Discovery is a wall of what is happening *now*; a cached one from ten
+    // minutes ago is a wall of what was.
+    staleTime: 30_000,
   })
 }
 
-export function useTrendingRooms(token: string | null) {
+export function useTrendingRooms() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: roomKeys.trending(),
-    queryFn: () => (token ? roomsApi.getTrending(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => rooms.trending(null),
+    enabled: signedIn,
   })
 }
 
-export function useLiveRooms(token: string | null) {
+export function useLiveRooms() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: roomKeys.live(),
-    queryFn: () => (token ? roomsApi.getLive(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => rooms.live(null),
+    enabled: signedIn,
   })
 }
 
-export function useCommunityRoomsQuery(token: string | null, communityId: Uuid | null) {
+export function useCommunityRoomsQuery(communityId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: communityId ? roomKeys.community(communityId) : ['rooms', 'unselected', 'community'],
-    queryFn: () => {
-      if (!token || !communityId) throw new Error('Unauthenticated or missing community')
-      return roomsApi.getCommunityRooms(token, communityId)
-    },
-    enabled: Boolean(token && communityId),
+    queryKey: communityId ? roomKeys.community(communityId) : idle('community'),
+    queryFn: () => rooms.list(null, communityId!),
+    enabled: signedIn && Boolean(communityId),
   })
 }
 
-export function useMyRoomsQuery(token: string | null) {
+export function useMyRoomsQuery() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: roomKeys.mine(),
-    queryFn: () => (token ? roomsApi.getMyRooms(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => rooms.mine(null),
+    enabled: signedIn,
   })
 }
 
-export function useRoomDetailQuery(token: string | null, roomId: Uuid | null) {
+export function useRoomDetailQuery(roomId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: roomId ? roomKeys.detail(roomId) : ['rooms', 'unselected', 'detail'],
-    queryFn: () => {
-      if (!token || !roomId) throw new Error('Unauthenticated or invalid room ID')
-      return roomsApi.getRoom(token, roomId)
-    },
-    enabled: Boolean(token && roomId),
+    queryKey: roomId ? roomKeys.detail(roomId) : idle('detail'),
+    queryFn: () => rooms.get(null, roomId!),
+    enabled: signedIn && Boolean(roomId),
   })
 }
 
-export function useRoomParticipantsQuery(token: string | null, roomId: Uuid | null) {
+/**
+ * Open a room: join it, and read back what you may do in it.
+ *
+ * Joining is what establishes presence and mints the anonymous identity, so it
+ * has to happen before the screen can render — but it is idempotent, and the
+ * room it returns is the same record `useRoomDetailQuery` holds. It shares that
+ * key for exactly that reason, and never refetches on its own: re-joining on a
+ * window focus would churn presence for somebody alt-tabbing.
+ */
+export function useJoinedRoomQuery(roomId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: roomId ? roomKeys.participants(roomId) : ['rooms', 'unselected', 'participants'],
-    queryFn: () => {
-      if (!token || !roomId) throw new Error('Unauthenticated or invalid room ID')
-      return roomsApi.getParticipants(token, roomId)
-    },
-    enabled: Boolean(token && roomId),
+    queryKey: roomId ? roomKeys.detail(roomId) : idle('joined'),
+    queryFn: () => rooms.join(null, roomId!),
+    enabled: signedIn && Boolean(roomId),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 }
 
-export function useCreateStandaloneRoomMutation(token: string | null) {
+export function useRoomParticipantsQuery(roomId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
+  return useQuery({
+    queryKey: roomId ? roomKeys.participants(roomId) : idle('participants'),
+    queryFn: () => rooms.participants(null, roomId!),
+    enabled: signedIn && Boolean(roomId),
+  })
+}
+
+export function useCreateStandaloneRoomMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: CreateStandaloneRoomInput) => {
-      if (!token) throw new Error('Unauthenticated')
-      return roomsApi.createStandalone(token, input)
-    },
+    mutationFn: (input: CreateStandaloneRoomInput) => rooms.createStandalone(null, input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: roomKeys.mine() })
       queryClient.invalidateQueries({ queryKey: roomKeys.all })
     },
   })
 }
 
-export function useCreateCommunityRoomMutation(token: string | null, communityId: Uuid | null) {
+export function useCreateCommunityRoomMutation(communityId: Uuid | null | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: CreateCommunityRoomInput) => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid community ID')
-      return roomsApi.createCommunityRoom(token, communityId, input)
-    },
+    mutationFn: (input: CreateCommunityRoomInput) => rooms.create(null, communityId!, input),
     onSuccess: () => {
       if (communityId) {
         queryClient.invalidateQueries({ queryKey: roomKeys.community(communityId) })
@@ -112,61 +141,108 @@ export function useCreateCommunityRoomMutation(token: string | null, communityId
   })
 }
 
-export function useJoinRoomMutation(token: string | null) {
+export function useUpdateRoomMutation(roomId: Uuid | null | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (roomId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return roomsApi.join(token, roomId)
-    },
-    onSuccess: (_data, roomId) => {
-      queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) })
-      queryClient.invalidateQueries({ queryKey: roomKeys.participants(roomId) })
-      queryClient.invalidateQueries({ queryKey: roomKeys.mine() })
-    },
-  })
-}
-
-export function useLeaveRoomMutation(token: string | null) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (roomId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return roomsApi.leave(token, roomId)
-    },
-    onSuccess: (_data, roomId) => {
-      queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) })
-      queryClient.invalidateQueries({ queryKey: roomKeys.participants(roomId) })
-      queryClient.invalidateQueries({ queryKey: roomKeys.mine() })
-    },
-  })
-}
-
-export function useUpdateRoomMutation(token: string | null, roomId: Uuid | null) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: UpdateRoomInput) => {
-      if (!token || !roomId) throw new Error('Unauthenticated or missing room ID')
-      return roomsApi.update(token, roomId, input)
-    },
+    mutationFn: (input: UpdateRoomInput) => rooms.update(null, roomId!, input),
     onSuccess: () => {
-      if (roomId) {
-        queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) })
-      }
+      if (roomId) queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) })
       queryClient.invalidateQueries({ queryKey: roomKeys.all })
     },
   })
 }
 
-export function useOpenDMMutation(token: string | null) {
+export function useDeleteRoomMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (targetUserId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return roomsApi.openDM(token, targetUserId)
+    mutationFn: (roomId: Uuid) => rooms.delete(null, roomId),
+    onSuccess: (_result, roomId) => {
+      queryClient.removeQueries({ queryKey: roomKeys.detail(roomId) })
+      queryClient.invalidateQueries({ queryKey: roomKeys.all })
     },
+  })
+}
+
+export function useJoinRoomMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (roomId: Uuid) => rooms.join(null, roomId),
+    onSuccess: (room, roomId) => {
+      queryClient.setQueryData(roomKeys.detail(roomId), room)
+      queryClient.invalidateQueries({ queryKey: roomKeys.participants(roomId) })
+      queryClient.invalidateQueries({ queryKey: roomKeys.mine() })
+    },
+  })
+}
+
+export function useLeaveRoomMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (roomId: Uuid) => rooms.leave(null, roomId),
+    onSuccess: (_result, roomId) => {
+      queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) })
+      queryClient.invalidateQueries({ queryKey: roomKeys.participants(roomId) })
+      queryClient.invalidateQueries({ queryKey: roomKeys.mine() })
+    },
+  })
+}
+
+/** Switch between an anonymous identity and the real profile inside a room. */
+export function useSetPersonaMutation(roomId: Uuid | null | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (isAnonymous: boolean) => rooms.setPersona(null, roomId!, isAnonymous),
+    onSuccess: () => {
+      if (!roomId) return
+      queryClient.invalidateQueries({ queryKey: roomKeys.detail(roomId) })
+      queryClient.invalidateQueries({ queryKey: roomKeys.participants(roomId) })
+    },
+  })
+}
+
+export function useOpenDMMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (targetUserId: Uuid) => rooms.openDM(null, targetUserId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: roomKeys.mine() })
     },
+  })
+}
+
+/**
+ * Pick a room at random.
+ *
+ * A mutation rather than a query: it is an action the user takes, and two
+ * presses must produce two different rooms, which is the opposite of what a
+ * cache is for.
+ */
+export function useRandomRoomMutation() {
+  return useMutation({
+    mutationFn: (input: { category?: string; roomType?: RoomType } = {}) =>
+      rooms.random(null, input.category, input.roomType),
+  })
+}
+
+/** Mint a media credential for the room's voice/video session. */
+export function useJoinMediaSessionMutation() {
+  return useMutation({
+    mutationFn: (roomId: Uuid) => media.join(null, roomId),
+  })
+}
+
+/** Ring the other person in a direct conversation. */
+export function useRingMutation() {
+  return useMutation({
+    mutationFn: ({ roomId, video }: { roomId: Uuid; video: boolean }) =>
+      media.ring(null, roomId, video),
+  })
+}
+
+/** Stop a call that has not connected — a hang-up before the answer, or a decline. */
+export function useEndCallMutation() {
+  return useMutation({
+    mutationFn: ({ roomId, reason }: { roomId: Uuid; reason: CallEndReason }) =>
+      media.endCall(null, roomId, reason),
   })
 }

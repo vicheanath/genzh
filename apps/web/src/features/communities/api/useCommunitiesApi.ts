@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { communitiesApi } from './communitiesApi'
+
+import { communities } from '@/lib/api'
+import { useIsSignedIn } from '@/lib/auth'
+
 import type {
   CreateCommunityInput,
   CreateRoleInput,
@@ -16,71 +19,58 @@ export const communityKeys = {
   roles: (id: Uuid) => [...communityKeys.detail(id), 'roles'] as const,
 }
 
-export function useCommunitiesList(token: string | null) {
+const idle = (...parts: string[]) => [...communityKeys.all, 'idle', ...parts] as const
+
+export function useCommunitiesList() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: communityKeys.list(),
-    queryFn: () => (token ? communitiesApi.list(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => communities.list(null),
+    enabled: signedIn,
   })
 }
 
-export function useCommunityDetail(token: string | null, communityId: Uuid | null) {
+export function useCommunityDetail(communityId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: communityId ? communityKeys.detail(communityId) : ['communities', 'unselected'],
-    queryFn: () => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid ID')
-      return communitiesApi.get(token, communityId)
-    },
-    enabled: Boolean(token && communityId),
+    queryKey: communityId ? communityKeys.detail(communityId) : idle('detail'),
+    queryFn: () => communities.get(null, communityId!),
+    enabled: signedIn && Boolean(communityId),
   })
 }
 
-export function useCommunityMembers(
-  token: string | null,
-  communityId: Uuid | null,
-  limit = 100,
-) {
+export function useCommunityMembers(communityId: Uuid | null | undefined, limit = 100) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: communityId ? communityKeys.members(communityId) : ['communities', 'unselected', 'members'],
-    queryFn: () => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid ID')
-      return communitiesApi.getMembers(token, communityId, limit)
-    },
-    enabled: Boolean(token && communityId),
+    queryKey: communityId ? communityKeys.members(communityId) : idle('members'),
+    queryFn: () => communities.members(null, communityId!, limit),
+    enabled: signedIn && Boolean(communityId),
   })
 }
 
-export function useCommunityRoles(token: string | null, communityId: Uuid | null) {
+export function useCommunityRoles(communityId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: communityId ? communityKeys.roles(communityId) : ['communities', 'unselected', 'roles'],
-    queryFn: () => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid ID')
-      return communitiesApi.getRoles(token, communityId)
-    },
-    enabled: Boolean(token && communityId),
+    queryKey: communityId ? communityKeys.roles(communityId) : idle('roles'),
+    queryFn: () => communities.roles(null, communityId!),
+    enabled: signedIn && Boolean(communityId),
   })
 }
 
-export function useCreateCommunityMutation(token: string | null) {
+export function useCreateCommunityMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: CreateCommunityInput) => {
-      if (!token) throw new Error('Unauthenticated')
-      return communitiesApi.create(token, input)
-    },
+    mutationFn: (input: CreateCommunityInput) => communities.create(null, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: communityKeys.list() })
     },
   })
 }
 
-export function useUpdateCommunityMutation(token: string | null, communityId: Uuid | null) {
+export function useUpdateCommunityMutation(communityId: Uuid | null | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: UpdateCommunityInput) => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid ID')
-      return communitiesApi.update(token, communityId, input)
-    },
+    mutationFn: (input: UpdateCommunityInput) => communities.update(null, communityId!, input),
     onSuccess: () => {
       if (communityId) {
         queryClient.invalidateQueries({ queryKey: communityKeys.detail(communityId) })
@@ -90,85 +80,79 @@ export function useUpdateCommunityMutation(token: string | null, communityId: Uu
   })
 }
 
-export function useDeleteCommunityMutation(token: string | null) {
+export function useDeleteCommunityMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (communityId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return communitiesApi.delete(token, communityId)
-    },
-    onSuccess: (_data, communityId) => {
+    mutationFn: (communityId: Uuid) => communities.delete(null, communityId),
+    onSuccess: (_result, communityId) => {
       queryClient.removeQueries({ queryKey: communityKeys.detail(communityId) })
       queryClient.invalidateQueries({ queryKey: communityKeys.list() })
     },
   })
 }
 
-export function useJoinCommunityMutation(token: string | null) {
+export function useJoinCommunityMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (communityId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return communitiesApi.join(token, communityId)
-    },
-    onSuccess: (_data, communityId) => {
+    mutationFn: (communityId: Uuid) => communities.join(null, communityId),
+    onSuccess: (_result, communityId) => {
       queryClient.invalidateQueries({ queryKey: communityKeys.list() })
       queryClient.invalidateQueries({ queryKey: communityKeys.members(communityId) })
     },
   })
 }
 
-export function useLeaveCommunityMutation(token: string | null) {
+export function useLeaveCommunityMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ communityId, userId }: { communityId: Uuid; userId: Uuid }) => {
-      if (!token) throw new Error('Unauthenticated')
-      return communitiesApi.leave(token, communityId, userId)
-    },
-    onSuccess: (_data, variables) => {
+    mutationFn: ({ communityId, userId }: { communityId: Uuid; userId: Uuid }) =>
+      communities.leave(null, communityId, userId),
+    onSuccess: (_result, { communityId }) => {
       queryClient.invalidateQueries({ queryKey: communityKeys.list() })
-      queryClient.invalidateQueries({ queryKey: communityKeys.members(variables.communityId) })
+      queryClient.invalidateQueries({ queryKey: communityKeys.members(communityId) })
     },
   })
 }
 
-export function useCreateRoleMutation(token: string | null, communityId: Uuid | null) {
+export function useCreateRoleMutation(communityId: Uuid | null | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: CreateRoleInput) => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid ID')
-      return communitiesApi.createRole(token, communityId, input)
+    mutationFn: (input: CreateRoleInput) => communities.createRole(null, communityId!, input),
+    onSuccess: () => {
+      if (communityId) queryClient.invalidateQueries({ queryKey: communityKeys.roles(communityId) })
     },
+  })
+}
+
+export function useUpdateRoleMutation(communityId: Uuid | null | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ roleId, input }: { roleId: Uuid; input: UpdateRoleInput }) =>
+      communities.updateRole(null, communityId!, roleId, input),
+    onSuccess: () => {
+      if (communityId) queryClient.invalidateQueries({ queryKey: communityKeys.roles(communityId) })
+    },
+  })
+}
+
+export function useAssignRoleMutation(communityId: Uuid | null | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, roleId }: { userId: Uuid; roleId: Uuid }) =>
+      communities.assignRole(null, communityId!, userId, roleId),
     onSuccess: () => {
       if (communityId) {
-        queryClient.invalidateQueries({ queryKey: communityKeys.roles(communityId) })
+        queryClient.invalidateQueries({ queryKey: communityKeys.members(communityId) })
       }
     },
   })
 }
 
-export function useUpdateRoleMutation(token: string | null, communityId: Uuid | null) {
+export function useRemoveRoleMutation(communityId: Uuid | null | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ roleId, input }: { roleId: Uuid; input: UpdateRoleInput }) => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid ID')
-      return communitiesApi.updateRole(token, communityId, roleId, input)
-    },
-    onSuccess: () => {
-      if (communityId) {
-        queryClient.invalidateQueries({ queryKey: communityKeys.roles(communityId) })
-      }
-    },
-  })
-}
-
-export function useAssignRoleMutation(token: string | null, communityId: Uuid | null) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ userId, roleId }: { userId: Uuid; roleId: Uuid }) => {
-      if (!token || !communityId) throw new Error('Unauthenticated or invalid ID')
-      return communitiesApi.assignRole(token, communityId, userId, roleId)
-    },
+    mutationFn: ({ userId, roleId }: { userId: Uuid; roleId: Uuid }) =>
+      communities.removeRole(null, communityId!, userId, roleId),
     onSuccess: () => {
       if (communityId) {
         queryClient.invalidateQueries({ queryKey: communityKeys.members(communityId) })

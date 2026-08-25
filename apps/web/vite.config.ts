@@ -14,6 +14,17 @@ export default defineConfig(({ mode }) => {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
         '@genzh/shared': fileURLToPath(new URL('../../packages/shared/src', import.meta.url)),
       },
+
+      // One instance of each of these, whatever the workspace resolution says.
+      //
+      // `@genzh/shared` is aliased to source, so its imports resolve against
+      // `packages/shared/node_modules` while the app's resolve against
+      // `apps/web/node_modules`. When those hold different versions the bundle
+      // gets two copies — and for anything built on React context that means
+      // two contexts, so a provider mounted from one copy is invisible to a
+      // hook from the other. React Query fails this way loudly ("No QueryClient
+      // set"); React itself fails it in stranger ways.
+      dedupe: ['react', 'react-dom', '@tanstack/react-query'],
     },
 
     server: {

@@ -1,4 +1,5 @@
 import type {
+  CallEndReason,
   DiscoveryResponse,
   MediaJoinResponse,
   Permission,
@@ -50,6 +51,7 @@ export interface UpdateRoomInput {
 }
 
 export type {
+  CallEndReason,
   DiscoveryResponse,
   MediaJoinResponse,
   Permission,

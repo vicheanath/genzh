@@ -8,14 +8,12 @@ import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { Switch } from '@/components/Switch'
 import { useToast } from '@/components/Toast'
+import { useCommunityRoles, useCreateRoleMutation } from '@/features/api'
 import {
-  ApiError,
   type CommunityWithPermissions,
   type Permission,
 } from '@/lib/api'
-import { communitiesApi } from '@/features/communities'
-import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+import { errorText } from '@/lib/errors'
 import { DEFAULT_ACCENT } from '@/lib/palette'
 
 import {
@@ -37,13 +35,11 @@ export function RolesTab({
   community: CommunityWithPermissions
   abilities: CommunityAbilities
 }) {
-  const { getToken } = useAuth()
+
   const toast = useToast()
 
-  const roles = useAsync(
-    async () => communitiesApi.roles(await getToken(), community.id),
-    [getToken, community.id],
-  )
+  const roles = useCommunityRoles(community.id)
+  const createRole = useCreateRoleMutation(community.id)
 
   const [name, setName] = useState('')
   const [color, setColor] = useState(DEFAULT_ROLE_COLOR)
@@ -57,17 +53,16 @@ export function RolesTab({
     if (!name.trim()) return
     setCreating(true)
     try {
-      await communitiesApi.createRole(await getToken(), community.id, {
+      await createRole.mutateAsync({
         name: name.trim(),
         color,
         permissions: [...granted],
       })
       setName('')
       setGranted(new Set(DEFAULT_NEW_ROLE_PERMISSIONS))
-      roles.reload()
       toast.success('Role created')
     } catch (cause) {
-      toast.error('Could not create role', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not create role', errorText(cause))
     } finally {
       setCreating(false)
     }
@@ -147,11 +142,11 @@ export function RolesTab({
 
       <h3 className={styles.listHeading}>Server roles</h3>
 
-      {roles.error && <Callout tone="danger">{roles.error}</Callout>}
-      {roles.loading && <PanelSkeleton rows={3} />}
+      {roles.error && <Callout tone="danger">{errorText(roles.error, 'Could not load roles')}</Callout>}
+      {roles.isLoading && <PanelSkeleton rows={3} />}
 
       <PanelList
-        empty={!roles.loading && (roles.data?.length ?? 0) === 0}
+        empty={!roles.isLoading && (roles.data?.length ?? 0) === 0}
         emptyText="No roles yet. The default role covers everyone until you add one."
       >
         {roles.data?.map((role) => (

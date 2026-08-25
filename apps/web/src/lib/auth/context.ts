@@ -43,3 +43,15 @@ export function useAuth(): AuthValue {
   if (!value) throw new Error('useAuth must be used inside <AuthProvider>')
   return value
 }
+
+/**
+ * Whether a session exists, for gating queries.
+ *
+ * Every authenticated query is `enabled` on this rather than on a token the
+ * component had to fetch and thread down. The token itself is ambient — the
+ * provider registers `getToken` with the API client's interceptor — so a hook
+ * only needs to know *whether* to fire, never *what* to send.
+ */
+export function useIsSignedIn(): boolean {
+  return Boolean(use(AuthContext)?.user)
+}

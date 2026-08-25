@@ -1,16 +1,14 @@
 import { useState } from 'react'
-import { Navigate, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
 import { Callout } from '@/components/Callout'
 import { ArrowLeftIcon } from '@/components/Icons'
 import { LoadingPanel } from '@/components/Spinner'
 import { CommunitySettings, type CommunityTab } from '@/features/community-settings'
-import { communitiesApi } from '@/features/communities'
-import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+import { useCommunityDetail } from '@/features/api'
+import { errorText } from '@/lib/errors'
 import { useIsMobile } from '@/lib/useMediaQuery'
 
-import type { ShellContext } from './AppShell'
 import styles from './CommunitySettingsRoute.module.css'
 
 /**
@@ -28,17 +26,12 @@ import styles from './CommunitySettingsRoute.module.css'
  */
 export function CommunitySettingsRoute() {
   const { communityId = '' } = useParams<{ communityId: string }>()
-  const { getToken } = useAuth()
-  const { reloadRooms, reloadCommunities } = useOutletContext<ShellContext>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
   const [activeTab, setActiveTab] = useState<CommunityTab>('overview')
 
-  const community = useAsync(
-    async () => communitiesApi.get(await getToken(), communityId),
-    [getToken, communityId],
-  )
+  const community = useCommunityDetail(communityId)
 
   // A widened window, or a link opened on a desktop: go to the server and open
   // the dialog there, which is where these settings live in that layout.
@@ -64,10 +57,10 @@ export function CommunitySettingsRoute() {
         </div>
       </header>
 
-      {community.loading && <LoadingPanel />}
+      {community.isLoading && <LoadingPanel />}
       {community.error && (
         <div className={styles.message}>
-          <Callout tone="danger">{community.error}</Callout>
+          <Callout tone="danger">{errorText(community.error, 'Could not load this server')}</Callout>
         </div>
       )}
 
@@ -77,17 +70,11 @@ export function CommunitySettingsRoute() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           variant="page"
-          onUpdated={() => {
-            community.reload()
-            reloadCommunities()
-            // A renamed server has to change in the rail behind this screen,
-            // and a new channel has to be in the list you go back to.
-            reloadRooms()
-          }}
-          onDeleted={() => {
-            reloadCommunities()
-            void navigate('/')
-          }}
+          // The tabs' own mutations invalidate the community, its rooms and
+          // the list in the rail, so a rename is already in the sidebar behind
+          // this screen by the time the callback fires.
+          onUpdated={() => {}}
+          onDeleted={() => void navigate('/')}
         />
       )}
     </div>

@@ -1,10 +1,6 @@
-import {
-  communities as communitiesApi,
-  rooms as roomsApi,
-  type Uuid,
-} from '@/lib/api'
+import { useCommunityMembers, useRoomParticipantsQuery } from '@/features/api'
+import type { Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 
@@ -30,28 +26,30 @@ export function useMentionCandidates(room: {
   id: Uuid
   community_id: Uuid | null
 }): MentionCandidate[] {
-  const { getToken, user } = useAuth()
+  const { user } = useAuth()
   const { isOnline } = usePresence()
 
-  const members = useAsync<MentionMember[]>(async () => {
-    const token = await getToken()
+  // Only one of the two ever runs: a channel completes to the community's
+  // members, a standalone room to its participants. Both read the same cache
+  // the member list fills, so opening the picker on a screen that already
+  // listed them costs nothing.
+  const communityMembers = useCommunityMembers(room.community_id)
+  const participants = useRoomParticipantsQuery(room.community_id ? null : room.id)
 
-    if (room.community_id) {
-      const list = await communitiesApi.members(token, room.community_id)
-      return list.map((member) => ({ userId: member.user_id, nickname: member.nickname }))
-    }
+  const roster: MentionMember[] = room.community_id
+    ? (communityMembers.data ?? []).map((member) => ({
+        userId: member.user_id,
+        nickname: member.nickname,
+      }))
+    : (participants.data ?? []).map((participant) => ({ userId: participant.user_id }))
 
-    const list = await roomsApi.participants(token, room.id)
-    return list.map((participant) => ({ userId: participant.user_id }))
-  }, [getToken, room.community_id, room.id])
-
-  const roster = (members.data ?? []).filter((member) => member.userId !== user?.id)
+  const withoutSelf = roster.filter((member) => member.userId !== user?.id)
 
   // Resolving through the shared cache means a room whose transcript is already
   // on screen usually has every profile in hand before the first `@` is typed.
-  const lookup = useProfiles(roster.map((member) => member.userId))
+  const lookup = useProfiles(withoutSelf.map((member) => member.userId))
 
-  const people = roster
+  const people = withoutSelf
     .map((member) => toCandidate(member, lookup(member.userId), isOnline(member.userId)))
     .filter((candidate): candidate is MentionCandidate => candidate !== null)
 

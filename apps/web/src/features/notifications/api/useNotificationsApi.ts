@@ -1,48 +1,145 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { notificationsApi } from './notificationsApi'
-import type { NotificationPage, Timestamp, Uuid } from './types'
+import { useInfiniteQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+
+import { notifications } from '@/lib/api'
+import { useIsSignedIn } from '@/lib/auth'
+
+import type { AppNotification, NotificationPage, Timestamp, Uuid } from './types'
 
 export const notificationKeys = {
   all: ['notifications'] as const,
   feed: () => [...notificationKeys.all, 'feed'] as const,
-  unread: () => [...notificationKeys.all, 'unread'] as const,
 }
 
-export function useNotificationsInfinite(token: string | null, limit = 20) {
+type Feed = { pages: NotificationPage[] }
+
+/**
+ * The notification inbox.
+ *
+ * The list is fetched so anything that arrived while you were away is there,
+ * and the socket bridge prepends what happens while you are looking. The server
+ * stores every notification before pushing it, so what arrives live is the same
+ * row a reload would show — a pushed item never vanishes on refresh.
+ *
+ * `unread` is the server's own count rather than a tally of the rows currently
+ * loaded: the badge has to be right before you have scrolled the whole feed.
+ */
+export function useNotificationsInfinite(limit = 20) {
+  const signedIn = useIsSignedIn()
   return useInfiniteQuery({
     queryKey: notificationKeys.feed(),
-    queryFn: ({ pageParam }) => {
-      if (!token) throw new Error('Unauthenticated')
-      return notificationsApi.list(token, { before: pageParam, limit })
-    },
+    queryFn: ({ pageParam }) => notifications.list(null, pageParam, limit),
     initialPageParam: undefined as Timestamp | undefined,
     getNextPageParam: (lastPage: NotificationPage) => lastPage.next_before,
-    enabled: Boolean(token),
+    enabled: signedIn,
+    select: (data) => ({
+      ...data,
+      items: data.pages.flatMap((page) => page.notifications),
+      unread: data.pages[0]?.unread ?? 0,
+    }),
   })
 }
 
-export function useMarkNotificationReadMutation(token: string | null) {
+export function useMarkNotificationReadMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return notificationsApi.markRead(token, id)
+    mutationFn: (id: Uuid) => notifications.markRead(null, id),
+    // Optimistic: the badge should drop the instant it is clicked, and the
+    // request is idempotent, so a failure costs nothing but a stale count.
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: notificationKeys.feed() })
+      const previous = queryClient.getQueryData<Feed>(notificationKeys.feed())
+
+      let wasUnread = false
+      for (const page of previous?.pages ?? []) {
+        if (page.notifications.some((item) => item.id === id && !item.read_at)) wasUnread = true
+      }
+
+      editFeed(queryClient, {
+        patch: (item) =>
+          item.id === id && !item.read_at
+            ? { ...item, read_at: new Date().toISOString() }
+            : item,
+        unread: (count) => (wasUnread ? Math.max(0, count - 1) : count),
+      })
+
+      return { previous }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: notificationKeys.all })
+    onError: (_error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(notificationKeys.feed(), context.previous)
     },
   })
 }
 
-export function useMarkAllNotificationsReadMutation(token: string | null) {
+export function useMarkAllNotificationsReadMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => {
-      if (!token) throw new Error('Unauthenticated')
-      return notificationsApi.markAllRead(token)
+    mutationFn: () => notifications.markAllRead(null),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: notificationKeys.feed() })
+      const previous = queryClient.getQueryData<Feed>(notificationKeys.feed())
+      const readAt = new Date().toISOString()
+
+      editFeed(queryClient, {
+        patch: (item) => (item.read_at ? item : { ...item, read_at: readAt }),
+        unread: () => 0,
+      })
+
+      return { previous }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: notificationKeys.all })
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(notificationKeys.feed(), context.previous)
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: notificationKeys.feed() })
+    },
+  })
+}
+
+/**
+ * Rewrite the cached feed.
+ *
+ * `unread` lives on every page but only page 0's is read, so the count is
+ * adjusted across all of them to keep a later refetch from resurrecting a stale
+ * badge from a page the reader had already scrolled past.
+ */
+function editFeed(
+  queryClient: QueryClient,
+  edit: {
+    patch?: (item: AppNotification) => AppNotification
+    prepend?: AppNotification
+    unread: (count: number) => number
+  },
+): void {
+  queryClient.setQueryData<Feed>(notificationKeys.feed(), (cached) => {
+    if (!cached || cached.pages.length === 0) return cached
+
+    return {
+      ...cached,
+      pages: cached.pages.map((page, index) => {
+        let items = edit.patch ? page.notifications.map(edit.patch) : page.notifications
+        if (edit.prepend && index === 0) {
+          // Re-delivery is possible on reconnect, so drop any existing copy.
+          items = [edit.prepend, ...items.filter((item) => item.id !== edit.prepend!.id)]
+        }
+        return { ...page, notifications: items, unread: edit.unread(page.unread) }
+      }),
+    }
+  })
+}
+
+/** A notification arrived over the socket. Called by the realtime bridge. */
+export function applyNotificationCreated(
+  queryClient: QueryClient,
+  notification: AppNotification,
+): void {
+  const feed = queryClient.getQueryData<Feed>(notificationKeys.feed())
+  const alreadyHeld = feed?.pages.some((page) =>
+    page.notifications.some((item) => item.id === notification.id),
+  )
+  if (alreadyHeld) return
+
+  editFeed(queryClient, {
+    prepend: notification,
+    unread: (count) => (notification.read_at ? count : count + 1),
   })
 }

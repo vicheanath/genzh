@@ -1,14 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Outlet, useLocation, useParams } from 'react-router-dom'
 
 import { Sheet } from '@/components/Sheet'
 import { UserSettingsModal } from '@/features/settings'
-import { communities as communitiesApi, rooms as roomsApi } from '@/lib/api'
-import { useAuth } from '@/lib/auth'
+import { useCommunitiesList, useCommunityRoomsQuery, useMyRoomsQuery } from '@/features/api'
 import { useAppStore } from '@/lib/store'
-import { useAsync } from '@/lib/useAsync'
 import { useIsMobile } from '@/lib/useMediaQuery'
-import { chatSocket } from '@/lib/ws/ChatSocket'
 
 import { AddCommunityDialog } from './AddCommunityDialog'
 import { CallDialogs } from './CallDialogs'
@@ -22,7 +19,6 @@ import styles from './shell/shell.module.css'
  */
 export function AppShell() {
   const { communityId } = useParams<{ communityId?: string }>()
-  const { getToken } = useAuth()
   const isMobile = useIsMobile()
   const location = useLocation()
 
@@ -44,65 +40,24 @@ export function AppShell() {
   const drawerOpen = openedAt === location.pathname
   const setDrawerOpen = (open: boolean) => setOpenedAt(open ? location.pathname : null)
 
-  const communities = useAsync(
-    async () => communitiesApi.list(await getToken()),
-    [getToken],
-  )
-
-  const rooms = useAsync(
-    async () => (communityId ? roomsApi.list(await getToken(), communityId) : null),
-    [communityId, getToken],
-  )
-
-  // Load user's direct message / private playground rooms for the left sidebar
-  const myRooms = useAsync(
-    async () => roomsApi.mine(await getToken()),
-    [getToken],
-  )
-
-  // The shell owns the socket, not the chat transcript.
-  //
-  // It used to connect only when a room was open, which meant somebody sitting
-  // on Friends or Explore had no connection at all — and so never heard that a
-  // conversation had been opened with them. The sidebar is always mounted, so
-  // this is the one place that can hold it for the whole session.
-  const reloadMyRooms = myRooms.reload
-  useEffect(() => {
-    let cancelled = false
-
-    void (async () => {
-      try {
-        const token = await getToken()
-        if (!cancelled) chatSocket.setToken(token)
-      } catch {
-        // Not signed in yet, or the refresh failed; the socket stays down and
-        // the sidebar falls back to what it fetched.
-      }
-    })()
-
-    // Both participants get this, so the conversation appears for the person
-    // who opened it and the person who was messaged, without either reloading.
-    const off = chatSocket.on('direct_room_opened', () => reloadMyRooms())
-
-    return () => {
-      cancelled = true
-      off()
-    }
-  }, [getToken, reloadMyRooms])
+  const communities = useCommunitiesList()
+  const rooms = useCommunityRoomsQuery(communityId)
+  // Direct messages and private playground rooms, for the left sidebar.
+  const myRooms = useMyRoomsQuery()
 
   const navigation = (
     <>
       <CommunityRail
-        communities={communities.data}
-        loading={communities.loading}
+        communities={communities.data ?? null}
+        loading={communities.isLoading}
         onAddClick={() => openAddCommunity()}
       />
       <ChannelSidebar
         communityId={communityId}
         community={communities.data?.find((item) => item.id === communityId)}
-        rooms={rooms.data}
+        rooms={rooms.data ?? null}
         directRooms={myRooms.data?.filter((r) => r.category === 'dm') ?? []}
-        loading={rooms.loading || myRooms.loading}
+        loading={rooms.isLoading || myRooms.isLoading}
         onOpenSettings={() => openUserSettings()}
       />
     </>
@@ -128,16 +83,12 @@ export function AppShell() {
           />
         )}
 
+        {/* No context handed down any more: a child route that creates a
+            community or a room runs a mutation, and the mutation invalidates
+            these queries. The sidebar redraws because its data changed, not
+            because the screen remembered to call back into the shell. */}
         <div className={styles.outlet}>
-          <Outlet
-            context={
-              {
-                reloadCommunities: communities.reload,
-                reloadRooms: rooms.reload,
-                reloadMyRooms: myRooms.reload,
-              } satisfies ShellContext
-            }
-          />
+          <Outlet />
         </div>
       </main>
 
@@ -146,9 +97,6 @@ export function AppShell() {
       <AddCommunityDialog
         open={addCommunityOpen}
         onClose={closeAddCommunity}
-        onCreated={() => {
-          communities.reload()
-        }}
       />
 
       <UserSettingsModal
@@ -171,12 +119,4 @@ export function AppShell() {
       )}
     </div>
   )
-}
-
-/** Context handed to child routes so they can refresh navigation after
- *  creating a community or a room. */
-export interface ShellContext {
-  reloadCommunities: () => void
-  reloadRooms: () => void
-  reloadMyRooms?: () => void
 }

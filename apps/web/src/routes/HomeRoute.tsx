@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
@@ -24,11 +24,9 @@ import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { Toggle, ToggleGroup } from '@/components/ToggleGroup'
-import { communities as communitiesApi, rooms as roomsApi, type Room } from '@/lib/api'
-import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+import type { Room } from '@/lib/api'
+import { useCommunitiesList, useDiscoveryRooms, useRandomRoomMutation } from '@/features/api'
 
-import type { ShellContext } from './AppShell'
 import { CreatePlaygroundRoomDialog } from './CreatePlaygroundRoomDialog'
 import styles from './HomeRoute.module.css'
 
@@ -49,31 +47,22 @@ const ROOM_TYPE_ICONS: Record<string, typeof HashIcon> = {
 const ALL_CATEGORIES = 'all'
 
 export function HomeRoute() {
-  const { getToken } = useAuth()
-  const { reloadCommunities } = useOutletContext<ShellContext>()
   const navigate = useNavigate()
   const toast = useToast()
 
   const [createRoomOpen, setCreateRoomOpen] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [matching, setMatching] = useState(false)
 
-  // Communities list
-  const communities = useAsync(
-    async () => communitiesApi.list(await getToken()),
-    [getToken],
-  )
-
-  // Playground discovery feed
-  const discovery = useAsync(
-    async () => roomsApi.discovery(await getToken(), selectedCategory || undefined),
-    [getToken, selectedCategory],
-  )
+  const communities = useCommunitiesList()
+  const discovery = useDiscoveryRooms(selectedCategory || undefined)
+  const findRandomRoom = useRandomRoomMutation()
+  const matching = findRandomRoom.isPending
 
   async function handleFindRandomRoom() {
-    setMatching(true)
     try {
-      const room = await roomsApi.random(await getToken(), selectedCategory || undefined)
+      const room = await findRandomRoom.mutateAsync({
+        category: selectedCategory || undefined,
+      })
       if (room) {
         toast.success(`Entering ${room.name}!`)
         void navigate(`/rooms/${room.id}`)
@@ -83,8 +72,6 @@ export function HomeRoute() {
       }
     } catch {
       toast.error('Could not find a random room right now')
-    } finally {
-      setMatching(false)
     }
   }
 
@@ -167,7 +154,7 @@ export function HomeRoute() {
             </h2>
           </div>
 
-          {discovery.loading && (
+          {discovery.isLoading && (
             <div className={styles.roomsGrid}>
               {Array.from({ length: 4 }, (_, index) => (
                 <div key={index} className={styles.roomCard}>
@@ -183,7 +170,7 @@ export function HomeRoute() {
             </div>
           )}
 
-          {!discovery.loading && (!discovery.data?.rooms || discovery.data.rooms.length === 0) && (
+          {!discovery.isLoading && (!discovery.data?.rooms || discovery.data.rooms.length === 0) && (
             <div className={styles.empty}>
               <span className={styles.emptyMark} aria-hidden>
                 <SparkleIcon size={22} />
@@ -260,7 +247,7 @@ export function HomeRoute() {
             </Link>
           </div>
 
-          {communities.loading && (
+          {communities.isLoading && (
             <div className={styles.grid}>
               {Array.from({ length: 3 }, (_, index) => (
                 <div key={index} className={styles.card}>
@@ -276,7 +263,7 @@ export function HomeRoute() {
             </div>
           )}
 
-          {!communities.loading && (!communities.data || communities.data.length === 0) && (
+          {!communities.isLoading && (!communities.data || communities.data.length === 0) && (
             <div className={styles.empty}>
               <span className={styles.emptyMark} aria-hidden>
                 <CompassIcon size={22} />
@@ -320,10 +307,6 @@ export function HomeRoute() {
       <CreatePlaygroundRoomDialog
         open={createRoomOpen}
         onClose={() => setCreateRoomOpen(false)}
-        onCreated={() => {
-          discovery.reload()
-          reloadCommunities()
-        }}
       />
     </div>
   )

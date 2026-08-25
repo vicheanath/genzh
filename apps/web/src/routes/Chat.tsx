@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -36,8 +35,22 @@ import {
   type RoomWithPermissions,
   type Uuid,
 } from '@/lib/api'
-import { chatApi as messagesApi } from '@/features/chat'
+import { useQueryClient } from '@tanstack/react-query'
+
+import {
+  applyLocalReaction,
+  applyMessageCreated,
+  applyMessageDeleted,
+  applyMessageUpdated,
+  useDeleteMessageMutation,
+  useEditMessageMutation,
+  useReactionMutation,
+  useRoomMessagesInfinite,
+  useSendMessageMutation,
+} from '@/features/api'
+import { useRoomSubscription, useRoomTyping, useSocketEvent } from '@/features/realtime'
 import { useAuth } from '@/lib/auth'
+import { errorText } from '@/lib/errors'
 import { cx } from '@/lib/cx'
 import { can } from '@/lib/permissions'
 import {
@@ -54,9 +67,7 @@ import { useAppStore } from '@/lib/store'
 import { Composer } from '@/features/chat/Composer'
 import { MENTION } from '@/features/chat/mentions'
 import { QUICK_REACTIONS } from '@/features/chat/emoji'
-import { mergeMessages, useMessageHistory } from '@/features/chat/useMessageHistory'
 import { EmojiPicker } from '@/features/chat/EmojiPicker'
-import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 import styles from './Chat.module.css'
 
 /**
@@ -85,19 +96,26 @@ export function Chat({
   isAnonymousPersona?: boolean
   onTogglePersona?: (isAnon: boolean) => void
 }) {
-  const { getToken, user } = useAuth()
+  const { user } = useAuth()
   const toast = useToast()
+  const queryClient = useQueryClient()
 
-  const {
-    items,
-    setItems,
-    loading,
-    loadingOlder,
-    hasMore,
-    error,
-    loadOlder,
-    prependedAt,
-  } = useMessageHistory(room.id)
+  const transcript = useRoomMessagesInfinite(room.id)
+  const items = transcript.data?.items ?? []
+  const loading = transcript.isLoading
+  const loadingOlder = transcript.isFetchingNextPage
+  const hasMore = transcript.hasNextPage
+  const error = transcript.error ? errorText(transcript.error, 'Could not load messages') : null
+  const loadOlder = transcript.fetchNextPage
+  // One prepend per page beyond the first. A count rather than a flag: two
+  // pages in a row must both re-anchor the scroll, and a boolean would coalesce.
+  const prependedAt = Math.max(0, (transcript.data?.pages.length ?? 1) - 1)
+
+  const sendMessage = useSendMessageMutation(room.id)
+  const editMessageMutation = useEditMessageMutation()
+  const deleteMessageMutation = useDeleteMessageMutation()
+  const reactionMutation = useReactionMutation()
+  const sendTyping = useRoomTyping(room.id)
 
   const [pending, setPending] = useState<PendingMessage[]>([])
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
@@ -119,95 +137,34 @@ export function Chat({
 
   const lookup = useProfiles([...new Set(items.map((message) => message.author_id))])
 
-  // ── WebSocket Real-Time Subscription & Initial Load ─────────────────────────
+  // ── realtime ─────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    let cancelled = false
+  // The transcript itself is kept current by the cache bridge, which writes
+  // every message frame into the same query this screen reads. All that is
+  // left here is the subscription, and the two frames that are about the view
+  // rather than about the room's state.
+  useRoomSubscription(room.id)
 
-    void (async () => {
-      const token = await getToken()
-      if (cancelled) return
-      chatSocket.setToken(token)
-      chatSocket.subscribe(room.id)
-    })()
+  useSocketEvent('typing', (event) => {
+    if (event.room_id !== room.id || event.user_id === user?.id) return
+    setTypingUsers((current) => {
+      const next = new Map(current)
+      if (event.is_typing) {
+        next.set(event.user_id, event.display_name)
+      } else {
+        next.delete(event.user_id)
+      }
+      return next
+    })
+  })
 
-    // Real-time WebSocket event listeners
-    const unsubs = [
-      chatSocket.on<ChatServerEvent>('message_created', (event) => {
-        if (event.type === 'message_created' && event.room_id === room.id) {
-          const fullMessage: Message = {
-            ...event.message,
-            reactions: event.reactions ?? [],
-            anonymous_author: event.anonymous_author,
-          }
-          setItems((current) => mergeMessages(current, [fullMessage]))
-        }
-      }),
-      chatSocket.on<ChatServerEvent>('message_updated', (event) => {
-        if (event.type === 'message_updated' && event.room_id === room.id) {
-          setItems((current) =>
-            current.map((m) =>
-              m.id === event.message.id
-                ? {
-                    ...event.message,
-                    reactions: event.reactions ?? m.reactions,
-                    anonymous_author: event.anonymous_author ?? m.anonymous_author,
-                  }
-                : m,
-            ),
-          )
-        }
-      }),
-      chatSocket.on<ChatServerEvent>('message_deleted', (event) => {
-        if (event.type === 'message_deleted' && event.room_id === room.id) {
-          setItems((current) => current.filter((m) => m.id !== event.message_id))
-        }
-      }),
-      chatSocket.on<ChatServerEvent>('reactions_updated', (event) => {
-        if (event.type === 'reactions_updated' && event.room_id === room.id) {
-          setItems((current) =>
-            current.map((m) => {
-              if (m.id !== event.message_id) return m
-              const myExistingReactions = new Set(
-                m.reactions.filter((r) => r.me).map((r) => r.reaction),
-              )
-              const updatedReactions = (event.reactions ?? []).map((r) => ({
-                ...r,
-                me: myExistingReactions.has(r.reaction),
-              }))
-              return { ...m, reactions: updatedReactions }
-            }),
-          )
-        }
-      }),
-      chatSocket.on<ChatServerEvent>('typing', (event) => {
-        if (event.type === 'typing' && event.room_id === room.id && event.user_id !== user?.id) {
-          setTypingUsers((prev) => {
-            const next = new Map(prev)
-            if (event.is_typing) {
-              next.set(event.user_id, event.display_name)
-            } else {
-              next.delete(event.user_id)
-            }
-            return next
-          })
-        }
-      }),
-      // A command the server refused — a message posted straight down the
-      // socket by one of the room experiences, usually, since those never
-      // touch the REST endpoint and so have no other way to fail visibly.
-      // Without this the message simply never appears and nobody is told why.
-      chatSocket.on<ChatServerEvent>('error', (event) => {
-        if (event.type === 'error') toast.error('Not sent', event.message)
-      }),
-    ]
-
-    return () => {
-      cancelled = true
-      chatSocket.unsubscribe(room.id)
-      for (const unsub of unsubs) unsub()
-    }
-  }, [getToken, room.id, user?.id, setItems, toast])
+  // A command the server refused — a message posted straight down the socket by
+  // one of the room experiences, usually, since those never touch the REST
+  // endpoint and so have no other way to fail visibly. Without this the message
+  // simply never appears and nobody is told why.
+  useSocketEvent('error', (event) => {
+    toast.error('Not sent', event.message)
+  })
 
   // ── scroll tracking ──────────────────────────────────────────────────────
 
@@ -330,7 +287,7 @@ export function Chat({
     const now = Date.now()
     if (now - typingSentAtRef.current >= TYPING_INTERVAL_MS) {
       typingSentAtRef.current = now
-      chatSocket.sendTyping(room.id, true)
+      sendTyping(true)
     }
 
     // The stop is always rescheduled, so it lands 2.5s after the *last*
@@ -340,14 +297,14 @@ export function Chat({
     }
     typingTimerRef.current = window.setTimeout(() => {
       typingSentAtRef.current = 0
-      chatSocket.sendTyping(room.id, false)
+      sendTyping(false)
       typingTimerRef.current = null
     }, 2500)
-  }, [room.id])
+  }, [sendTyping])
 
   const send = useCallback(
     async (content: string) => {
-      chatSocket.sendTyping(room.id, false)
+      sendTyping(false)
       if (typingTimerRef.current) {
         clearTimeout(typingTimerRef.current)
         typingTimerRef.current = null
@@ -360,9 +317,15 @@ export function Chat({
       ])
 
       try {
-        const posted = await messagesApi.post(await getToken(), room.id, content, isAnonymousPersona)
+        const posted = await sendMessage.mutateAsync({
+          content,
+          is_anonymous: isAnonymousPersona,
+        })
         setPending((current) => current.filter((item) => item.localId !== localId))
-        setItems((current) => mergeMessages(current, [posted]))
+        // The socket echoes this back too, and the write is idempotent — but
+        // placing it now means the sender's own message does not wait on a
+        // round trip through the server's broadcast to appear.
+        applyMessageCreated(queryClient, room.id, posted)
       } catch (cause) {
         setPending((current) =>
           current.map((item) => (item.localId === localId ? { ...item, failed: true } : item)),
@@ -373,15 +336,13 @@ export function Chat({
         const throttled = cause instanceof ApiError && cause.isThrottled
         toast.error(
           throttled ? 'Slow down' : 'Message not sent',
-          cause instanceof ApiError
-            ? throttled && cause.retryAfterSeconds
-              ? `${cause.message} — try again in ${cause.retryAfterSeconds}s`
-              : cause.message
-            : undefined,
+          throttled && cause.retryAfterSeconds
+            ? `${cause.message} — try again in ${cause.retryAfterSeconds}s`
+            : errorText(cause, 'Message not sent'),
         )
       }
     },
-    [getToken, room.id, isAnonymousPersona, toast, setItems],
+    [sendMessage, sendTyping, queryClient, room.id, isAnonymousPersona, toast],
   )
 
   const retry = useCallback(
@@ -402,83 +363,53 @@ export function Chat({
 
   const toggleReaction = useCallback(
     async (messageId: Uuid, emoji: string, active: boolean) => {
-      // Optimistic: a reaction that waits for a round trip feels broken, and the
-      // server's tally overwrites this a moment later either way.
-      setItems((current) =>
-        current.map((message) =>
-          message.id === messageId
-            ? { ...message, reactions: applyLocally(message.reactions, emoji, !active) }
-            : message,
-        ),
-      )
+      applyLocalReaction(queryClient, room.id, messageId, emoji, !active)
 
       try {
-        const token = await getToken()
-        const reactions = active
-          ? await messagesApi.unreact(token, messageId, emoji)
-          : await messagesApi.react(token, messageId, emoji)
-        setItems((current) =>
-          current.map((message) =>
-            message.id === messageId ? { ...message, reactions } : message,
-          ),
-        )
+        await reactionMutation.mutateAsync({
+          messageId,
+          reaction: emoji,
+          action: active ? 'remove' : 'add',
+        })
       } catch (cause) {
         // Put the optimistic change back.
-        setItems((current) =>
-          current.map((message) =>
-            message.id === messageId
-              ? { ...message, reactions: applyLocally(message.reactions, emoji, active) }
-              : message,
-          ),
-        )
-        toast.error(
-          'Could not react',
-          cause instanceof ApiError ? cause.message : undefined,
-        )
+        applyLocalReaction(queryClient, room.id, messageId, emoji, active)
+        toast.error('Could not react', errorText(cause))
       }
     },
-    [getToken, toast, setItems],
+    [reactionMutation, queryClient, room.id, toast],
   )
 
   const editMessage = useCallback(
     async (messageId: Uuid, content: string) => {
       try {
-        const updated = await messagesApi.edit(await getToken(), messageId, content)
-        setItems((current) =>
-          current.map((message) =>
-            // The edit response has no reactions of its own, so the ones already
-            // on screen are carried across rather than blanked.
-            message.id === messageId
-              ? { ...updated, reactions: message.reactions }
-              : message,
-          ),
-        )
+        const updated = await editMessageMutation.mutateAsync({
+          messageId,
+          payload: { content },
+        })
+        // The edit response has no reactions of its own; the cache write keeps
+        // the ones already on screen rather than blanking them.
+        applyMessageUpdated(queryClient, room.id, updated)
       } catch (cause) {
-        toast.error(
-          'Could not edit',
-          cause instanceof ApiError ? cause.message : undefined,
-        )
+        toast.error('Could not edit', errorText(cause))
       }
     },
-    [getToken, toast, setItems],
+    [editMessageMutation, queryClient, room.id, toast],
   )
 
   const deleteMessage = useCallback(
     async (messageId: Uuid) => {
-      const removed = items.find((message) => message.id === messageId)
-      setItems((current) => current.filter((message) => message.id !== messageId))
+      const removed = applyMessageDeleted(queryClient, room.id, messageId)
       try {
-        await messagesApi.remove(await getToken(), messageId)
+        await deleteMessageMutation.mutateAsync(messageId)
         toast.success('Message deleted')
       } catch (cause) {
-        if (removed) setItems((current) => mergeMessages(current, [removed]))
-        toast.error(
-          'Could not delete',
-          cause instanceof ApiError ? cause.message : undefined,
-        )
+        // Put it back where it was.
+        if (removed) applyMessageCreated(queryClient, room.id, removed)
+        toast.error('Could not delete', errorText(cause))
       }
     },
-    [getToken, items, toast, setItems],
+    [deleteMessageMutation, queryClient, room.id, toast],
   )
 
   // ── render ───────────────────────────────────────────────────────────────
@@ -1092,21 +1023,4 @@ function Mentioned({ text, handle }: { text: string; handle?: string }) {
 
 
 /** Apply a reaction toggle to a tally locally, for the optimistic update. */
-function applyLocally(
-  reactions: ReactionSummary[],
-  emoji: string,
-  add: boolean,
-): ReactionSummary[] {
-  const existing = reactions.find((reaction) => reaction.reaction === emoji)
 
-  if (!existing) {
-    return add ? [...reactions, { reaction: emoji, count: 1, me: true }] : reactions
-  }
-
-  const count = existing.count + (add ? 1 : -1)
-  if (count <= 0) return reactions.filter((reaction) => reaction.reaction !== emoji)
-
-  return reactions.map((reaction) =>
-    reaction.reaction === emoji ? { ...reaction, count, me: add } : reaction,
-  )
-}

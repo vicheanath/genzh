@@ -3,10 +3,9 @@ import { useState } from 'react'
 import { UserRow } from '@/components/UserRow'
 import { Skeleton } from '@/components/Skeleton'
 import { type Uuid } from '@/lib/api'
-import { communitiesApi } from '@/features/communities'
-import { roomsApi } from '@/features/rooms'
+import { useCommunityMembers, useRoomParticipantsQuery } from '@/features/api'
+import { errorText } from '@/lib/errors'
 import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 
@@ -19,29 +18,27 @@ interface MemberListProps {
 }
 
 export function MemberList({ communityId, roomId }: MemberListProps) {
-  const { getToken, user } = useAuth()
+  const { user } = useAuth()
   const [selectedUserId, setSelectedUserId] = useState<Uuid | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const members = useAsync(async () => {
-    const token = await getToken()
-    if (communityId) {
-      const list = await communitiesApi.members(token, communityId)
-      return list.map((m) => ({ user_id: m.user_id, nickname: m.nickname }))
-    }
-    if (roomId) {
-      const list = await roomsApi.participants(token, roomId)
-      return list.map((p) => ({ user_id: p.user_id, nickname: undefined }))
-    }
-    return []
-  }, [getToken, communityId, roomId])
+  // A community lists its members, a standalone room its participants. Only
+  // one of the two is enabled, and both read the cache the rest of the screen
+  // has usually filled already.
+  const communityMembers = useCommunityMembers(communityId)
+  const participants = useRoomParticipantsQuery(communityId ? null : roomId)
 
-  const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? [])
+  const source = communityId ? communityMembers : participants
+  const members: { user_id: Uuid; nickname: string | null }[] = communityId
+    ? (communityMembers.data ?? []).map((m) => ({ user_id: m.user_id, nickname: m.nickname }))
+    : (participants.data ?? []).map((p) => ({ user_id: p.user_id, nickname: null }))
+
+  const lookup = useProfiles(members.map((member) => member.user_id))
   const { isOnline } = usePresence()
 
   // Online first. A member list sorted by join order buries the people you can
   // actually talk to right now.
-  const allMembers = [...(members.data ?? [])].sort(
+  const allMembers = [...members].sort(
     (a, b) => Number(isOnline(b.user_id)) - Number(isOnline(a.user_id)),
   )
 
@@ -80,7 +77,7 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
         </div>
       )}
 
-      {members.loading && (
+      {source.isLoading && (
         <div className={styles.skeletons}>
           {Array.from({ length: 6 }, (_, index) => (
             <div key={index} className={styles.skeletonRow}>
@@ -91,8 +88,12 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
         </div>
       )}
 
-      {members.error && <p className={styles.message}>{members.error}</p>}
-      {members.data?.length === 0 && <p className={styles.message}>Nobody here yet.</p>}
+      {source.error && (
+        <p className={styles.message}>{errorText(source.error, 'Could not load this list')}</p>
+      )}
+      {!source.isLoading && !source.error && members.length === 0 && (
+        <p className={styles.message}>Nobody here yet.</p>
+      )}
 
       {selectedUserId && (
         <ProfileDialog

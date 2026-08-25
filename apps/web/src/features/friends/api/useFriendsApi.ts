@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { friendsApi } from './friendsApi'
+
+import { blocks, friends, presence } from '@/lib/api'
+import { useIsSignedIn } from '@/lib/auth'
+
 import type { Uuid } from './types'
 
 export const friendKeys = {
@@ -7,105 +10,116 @@ export const friendKeys = {
   list: () => [...friendKeys.all, 'list'] as const,
   pending: () => [...friendKeys.all, 'pending'] as const,
   sent: () => [...friendKeys.all, 'sent'] as const,
-  presence: (ids?: Uuid[]) => [...friendKeys.all, 'presence', ids?.join(',') ?? 'all'] as const,
-  blocked: ['blocks'] as const,
+  blocked: () => ['blocks', 'list'] as const,
+  presence: () => ['presence', 'online'] as const,
 }
 
-export function useFriendsList(token: string | null) {
+/** Everything the friend graph is made of, invalidated as one. */
+export const socialGraphKeys = [
+  friendKeys.list(),
+  friendKeys.pending(),
+  friendKeys.sent(),
+  friendKeys.blocked(),
+]
+
+export function useFriendsList() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: friendKeys.list(),
-    queryFn: () => (token ? friendsApi.listFriends(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => friends.list(null),
+    enabled: signedIn,
   })
 }
 
-export function usePendingFriendRequests(token: string | null) {
+export function usePendingFriendRequests() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: friendKeys.pending(),
-    queryFn: () => (token ? friendsApi.listPendingRequests(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => friends.pending(null),
+    enabled: signedIn,
   })
 }
 
-export function useSentFriendRequests(token: string | null) {
+export function useSentFriendRequests() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: friendKeys.sent(),
-    queryFn: () => (token ? friendsApi.listSentRequests(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryFn: () => friends.sent(null),
+    enabled: signedIn,
   })
 }
 
-export function useBlockedUsers(token: string | null) {
+export function useBlockedUsers() {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: friendKeys.blocked,
-    queryFn: () => (token ? friendsApi.listBlockedUsers(token) : Promise.reject(new Error('Unauthenticated'))),
-    enabled: Boolean(token),
+    queryKey: friendKeys.blocked(),
+    queryFn: () => blocks.list(null),
+    enabled: signedIn,
   })
 }
 
-export function useSendFriendRequestMutation(token: string | null) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (userId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return friendsApi.sendRequest(token, userId)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: friendKeys.sent() })
-    },
+/**
+ * Who is online, as of now.
+ *
+ * The starting point only — the socket carries the changes on top of it, and
+ * the bridge writes them into this same key. Without the fetch every avatar
+ * would read offline until its owner happened to reconnect; without the socket
+ * the list would go stale the moment somebody closed their laptop.
+ */
+export function useOnlineUsers() {
+  const signedIn = useIsSignedIn()
+  return useQuery({
+    queryKey: friendKeys.presence(),
+    queryFn: () => presence.online(null).then((result) => result.online),
+    enabled: signedIn,
+    staleTime: 1000 * 60,
   })
 }
 
-export function useRespondFriendRequestMutation(token: string | null) {
+function useGraphInvalidation() {
   const queryClient = useQueryClient()
+  return () => {
+    for (const queryKey of socialGraphKeys) queryClient.invalidateQueries({ queryKey })
+  }
+}
+
+export function useSendFriendRequestMutation() {
+  const invalidateGraph = useGraphInvalidation()
   return useMutation({
-    mutationFn: ({ requesterId, accept }: { requesterId: Uuid; accept: boolean }) => {
-      if (!token) throw new Error('Unauthenticated')
-      return friendsApi.respondRequest(token, requesterId, accept)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: friendKeys.list() })
-      queryClient.invalidateQueries({ queryKey: friendKeys.pending() })
-    },
+    mutationFn: (userId: Uuid) => friends.request(null, userId),
+    onSuccess: invalidateGraph,
   })
 }
 
-export function useRemoveFriendMutation(token: string | null) {
-  const queryClient = useQueryClient()
+export function useRespondFriendRequestMutation() {
+  const invalidateGraph = useGraphInvalidation()
   return useMutation({
-    mutationFn: (userId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return friendsApi.removeFriend(token, userId)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: friendKeys.list() })
-    },
+    mutationFn: ({ requesterId, accept }: { requesterId: Uuid; accept: boolean }) =>
+      friends.respond(null, requesterId, accept),
+    onSuccess: invalidateGraph,
   })
 }
 
-export function useBlockUserMutation(token: string | null) {
-  const queryClient = useQueryClient()
+export function useRemoveFriendMutation() {
+  const invalidateGraph = useGraphInvalidation()
   return useMutation({
-    mutationFn: (userId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return friendsApi.blockUser(token, userId)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: friendKeys.blocked })
-      queryClient.invalidateQueries({ queryKey: friendKeys.list() })
-    },
+    mutationFn: (userId: Uuid) => friends.remove(null, userId),
+    onSuccess: invalidateGraph,
   })
 }
 
-export function useUnblockUserMutation(token: string | null) {
-  const queryClient = useQueryClient()
+export function useBlockUserMutation() {
+  const invalidateGraph = useGraphInvalidation()
   return useMutation({
-    mutationFn: (userId: Uuid) => {
-      if (!token) throw new Error('Unauthenticated')
-      return friendsApi.unblockUser(token, userId)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: friendKeys.blocked })
-    },
+    mutationFn: (userId: Uuid) => blocks.block(null, userId),
+    onSuccess: invalidateGraph,
+  })
+}
+
+export function useUnblockUserMutation() {
+  const invalidateGraph = useGraphInvalidation()
+  return useMutation({
+    mutationFn: (userId: Uuid) => blocks.unblock(null, userId),
+    onSuccess: invalidateGraph,
   })
 }

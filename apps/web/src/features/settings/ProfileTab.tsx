@@ -8,7 +8,7 @@ import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import type { CurrentUser } from '@/lib/api'
-import { authApi } from '@/features/auth'
+import { useUpdateProfileMutation } from '@/features/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 
@@ -24,7 +24,8 @@ interface ProfileFormValues {
 }
 
 export function ProfileTab({ user }: { user: CurrentUser }) {
-  const { getToken, applyProfile } = useAuth()
+  const { applyProfile } = useAuth()
+  const updateProfile = useUpdateProfileMutation()
   const toast = useToast()
   const save = useSubmission()
 
@@ -57,7 +58,7 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
 
   async function onSubmit(data: ProfileFormValues) {
     const updated = await save.run(async () =>
-      authApi.updateProfile(await getToken(), {
+      updateProfile.mutateAsync({
         display_name: data.displayName.trim() || undefined,
         bio: data.bio.trim() || undefined,
         avatar_url: data.avatarUrl.trim() || undefined,

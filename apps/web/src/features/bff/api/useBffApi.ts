@@ -1,5 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { bffApi } from './bffApi'
+
+import { auth, communities, rooms, social } from '@/lib/api'
+import { useIsSignedIn } from '@/lib/auth'
+
 import type { Uuid } from './types'
 
 /** Cache keys for the composite views, kept apart from the per-resource keys. */
@@ -11,28 +14,24 @@ export const bffKeys = {
   socialOverview: () => [...bffKeys.all, 'me', 'social'] as const,
 }
 
-/** The app shell's boot payload. */
-export function useMeOverviewQuery(token: string | null) {
+/** The app shell's boot payload, in one round-trip instead of seven. */
+export function useMeOverviewQuery() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: bffKeys.meOverview(),
-    queryFn: () =>
-      token ? bffApi.meOverview(token) : Promise.reject(new Error('Unauthenticated')),
-    enabled: Boolean(token),
+    queryFn: () => auth.overview(null),
+    enabled: signedIn,
     staleTime: 1000 * 60 * 2,
   })
 }
 
 /** Everything a community screen renders. */
-export function useCommunityOverviewQuery(token: string | null, communityId: Uuid | null) {
+export function useCommunityOverviewQuery(communityId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: communityId
-      ? bffKeys.communityOverview(communityId)
-      : [...bffKeys.all, 'community', 'none'],
-    queryFn: () => {
-      if (!token || !communityId) throw new Error('Unauthenticated or missing community ID')
-      return bffApi.communityOverview(token, communityId)
-    },
-    enabled: Boolean(token && communityId),
+    queryKey: communityId ? bffKeys.communityOverview(communityId) : [...bffKeys.all, 'idle'],
+    queryFn: () => communities.overview(null, communityId!),
+    enabled: signedIn && Boolean(communityId),
   })
 }
 
@@ -43,14 +42,12 @@ export function useCommunityOverviewQuery(token: string | null, communityId: Uui
  * must not re-fire on a window focus or a reconnect. Live updates arrive over
  * the websocket; a genuine re-join invalidates `bffKeys.roomSession(id)`.
  */
-export function useRoomSessionQuery(token: string | null, roomId: Uuid | null) {
+export function useRoomSessionQuery(roomId: Uuid | null | undefined) {
+  const signedIn = useIsSignedIn()
   return useQuery({
-    queryKey: roomId ? bffKeys.roomSession(roomId) : [...bffKeys.all, 'room', 'none'],
-    queryFn: () => {
-      if (!token || !roomId) throw new Error('Unauthenticated or missing room ID')
-      return bffApi.openRoomSession(token, roomId)
-    },
-    enabled: Boolean(token && roomId),
+    queryKey: roomId ? bffKeys.roomSession(roomId) : [...bffKeys.all, 'room', 'idle'],
+    queryFn: () => rooms.session(null, roomId!),
+    enabled: signedIn && Boolean(roomId),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -59,11 +56,11 @@ export function useRoomSessionQuery(token: string | null, roomId: Uuid | null) {
 }
 
 /** Friends, presence, requests and blocks for the social screen. */
-export function useSocialOverviewQuery(token: string | null) {
+export function useSocialOverviewQuery() {
+  const signedIn = useIsSignedIn()
   return useQuery({
     queryKey: bffKeys.socialOverview(),
-    queryFn: () =>
-      token ? bffApi.socialOverview(token) : Promise.reject(new Error('Unauthenticated')),
-    enabled: Boolean(token),
+    queryFn: () => social.overview(null),
+    enabled: signedIn,
   })
 }

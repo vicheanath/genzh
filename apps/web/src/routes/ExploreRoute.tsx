@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
@@ -10,46 +10,38 @@ import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { ApiError, type Uuid } from '@/lib/api'
-import { communitiesApi } from '@/features/communities'
-import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+import { useCommunitiesList, useJoinCommunityMutation } from '@/features/api'
+import { errorText } from '@/lib/errors'
 import { hueFor } from '@/lib/palette'
 
 import { AddCommunityDialog } from './AddCommunityDialog'
-import type { ShellContext } from './AppShell'
 import styles from './ExploreRoute.module.css'
 
 export function ExploreRoute() {
-  const { getToken } = useAuth()
-  const { reloadCommunities } = useOutletContext<ShellContext>()
   const navigate = useNavigate()
   const toast = useToast()
 
   const [query, setQuery] = useState('')
   const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [joiningId, setJoiningId] = useState<Uuid | null>(null)
-
-  const communities = useAsync(
-    async () => communitiesApi.list(await getToken()),
-    [getToken],
-  )
+  const communities = useCommunitiesList()
+  const joinCommunity = useJoinCommunityMutation()
+  // Which row is spinning, not merely that something is: several Join buttons
+  // are on screen and only the pressed one should show it.
+  const joiningId = joinCommunity.isPending ? joinCommunity.variables : null
 
   async function handleJoin(communityId: Uuid) {
-    setJoiningId(communityId)
     try {
-      await communitiesApi.join(await getToken(), communityId)
-      reloadCommunities()
-      communities.reload()
+      await joinCommunity.mutateAsync(communityId)
       toast.success('Joined community!')
       void navigate(`/c/${communityId}`)
     } catch (cause) {
+      // Already a member: the button is stale, and the place they wanted to
+      // reach is the one they are already in.
       if (cause instanceof ApiError && cause.code === 'CONFLICT') {
         void navigate(`/c/${communityId}`)
         return
       }
-      toast.error('Could not join community', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setJoiningId(null)
+      toast.error('Could not join community', errorText(cause))
     }
   }
 
@@ -76,7 +68,9 @@ export function ExploreRoute() {
           </p>
         </header>
 
-        {communities.error && <Callout tone="danger">{communities.error}</Callout>}
+        {communities.error && (
+          <Callout tone="danger">{errorText(communities.error, 'Could not load communities')}</Callout>
+        )}
 
         <div className={styles.filterBar}>
           <div className={styles.searchWrap}>
@@ -102,7 +96,7 @@ export function ExploreRoute() {
             {communities.data && <Badge>{filtered.length}</Badge>}
           </div>
 
-          {communities.loading && (
+          {communities.isLoading && (
             <div className={styles.grid}>
               {Array.from({ length: 6 }, (_, index) => (
                 <div key={index} className={styles.card}>
@@ -118,7 +112,7 @@ export function ExploreRoute() {
             </div>
           )}
 
-          {!communities.loading && filtered.length === 0 && (
+          {!communities.isLoading && filtered.length === 0 && (
             <div className={styles.empty}>
               <span className={styles.emptyMark} aria-hidden>
                 <CompassIcon size={22} />
@@ -175,10 +169,6 @@ export function ExploreRoute() {
       <AddCommunityDialog
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
-        onCreated={() => {
-          reloadCommunities()
-          communities.reload()
-        }}
       />
     </div>
   )

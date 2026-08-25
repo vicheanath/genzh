@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { Button } from '@/components/Button'
@@ -7,10 +6,9 @@ import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { UserRow } from '@/components/UserRow'
 import { useToast } from '@/components/Toast'
-import { ApiError, type Uuid } from '@/lib/api'
-import { settingsApi as blocksApi } from '@/features/settings'
-import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+import type { Uuid } from '@/lib/api'
+import { useBlockUserMutation, useBlockedUsers, useUnblockUserMutation } from '@/features/api'
+import { errorText } from '@/lib/errors'
 import { useProfiles } from '@/lib/useProfiles'
 
 import { useSubmission } from './useSubmission'
@@ -21,7 +19,6 @@ interface BlockFormValues {
 }
 
 export function BlockedTab() {
-  const { getToken } = useAuth()
   const toast = useToast()
   const submit = useSubmission()
   const form = useForm<BlockFormValues>({ defaultValues: { userId: '' } })
@@ -29,9 +26,13 @@ export function BlockedTab() {
   // The list is fetched, not accumulated. It used to start empty and only grow
   // as you blocked people in that one sitting, so anyone you had blocked before
   // opening this screen was invisible and impossible to undo.
-  const blocked = useAsync(async () => blocksApi.list(await getToken()), [getToken])
-  const [ids, setIds] = useState<Uuid[] | null>(null)
-  const current = ids ?? blocked.data ?? []
+  const blocked = useBlockedUsers()
+  const blockUser = useBlockUserMutation()
+  const unblockUser = useUnblockUserMutation()
+
+  // No local shadow of the list: both mutations invalidate it, so the query is
+  // the only copy and the rows cannot disagree with the server.
+  const current = blocked.data ?? []
   const lookup = useProfiles(current)
 
   async function handleBlock(data: BlockFormValues) {
@@ -39,26 +40,21 @@ export function BlockedTab() {
     if (!targetId) return
 
     const done = await submit.run(async () => {
-      await blocksApi.block(await getToken(), targetId)
+      await blockUser.mutateAsync(targetId)
       return true
     })
     if (!done) return
 
-    setIds(current.includes(targetId) ? current : [targetId, ...current])
     form.reset()
     toast.success('User blocked', 'They can no longer reach you.')
   }
 
   async function handleUnblock(userId: Uuid) {
     try {
-      await blocksApi.unblock(await getToken(), userId)
-      setIds(current.filter((id) => id !== userId))
+      await unblockUser.mutateAsync(userId)
       toast.success('User unblocked')
     } catch (cause) {
-      toast.error(
-        'Could not unblock',
-        cause instanceof ApiError ? cause.message : undefined,
-      )
+      toast.error('Could not unblock', errorText(cause))
     }
   }
 
@@ -70,7 +66,7 @@ export function BlockedTab() {
       </p>
 
       {submit.error && <Callout tone="danger">{submit.error}</Callout>}
-      {blocked.error && <Callout tone="danger">{blocked.error}</Callout>}
+      {blocked.error && <Callout tone="danger">{errorText(blocked.error, 'Could not load blocked users')}</Callout>}
 
       <form className={styles.formRow} onSubmit={form.handleSubmit(handleBlock)}>
         <Input
@@ -87,9 +83,9 @@ export function BlockedTab() {
       </form>
 
       <div className={styles.blockedList}>
-        {blocked.loading && ids === null && <Spinner />}
+        {blocked.isLoading && <Spinner />}
 
-        {!blocked.loading && current.length === 0 && (
+        {!blocked.isLoading && current.length === 0 && (
           <p className={styles.emptyNote}>You haven&apos;t blocked anyone.</p>
         )}
 

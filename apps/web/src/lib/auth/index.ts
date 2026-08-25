@@ -1,2 +1,2 @@
 export { AuthProvider } from './AuthProvider'
-export { useAuth, type AuthValue } from './context'
+export { useAuth, useIsSignedIn, type AuthValue } from './context'

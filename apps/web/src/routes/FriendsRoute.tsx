@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 
@@ -26,18 +26,27 @@ import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { UserRow } from '@/components/UserRow'
-import { ApiError, type Uuid } from '@/lib/api'
-import { friendsApi, friendsApi as blocksApi } from '@/features/friends'
-import { roomsApi } from '@/features/rooms'
+import type { Uuid } from '@/lib/api'
+import {
+  useBlockUserMutation,
+  useBlockedUsers,
+  useFriendsList,
+  useOpenDMMutation,
+  usePendingFriendRequests,
+  useRemoveFriendMutation,
+  useRespondFriendRequestMutation,
+  useSendFriendRequestMutation,
+  useSentFriendRequests,
+  useUnblockUserMutation,
+} from '@/features/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useAppStore } from '@/lib/store'
 import { formatRelative } from '@/lib/time'
-import { useAsync } from '@/lib/useAsync'
+import { errorText } from '@/lib/errors'
 import { useCall } from '@/lib/useCall'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
-import { useSocialGraph } from '@/lib/useSocialGraph'
 
 import { ProfileDialog } from './ProfileDialog'
 import styles from './FriendsRoute.module.css'
@@ -51,7 +60,7 @@ interface AddFriendFormValues {
 
 export function FriendsRoute() {
   const confirm = useConfirm()
-  const { getToken, user } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
 
@@ -60,23 +69,29 @@ export function FriendsRoute() {
 
   const { isOnline } = usePresence()
   const call = useCall()
-  const refreshGraph = useSocialGraph().refresh
   const [search, setSearch] = useState('')
   const [selectedUserId, setSelectedUserId] = useState<Uuid | null>(null)
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
 
-  const friends = useAsync(async () => friendsApi.list(await getToken()), [getToken])
-  const requests = useAsync(async () => friendsApi.pending(await getToken()), [getToken])
-  const sent = useAsync(async () => friendsApi.sent(await getToken()), [getToken])
-  const blocked = useAsync(async () => blocksApi.list(await getToken()), [getToken])
+  const friends = useFriendsList()
+  const requests = usePendingFriendRequests()
+  const sent = useSentFriendRequests()
+  const blocked = useBlockedUsers()
 
-  // Local overlay on the fetched list, so blocking and unblocking take effect
-  // without a round trip. Null means "nothing changed here yet".
-  const [blockOverride, setBlockOverride] = useState<Uuid[] | null>(null)
-  const blockedUsers = blockOverride ?? blocked.data ?? []
+  const openDMMutation = useOpenDMMutation()
+  const sendRequestMutation = useSendFriendRequestMutation()
+  const respondMutation = useRespondFriendRequestMutation()
+  const removeFriendMutation = useRemoveFriendMutation()
+  const blockMutation = useBlockUserMutation()
+  const unblockMutation = useUnblockUserMutation()
+
+  // No local overlay on the block list any more: every one of these mutations
+  // invalidates the whole graph, so the lists here, the profile card and the
+  // member list cannot disagree about who is blocked.
+  const blockedUsers = blocked.data ?? []
 
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const busy = sendRequestMutation.isPending
 
   const addFriendForm = useForm<AddFriendFormValues>({
     defaultValues: { userId: '' },
@@ -90,16 +105,6 @@ export function FriendsRoute() {
   ]
   const lookup = useProfiles(allIds)
 
-  const refresh = useCallback(() => {
-    friends.reload()
-    requests.reload()
-    sent.reload()
-    // This screen is where the graph changes, and the profile card, the DM
-    // header and the member list all read it. Reloading only the three lists
-    // here would leave "Add Friend" on somebody you just accepted.
-    refreshGraph()
-  }, [friends, requests, sent, refreshGraph])
-
   /**
    * Open the conversation with a friend, and go there.
    *
@@ -109,7 +114,7 @@ export function FriendsRoute() {
    */
   async function openDM(friendId: Uuid): Promise<Uuid | null> {
     try {
-      const dmRoom = await roomsApi.openDM(await getToken(), friendId)
+      const dmRoom = await openDMMutation.mutateAsync(friendId)
       void navigate(`/rooms/${dmRoom.id}`)
       return dmRoom.id
     } catch {
@@ -134,27 +139,22 @@ export function FriendsRoute() {
     const id = data.userId.trim()
     if (!id) return
     setError(null)
-    setBusy(true)
     try {
-      await friendsApi.request(await getToken(), id)
+      await sendRequestMutation.mutateAsync(id)
       addFriendForm.reset()
       toast.success('Friend request sent!')
-      refresh()
       setTab('pending')
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not send request')
-    } finally {
-      setBusy(false)
+      setError(errorText(cause, 'Could not send request'))
     }
   }
 
   async function respond(requesterId: Uuid, accept: boolean) {
     try {
-      await friendsApi.respond(await getToken(), requesterId, accept)
+      await respondMutation.mutateAsync({ requesterId, accept })
       toast.success(accept ? 'Friend request accepted!' : 'Friend request declined')
-      refresh()
     } catch (cause) {
-      toast.error('Could not respond to request', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not respond to request', errorText(cause))
     }
   }
 
@@ -167,35 +167,28 @@ export function FriendsRoute() {
     })
     if (!ok) return
     try {
-      await friendsApi.remove(await getToken(), friendId)
+      await removeFriendMutation.mutateAsync(friendId)
       toast.success('Friend removed')
-      refresh()
     } catch (cause) {
-      toast.error('Could not remove friend', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not remove friend', errorText(cause))
     }
   }
 
   async function blockUser(otherId: Uuid) {
     try {
-      await blocksApi.block(await getToken(), otherId)
-      if (!blockedUsers.includes(otherId)) {
-        setBlockOverride([...blockedUsers, otherId])
-      }
+      await blockMutation.mutateAsync(otherId)
       toast.success('User blocked', 'They can no longer message or interact with you.')
-      refresh()
     } catch (cause) {
-      toast.error('Could not block user', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not block user', errorText(cause))
     }
   }
 
   async function unblockUser(otherId: Uuid) {
     try {
-      await blocksApi.unblock(await getToken(), otherId)
-      setBlockOverride(blockedUsers.filter((id) => id !== otherId))
+      await unblockMutation.mutateAsync(otherId)
       toast.success('User unblocked')
-      refresh()
     } catch (cause) {
-      toast.error('Could not unblock user', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not unblock user', errorText(cause))
     }
   }
 
@@ -299,7 +292,7 @@ export function FriendsRoute() {
               {tab === 'online' ? 'Online Friends' : 'All Friends'} — {filteredFriends.length}
             </div>
 
-            {friends.loading && (
+            {friends.isLoading && (
               <div className={styles.list}>
                 {Array.from({ length: 3 }, (_, i) => (
                   <div key={i} className={styles.skeletonRow}>
@@ -310,7 +303,7 @@ export function FriendsRoute() {
               </div>
             )}
 
-            {!friends.loading && filteredFriends.length === 0 && (
+            {!friends.isLoading && filteredFriends.length === 0 && (
               <div className={styles.empty}>
                 <UsersIcon size={32} />
                 <p>
@@ -421,7 +414,7 @@ export function FriendsRoute() {
           <section className={styles.section}>
             <div className={styles.sectionTitle}>Pending Friend Requests — {pendingCount}</div>
 
-            {requests.loading && (
+            {requests.isLoading && (
               <div className={styles.list}>
                 {Array.from({ length: 2 }, (_, i) => (
                   <div key={i} className={styles.skeletonRow}>
@@ -432,7 +425,7 @@ export function FriendsRoute() {
               </div>
             )}
 
-            {!requests.loading && pendingCount === 0 && (
+            {!requests.isLoading && pendingCount === 0 && (
               <div className={styles.empty}>
                 <p>Nothing pending — no requests waiting, none awaiting a reply.</p>
               </div>

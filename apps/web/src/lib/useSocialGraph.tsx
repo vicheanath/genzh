@@ -1,20 +1,13 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useMemo } from 'react'
 
 import {
-  blocks as blocksApi,
-  friends as friendsApi,
-  type Uuid,
-} from '@/lib/api'
+  useBlockedUsers,
+  useFriendsList,
+  usePendingFriendRequests,
+  useSentFriendRequests,
+} from '@/features/api'
+import type { Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 
 /**
  * What this user is to you.
@@ -30,11 +23,7 @@ interface SocialGraphValue {
   isFriend: (userId: Uuid) => boolean
   friendIds: ReadonlySet<Uuid>
   loading: boolean
-  /** Refetch after something changed the graph — a request, an accept, a block. */
-  refresh: () => void
 }
-
-const SocialGraphContext = createContext<SocialGraphValue | null>(null)
 
 /**
  * Your side of the friend graph, in one place.
@@ -45,78 +34,24 @@ const SocialGraphContext = createContext<SocialGraphValue | null>(null)
  * months, and offered it again to someone whose request was already sitting in
  * your own Pending tab.
  *
- * Held for the session rather than fetched per card. Four lists describe the
- * whole graph and they change rarely, so a dialog that opens on a name pays
- * nothing, while the alternative — four requests each time a profile opens —
- * would make the answer arrive after the buttons did.
+ * Four lists describe the whole graph and they change rarely, so the cache
+ * holds them for the session and a dialog that opens on a name pays nothing.
+ * Refreshing is not this hook's job: the mutations that change the graph
+ * invalidate it, and the bridge invalidates it when the other side acts.
  */
-export function SocialGraphProvider({ children }: { children: ReactNode }) {
-  const { user, getToken } = useAuth()
+export function useSocialGraph(): SocialGraphValue {
+  const { user } = useAuth()
+  const friends = useFriendsList()
+  const incoming = usePendingFriendRequests()
+  const outgoing = useSentFriendRequests()
+  const blocked = useBlockedUsers()
 
-  const [friendIds, setFriendIds] = useState<ReadonlySet<Uuid>>(() => new Set())
-  const [incoming, setIncoming] = useState<ReadonlySet<Uuid>>(() => new Set())
-  const [outgoing, setOutgoing] = useState<ReadonlySet<Uuid>>(() => new Set())
-  const [blockedIds, setBlockedIds] = useState<ReadonlySet<Uuid>>(() => new Set())
-  const [loading, setLoading] = useState(false)
-  const [nonce, setNonce] = useState(0)
+  return useMemo(() => {
+    const friendIds = new Set(friends.data ?? [])
+    const incomingIds = new Set((incoming.data ?? []).map((request) => request.requester_id))
+    const outgoingIds = new Set((outgoing.data ?? []).map((request) => request.addressee_id))
+    const blockedIds = new Set(blocked.data ?? [])
 
-  const signedIn = Boolean(user)
-  const refresh = useCallback(() => setNonce((n) => n + 1), [])
-
-  useEffect(() => {
-    if (!signedIn) {
-      setFriendIds(new Set())
-      setIncoming(new Set())
-      setOutgoing(new Set())
-      setBlockedIds(new Set())
-      return
-    }
-
-    let cancelled = false
-    setLoading(true)
-
-    void (async () => {
-      try {
-        const token = await getToken()
-        const [friends, pending, sent, blocked] = await Promise.all([
-          friendsApi.list(token),
-          friendsApi.pending(token),
-          friendsApi.sent(token),
-          blocksApi.list(token),
-        ])
-        if (cancelled) return
-        setFriendIds(new Set(friends))
-        setIncoming(new Set(pending.map((request) => request.requester_id)))
-        setOutgoing(new Set(sent.map((request) => request.addressee_id)))
-        setBlockedIds(new Set(blocked))
-      } catch {
-        // A graph that cannot be read leaves every relationship at `none`,
-        // which offers to add a friend you may already have. That is a wasted
-        // click; blanking the screens that ask would be worse.
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [signedIn, getToken, nonce])
-
-  // The other side accepting is the one change that happens without this tab
-  // doing anything, and it is exactly the one that would leave a stale "Request
-  // sent" sitting where a Call button belongs.
-  useEffect(() => {
-    if (!signedIn) return
-
-    return chatSocket.on<ChatServerEvent>('notification_created', (event) => {
-      if (event.type !== 'notification_created') return
-      const { kind } = event.notification
-      if (kind === 'friend_request' || kind === 'friend_accepted') refresh()
-    })
-  }, [signedIn, refresh])
-
-  const value = useMemo<SocialGraphValue>(() => {
     const relationship = (userId: Uuid): Relationship => {
       if (!userId) return 'none'
       if (userId === user?.id) return 'self'
@@ -124,8 +59,8 @@ export function SocialGraphProvider({ children }: { children: ReactNode }) {
       // erase the friendship row underneath it.
       if (blockedIds.has(userId)) return 'blocked'
       if (friendIds.has(userId)) return 'friends'
-      if (incoming.has(userId)) return 'incoming'
-      if (outgoing.has(userId)) return 'outgoing'
+      if (incomingIds.has(userId)) return 'incoming'
+      if (outgoingIds.has(userId)) return 'outgoing'
       return 'none'
     }
 
@@ -133,31 +68,8 @@ export function SocialGraphProvider({ children }: { children: ReactNode }) {
       relationship,
       isFriend: (userId: Uuid) => friendIds.has(userId),
       friendIds,
-      loading,
-      refresh,
+      loading:
+        friends.isLoading || incoming.isLoading || outgoing.isLoading || blocked.isLoading,
     }
-  }, [user?.id, friendIds, incoming, outgoing, blockedIds, loading, refresh])
-
-  return <SocialGraphContext.Provider value={value}>{children}</SocialGraphContext.Provider>
-}
-
-/**
- * Ask what you are to somebody.
- *
- * Falls back to "we know nothing" without a provider, so a component can ask
- * without every test mounting one.
- */
-export function useSocialGraph(): SocialGraphValue {
-  const context = useContext(SocialGraphContext)
-  const fallback = useMemo<SocialGraphValue>(
-    () => ({
-      relationship: () => 'none',
-      isFriend: () => false,
-      friendIds: new Set(),
-      loading: false,
-      refresh: () => {},
-    }),
-    [],
-  )
-  return context ?? fallback
+  }, [user?.id, friends.data, friends.isLoading, incoming.data, incoming.isLoading, outgoing.data, outgoing.isLoading, blocked.data, blocked.isLoading])
 }

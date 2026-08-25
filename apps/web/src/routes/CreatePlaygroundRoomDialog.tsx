@@ -24,9 +24,9 @@ import { Select } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
 import { Switch } from '@/components/Switch'
 import { useToast } from '@/components/Toast'
-import { ApiError, type RoomType } from '@/lib/api'
-import { roomsApi } from '@/features/rooms'
-import { useAuth } from '@/lib/auth'
+import type { RoomType } from '@/lib/api'
+import { useCreateStandaloneRoomMutation } from '@/features/api'
+import { errorText } from '@/lib/errors'
 import { cx } from '@/lib/cx'
 
 import styles from './CreatePlaygroundRoomDialog.module.css'
@@ -62,7 +62,7 @@ export function CreatePlaygroundRoomDialog({
   onClose,
   onCreated,
 }: CreatePlaygroundRoomDialogProps) {
-  const { getToken } = useAuth()
+  const createRoom = useCreateStandaloneRoomMutation()
   const navigate = useNavigate()
   const toast = useToast()
 
@@ -93,7 +93,7 @@ export function CreatePlaygroundRoomDialog({
     setBusy(true)
 
     try {
-      const room = await roomsApi.createStandalone(await getToken(), {
+      const room = await createRoom.mutateAsync({
         name: data.name.trim(),
         topic: data.topic?.trim() || undefined,
         category,
@@ -107,7 +107,7 @@ export function CreatePlaygroundRoomDialog({
       handleClose()
       void navigate(`/rooms/${room.id}`)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not create room')
+      setError(errorText(cause, 'Could not create room'))
     } finally {
       setBusy(false)
     }

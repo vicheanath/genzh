@@ -8,13 +8,17 @@ import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
 import { useToast } from '@/components/Toast'
 import {
-  ApiError,
+  useAssignRoleMutation,
+  useCommunityMembers,
+  useCommunityRoles,
+  useLeaveCommunityMutation,
+  useRemoveRoleMutation,
+} from '@/features/api'
+import {
   type CommunityWithPermissions,
   type Uuid,
 } from '@/lib/api'
-import { communitiesApi } from '@/features/communities'
-import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+import { errorText } from '@/lib/errors'
 import { usePresence } from '@/lib/usePresence'
 import { useProfiles } from '@/lib/useProfiles'
 
@@ -31,46 +35,40 @@ export function MembersTab({
   abilities: CommunityAbilities
 }) {
   const confirm = useConfirm()
-  const { getToken } = useAuth()
+
   const toast = useToast()
   const { isOnline } = usePresence()
 
-  const members = useAsync(
-    async () => communitiesApi.members(await getToken(), community.id),
-    [getToken, community.id],
-  )
+  const members = useCommunityMembers(community.id)
+  const assignRoleMutation = useAssignRoleMutation(community.id)
+  const removeRoleMutation = useRemoveRoleMutation(community.id)
+  const leaveCommunity = useLeaveCommunityMutation()
 
   // Only fetched when there is something to do with it. Someone who cannot
   // assign roles has no reason to pay for the list.
-  const roles = useAsync(
-    async () =>
-      abilities.roles ? communitiesApi.roles(await getToken(), community.id) : [],
-    [getToken, community.id, abilities.roles],
-  )
+  const roles = useCommunityRoles(abilities.roles ? community.id : null)
 
   const [search, setSearch] = useState('')
   const lookup = useProfiles(members.data?.map((member) => member.user_id) ?? [])
 
   async function assignRole(userId: Uuid, roleId: Uuid) {
     try {
-      await communitiesApi.assignRole(await getToken(), community.id, userId, roleId)
-      // Reloading is the point: the assignment used to succeed silently and
-      // leave the row exactly as it was, which is indistinguishable from having
-      // done nothing at all.
-      members.reload()
+      // The mutation invalidates the member list, so the row redraws with the
+      // new role: the assignment used to succeed silently and leave the row
+      // exactly as it was, which is indistinguishable from having done nothing.
+      await assignRoleMutation.mutateAsync({ userId, roleId })
       toast.success('Role assigned')
     } catch (cause) {
-      toast.error('Could not assign role', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not assign role', errorText(cause))
     }
   }
 
   async function removeRole(userId: Uuid, roleId: Uuid, roleName: string, name: string) {
     try {
-      await communitiesApi.removeRole(await getToken(), community.id, userId, roleId)
-      members.reload()
+      await removeRoleMutation.mutateAsync({ userId, roleId })
       toast.success(`${roleName} removed from ${name}`)
     } catch (cause) {
-      toast.error('Could not remove role', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not remove role', errorText(cause))
     }
   }
 
@@ -83,11 +81,10 @@ export function MembersTab({
     })
     if (!ok) return
     try {
-      await communitiesApi.leave(await getToken(), community.id, userId)
-      members.reload()
+      await leaveCommunity.mutateAsync({ communityId: community.id, userId })
       toast.success('Member removed')
     } catch (cause) {
-      toast.error('Could not remove member', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not remove member', errorText(cause))
     }
   }
 
@@ -130,11 +127,11 @@ export function MembersTab({
         />
       )}
 
-      {members.error && <Callout tone="danger">{members.error}</Callout>}
-      {members.loading && <PanelSkeleton rows={4} />}
+      {members.error && <Callout tone="danger">{errorText(members.error, 'Could not load members')}</Callout>}
+      {members.isLoading && <PanelSkeleton rows={4} />}
 
       <PanelList
-        empty={!members.loading && filtered.length === 0}
+        empty={!members.isLoading && filtered.length === 0}
         emptyText={needle ? `Nobody matches “${search.trim()}”.` : 'No members yet.'}
       >
         {filtered.map((member) => {

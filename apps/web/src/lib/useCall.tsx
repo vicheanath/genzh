@@ -9,10 +9,11 @@ import {
   type ReactNode,
 } from 'react'
 
-import { media as mediaApi, type CallEndReason, type Uuid } from '@/lib/api'
+import { useEndCallMutation, useRingMutation, type CallEndReason } from '@/features/api'
+import { useSocketEvent } from '@/features/realtime'
+import type { Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useVoice } from '@/lib/media'
-import { chatSocket, type ChatServerEvent } from '@/lib/ws/ChatSocket'
 
 /**
  * How long a ring stands before it is treated as missed.
@@ -68,8 +69,10 @@ const CallContext = createContext<CallValue | null>(null)
  * your friends are.
  */
 export function CallProvider({ children }: { children: ReactNode }) {
-  const { user, getToken } = useAuth()
+  const { user } = useAuth()
   const voice = useVoice()
+  const ring = useRingMutation()
+  const endCall = useEndCallMutation()
 
   const [incoming, setIncoming] = useState<IncomingCall | null>(null)
   const [outgoing, setOutgoing] = useState<OutgoingCall | null>(null)
@@ -91,17 +94,21 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const voiceRef = useRef(voice)
   voiceRef.current = voice
 
-  const notify = useCallback(
-    async (roomId: Uuid, reason: CallEndReason) => {
-      try {
-        await mediaApi.endCall(await getToken(), roomId, reason)
-      } catch {
-        // The other side falls back to its own ring timeout. Failing the
-        // hang-up here would leave this user in a call they meant to leave.
-      }
-    },
-    [getToken],
-  )
+  // The mutations are stable, but reading them through a ref keeps the
+  // callbacks below out of the re-render churn `useVoice` produces.
+  const ringRef = useRef(ring)
+  ringRef.current = ring
+  const endCallRef = useRef(endCall)
+  endCallRef.current = endCall
+
+  const notify = useCallback(async (roomId: Uuid, reason: CallEndReason) => {
+    try {
+      await endCallRef.current.mutateAsync({ roomId, reason })
+    } catch {
+      // The other side falls back to its own ring timeout. Failing the
+      // hang-up here would leave this user in a call they meant to leave.
+    }
+  }, [])
 
   const start = useCallback(
     async (roomId: Uuid, peerId: Uuid, peerName: string, video: boolean) => {
@@ -112,14 +119,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
       setOutgoing({ roomId, peerId, peerName, video })
 
       try {
-        await mediaApi.ring(await getToken(), roomId, video)
+        await ringRef.current.mutateAsync({ roomId, video })
       } catch (cause) {
         setOutgoing(null)
         await voiceRef.current.leave()
         throw cause
       }
     },
-    [getToken],
+    [],
   )
 
   const accept = useCallback(async () => {
@@ -145,14 +152,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [notify])
 
   useEffect(() => {
-    if (!signedIn) {
-      setIncoming(null)
-      setOutgoing(null)
-      return
-    }
+    if (signedIn) return
+    setIncoming(null)
+    setOutgoing(null)
+  }, [signedIn])
 
-    const offRinging = chatSocket.on<ChatServerEvent>('call_ringing', (event) => {
-      if (event.type !== 'call_ringing') return
+  useSocketEvent(
+    'call_ringing',
+    (event) => {
       // Your own other tab, or a repeat while one is already ringing: the first
       // ring stands, so answering in one place does not race with a second.
       if (event.from_user_id === user?.id) return
@@ -163,11 +170,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
         fromDisplayName: event.from_display_name,
         video: event.video,
       })
-    })
+    },
+    signedIn,
+  )
 
-    const offEnded = chatSocket.on<ChatServerEvent>('call_ended', (event) => {
-      if (event.type !== 'call_ended') return
-
+  useSocketEvent(
+    'call_ended',
+    (event) => {
       if (incomingRef.current?.roomId === event.room_id) {
         setIncoming(null)
       }
@@ -177,13 +186,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
         setOutgoing(null)
         void voiceRef.current.leave()
       }
-    })
-
-    return () => {
-      offRinging()
-      offEnded()
-    }
-  }, [signedIn, user?.id])
+    },
+    signedIn,
+  )
 
   // A ring nobody answers stops on its own, on both sides. Keyed on which call
   // is ringing rather than on the state object, so the clock runs once per call

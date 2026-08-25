@@ -18,7 +18,8 @@ import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { ApiError } from '@/lib/api'
-import { communitiesApi } from '@/features/communities'
+import { useCreateCommunityMutation, useJoinCommunityMutation } from '@/features/api'
+import { errorText } from '@/lib/errors'
 import { useAuth } from '@/lib/auth'
 
 import styles from './AddCommunityDialog.module.css'
@@ -93,7 +94,9 @@ const RANDOM_NAMES = [
 ]
 
 export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDialogProps) {
-  const { getToken, user } = useAuth()
+  const { user } = useAuth()
+  const createCommunity = useCreateCommunityMutation()
+  const joinCommunity = useJoinCommunityMutation()
   const navigate = useNavigate()
   const toast = useToast()
 
@@ -149,7 +152,7 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
     setError(null)
     setBusy(true)
     try {
-      const community = await communitiesApi.create(await getToken(), {
+      const community = await createCommunity.mutateAsync({
         name: data.name.trim(),
         description: data.description?.trim() || undefined,
         icon_url: data.iconUrl?.trim() || undefined,
@@ -159,7 +162,7 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
       handleClose()
       void navigate(`/c/${community.id}`)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not create community')
+      setError(errorText(cause, 'Could not create community'))
     } finally {
       setBusy(false)
     }
@@ -171,7 +174,7 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
     setError(null)
     setBusy(true)
     try {
-      await communitiesApi.join(await getToken(), id)
+      await joinCommunity.mutateAsync(id)
       toast.success('Joined community!')
       onCreated?.()
       handleClose()
@@ -183,7 +186,7 @@ export function AddCommunityDialog({ open, onClose, onCreated }: AddCommunityDia
         void navigate(`/c/${id}`)
         return
       }
-      setError(cause instanceof ApiError ? cause.message : 'Could not join community')
+      setError(errorText(cause, 'Could not join community'))
     } finally {
       setBusy(false)
     }

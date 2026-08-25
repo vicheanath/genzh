@@ -16,15 +16,13 @@ import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
+import type { CommunityWithPermissions, RoomType, Uuid } from '@/lib/api'
 import {
-  ApiError,
-  type CommunityWithPermissions,
-  type RoomType,
-  type Uuid,
-} from '@/lib/api'
-import { roomsApi } from '@/features/rooms'
-import { useAuth } from '@/lib/auth'
-import { useAsync } from '@/lib/useAsync'
+  useCommunityRoomsQuery,
+  useCreateCommunityRoomMutation,
+  useDeleteRoomMutation,
+} from '@/features/api'
+import { errorText } from '@/lib/errors'
 
 import { PanelList, PanelSkeleton } from './PanelList'
 import type { CommunityAbilities } from './tabs'
@@ -61,37 +59,31 @@ export function ChannelsTab({
   abilities: CommunityAbilities
 }) {
   const confirm = useConfirm()
-  const { getToken } = useAuth()
   const toast = useToast()
 
-  const rooms = useAsync(
-    async () => roomsApi.list(await getToken(), community.id),
-    [getToken, community.id],
-  )
+  const rooms = useCommunityRoomsQuery(community.id)
+  const createRoom = useCreateCommunityRoomMutation(community.id)
+  const deleteRoom = useDeleteRoomMutation()
 
   const [name, setName] = useState('')
   const [type, setType] = useState<RoomType>('text')
   const [topic, setTopic] = useState('')
-  const [creating, setCreating] = useState(false)
+  const creating = createRoom.isPending
 
   async function create(event: FormEvent) {
     event.preventDefault()
     if (!name.trim()) return
-    setCreating(true)
     try {
-      await roomsApi.create(await getToken(), community.id, {
+      await createRoom.mutateAsync({
         name: name.trim(),
         room_type: type,
         topic: topic.trim() || undefined,
       })
       setName('')
       setTopic('')
-      rooms.reload()
       toast.success('Channel created')
     } catch (cause) {
-      toast.error('Could not create channel', cause instanceof ApiError ? cause.message : undefined)
-    } finally {
-      setCreating(false)
+      toast.error('Could not create channel', errorText(cause))
     }
   }
 
@@ -104,11 +96,10 @@ export function ChannelsTab({
     })
     if (!ok) return
     try {
-      await roomsApi.delete(await getToken(), roomId)
-      rooms.reload()
+      await deleteRoom.mutateAsync(roomId)
       toast.success('Channel deleted')
     } catch (cause) {
-      toast.error('Could not delete channel', cause instanceof ApiError ? cause.message : undefined)
+      toast.error('Could not delete channel', errorText(cause))
     }
   }
 
@@ -165,11 +156,11 @@ export function ChannelsTab({
         {rooms.data ? `${rooms.data.length} channel${rooms.data.length === 1 ? '' : 's'}` : 'Channels'}
       </h3>
 
-      {rooms.error && <Callout tone="danger">{rooms.error}</Callout>}
-      {rooms.loading && <PanelSkeleton rows={4} />}
+      {rooms.error && <Callout tone="danger">{errorText(rooms.error, 'Could not load channels')}</Callout>}
+      {rooms.isLoading && <PanelSkeleton rows={4} />}
 
       <PanelList
-        empty={!rooms.loading && (rooms.data?.length ?? 0) === 0}
+        empty={!rooms.isLoading && (rooms.data?.length ?? 0) === 0}
         emptyText="No channels yet. The first one is usually #general."
       >
         {rooms.data?.map((room) => {

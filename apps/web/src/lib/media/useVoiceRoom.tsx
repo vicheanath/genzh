@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 
-import { media as mediaApi, type Uuid } from '@/lib/api'
+import { media, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useAppStore } from '@/lib/store'
 
@@ -45,7 +45,7 @@ export interface VoiceContextValue extends VoiceState {
 const VoiceContext = createContext<VoiceContextValue | null>(null)
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
-  const { user, getToken } = useAuth()
+  const { user } = useAuth()
 
   const [activeSession, setActiveSession] = useState<StoredVoiceSession | null>(() => {
     try {
@@ -64,13 +64,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const [client] = useState(
     () =>
+      // Deliberately a direct call rather than a mutation: this is the
+      // credential factory the transport calls on its own schedule, including
+      // on a reconnect the UI never sees. A cached credential is a stale one,
+      // so there is nothing here for the query cache to hold.
       new VoiceClient(async () => {
         const roomId = currentRoomIdRef.current
         if (!roomId) {
           throw new Error('No active voice room')
         }
-        const token = await getToken()
-        return mediaApi.join(token, roomId)
+        return media.join(null, roomId)
       }),
   )
 

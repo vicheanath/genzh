@@ -1,15 +1,14 @@
 import { QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { LoadingPanel } from '@/components/Spinner'
+import { SocketProvider } from '@/features/realtime'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { VoiceProvider } from '@/lib/media'
 import { queryClient } from '@/lib/queryClient'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { CallProvider } from '@/lib/useCall'
-import { NotificationsProvider } from '@/lib/useNotifications'
-import { PresenceProvider } from '@/lib/usePresence'
-import { SocialGraphProvider } from '@/lib/useSocialGraph'
 
 import { AccountRoute } from './routes/AccountRoute'
 import { AppShell } from './routes/AppShell'
@@ -27,22 +26,24 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <PresenceProvider>
-          <NotificationsProvider>
-            <SocialGraphProvider>
-              <VoiceProvider>
-                <BrowserRouter>
-                  {/* Inside the router, because answering a call navigates to
-                      the conversation it is happening in. */}
-                  <CallProvider>
-                    <Router />
-                  </CallProvider>
-                </BrowserRouter>
-              </VoiceProvider>
-            </SocialGraphProvider>
-          </NotificationsProvider>
-        </PresenceProvider>
+        {/* Presence, the friend graph and the inbox used to be three providers
+            here. They are queries now, so the only thing left to hold open for
+            the session is the socket that keeps them current. */}
+        <SocketProvider>
+          <VoiceProvider>
+            <BrowserRouter>
+              {/* Inside the router, because answering a call navigates to
+                  the conversation it is happening in. */}
+              <CallProvider>
+                <Router />
+              </CallProvider>
+            </BrowserRouter>
+          </VoiceProvider>
+        </SocketProvider>
       </AuthProvider>
+      {/* Tree-shaken out of a production build: the import resolves to an
+          empty component when `process.env.NODE_ENV === 'production'`. */}
+      <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
     </QueryClientProvider>
   )
 }

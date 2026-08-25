@@ -13,9 +13,8 @@ import { Badge } from '@/components/Badge'
 import { useToast } from '@/components/Toast'
 import { cx } from '@/lib/cx'
 import { type RoomWithPermissions } from '@/lib/api'
-import { chatApi as messagesApi } from '@/features/chat'
-import { useAuth } from '@/lib/auth'
-import { chatSocket } from '@/lib/ws/ChatSocket'
+import { useSendMessageMutation } from '@/features/api'
+import { useRoomBroadcast } from '@/features/realtime'
 import styles from './PollExperience.module.css'
 
 interface PollOption {
@@ -61,7 +60,8 @@ const INITIAL_POLLS: Poll[] = [
 ]
 
 export function PollExperience({ room }: { room: RoomWithPermissions }) {
-  const { getToken } = useAuth()
+  const sendMessage = useSendMessageMutation(room.id)
+  const broadcast = useRoomBroadcast(room.id)
   const toast = useToast()
   const [polls, setPolls] = useState<Poll[]>(INITIAL_POLLS)
   const [activePollIndex, setActivePollIndex] = useState(0)
@@ -88,9 +88,8 @@ export function PollExperience({ room }: { room: RoomWithPermissions }) {
     const msg = `🗳️ **LIVE POLL RESULTS** 🗳️\n❓ **${activePoll.question}**\n${optionsSummary}\n\n📊 Total Votes: **${activePoll.totalVotes}** • *Vote live on the poll card above!*`
 
     try {
-      const token = await getToken()
-      await messagesApi.post(token, room.id, msg, room.is_anonymous)
-      chatSocket.sendMessage(room.id, msg, room.is_anonymous)
+      await sendMessage.mutateAsync({ content: msg, is_anonymous: room.is_anonymous })
+      broadcast(msg, room.is_anonymous)
       toast.success('Poll results posted to chat!')
     } catch {
       toast.error('Could not post poll to chat')

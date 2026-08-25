@@ -18,10 +18,10 @@ import { useToast } from '@/components/Toast'
 import { Radio, RadioGroup } from '@/components/RadioGroup'
 import { cx } from '@/lib/cx'
 import { type RoomWithPermissions } from '@/lib/api'
-import { chatApi as messagesApi } from '@/features/chat'
+import { useSendMessageMutation } from '@/features/api'
 import { useAuth } from '@/lib/auth'
 import { can } from '@/lib/permissions'
-import { chatSocket } from '@/lib/ws/ChatSocket'
+import { useRoomBroadcast } from '@/features/realtime'
 import styles from './GameExperience.module.css'
 
 type GameMode = 'trivia' | 'would_you_rather' | 'truth_or_dare' | 'word_chain'
@@ -118,7 +118,9 @@ const DEFAULT_TRUTH_OR_DARE_DECK: TruthOrDareItem[] = [
 ]
 
 export function GameExperience({ room }: { room: RoomWithPermissions }) {
-  const { user, getToken } = useAuth()
+  const { user } = useAuth()
+  const sendMessage = useSendMessageMutation(room.id)
+  const broadcast = useRoomBroadcast(room.id)
   const toast = useToast()
 
   const isOwner = room.owner_id === user?.id || can(room.your_permissions, 'manage_room')
@@ -241,9 +243,8 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
     const messageContent = `🏆 **TRIVIA RUSH RESULTS** 🏆\n👤 Player: **${playerName}**\n⭐️ Final Score: **${score} Pts** (${score >= 300 ? '🔥 Godlike!' : score >= 150 ? '⚡ Great Job!' : '👍 Good Try!'})\n🔥 Best Streak: **${streak}x**\n📚 Questions Completed: **${triviaDeck.length}/${triviaDeck.length}**\n\n*Can anyone in the room beat this high score?*`
 
     try {
-      const token = await getToken()
-      await messagesApi.post(token, room.id, messageContent, room.is_anonymous)
-      chatSocket.sendMessage(room.id, messageContent, room.is_anonymous)
+      await sendMessage.mutateAsync({ content: messageContent, is_anonymous: room.is_anonymous })
+      broadcast(messageContent, room.is_anonymous)
       setHasSharedResults(true)
       toast.success('Results posted to chat!')
     } catch {
@@ -259,9 +260,8 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
     const messageContent = `🤔 **WOULD YOU RATHER POLL RESULT**\n🅰️ **${wyr.optionA}** — ${pA}%\n🅱️ **${wyr.optionB}** — ${pB}%\n\n*Vote live on the mini-game bar above!*`
 
     try {
-      const token = await getToken()
-      await messagesApi.post(token, room.id, messageContent, room.is_anonymous)
-      chatSocket.sendMessage(room.id, messageContent, room.is_anonymous)
+      await sendMessage.mutateAsync({ content: messageContent, is_anonymous: room.is_anonymous })
+      broadcast(messageContent, room.is_anonymous)
       toast.success('Dilemma shared to chat!')
     } catch {
       toast.error('Could not share to chat')
@@ -273,9 +273,8 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
     const messageContent = `🎯 **${tod.type.toUpperCase()} DROP**\n🎲 *" ${tod.text} "*\n\n*Answer or complete the dare in chat!*`
 
     try {
-      const token = await getToken()
-      await messagesApi.post(token, room.id, messageContent, room.is_anonymous)
-      chatSocket.sendMessage(room.id, messageContent, room.is_anonymous)
+      await sendMessage.mutateAsync({ content: messageContent, is_anonymous: room.is_anonymous })
+      broadcast(messageContent, room.is_anonymous)
       toast.success('Prompt dropped into chat!')
     } catch {
       toast.error('Could not share prompt to chat')
@@ -302,9 +301,7 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
     // Share milestones every 5 words
     if (nextChain.length % 5 === 0) {
       const msg = `⚡ **WORD CHAIN MILESTONE!** Chain reached **${nextChain.length} words**! Last word: **${word}** (Next starts with: **${word.slice(-1)}**)`
-      void getToken().then((token) => {
-        void messagesApi.post(token, room.id, msg, room.is_anonymous)
-      })
+      sendMessage.mutate({ content: msg, is_anonymous: room.is_anonymous })
     }
   }
 

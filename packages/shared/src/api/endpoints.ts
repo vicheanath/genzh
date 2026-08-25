@@ -37,9 +37,16 @@ import type {
 /**
  * The API surface, one function per endpoint.
  *
- * Each takes the access token explicitly rather than reading it from a module
- * global: that keeps these pure and testable, and makes it impossible to fire a
- * request with a stale token captured in a closure.
+ * Each takes the access token as its first argument rather than reading it from
+ * a module global: that keeps these pure and testable, and makes it impossible
+ * to fire a request with a stale token captured in a closure.
+ *
+ * Passing `null` is the other half of that contract, and it means "no token in
+ * hand — use the ambient one". The request interceptor then resolves it through
+ * the provider registered by `setTokenProvider`, which is where refresh already
+ * lives. Callers that hold a token (mobile) keep passing it; callers running
+ * under a provider (web) pass `null` and stop threading a session through every
+ * signature. Either way the token is never read from a global at call time.
  */
 
 // ── auth ──────────────────────────────────────────────────────────────────
@@ -66,9 +73,9 @@ export const auth = {
   logout: (refresh_token: string) =>
     request<void>('/api/v1/auth/logout', { method: 'POST', body: { refresh_token } }),
 
-  me: (token: string) => request<CurrentUser>('/api/v1/me', { token }),
+  me: (token: string | null) => request<CurrentUser>('/api/v1/me', { token }),
 
-  updateProfile: (token: string, input: UpdateProfileInput) =>
+  updateProfile: (token: string | null, input: UpdateProfileInput) =>
     request<Profile>('/api/v1/me', { method: 'PATCH', body: input, token }),
 
   /**
@@ -77,43 +84,43 @@ export const auth = {
    *
    * The server composes it, so booting costs one round-trip instead of seven.
    */
-  overview: (token: string) => request<MeOverviewResponse>('/api/v1/me/overview', { token }),
+  overview: (token: string | null) => request<MeOverviewResponse>('/api/v1/me/overview', { token }),
 }
 
 // ── users ─────────────────────────────────────────────────────────────────
 
 export const users = {
-  get: (token: string, userId: Uuid) =>
+  get: (token: string | null, userId: Uuid) =>
     request<PublicProfile>(`/api/v1/users/${userId}`, { token }),
 }
 
 // ── communities ───────────────────────────────────────────────────────────
 
 export const communities = {
-  list: (token: string) => request<Community[]>('/api/v1/communities', { token }),
+  list: (token: string | null) => request<Community[]>('/api/v1/communities', { token }),
 
-  get: (token: string, id: Uuid) =>
+  get: (token: string | null, id: Uuid) =>
     request<CommunityWithPermissions>(`/api/v1/communities/${id}`, { token }),
 
-  create: (token: string, input: { name: string; description?: string; icon_url?: string }) =>
+  create: (token: string | null, input: { name: string; description?: string; icon_url?: string }) =>
     request<CommunityWithPermissions>('/api/v1/communities', {
       method: 'POST',
       body: input,
       token,
     }),
 
-  join: (token: string, id: Uuid) =>
+  join: (token: string | null, id: Uuid) =>
     request<CommunityMember>(`/api/v1/communities/${id}/members`, {
       method: 'POST',
       body: {},
       token,
     }),
 
-  members: (token: string, id: Uuid, limit = 100) =>
+  members: (token: string | null, id: Uuid, limit = 100) =>
     request<CommunityMember[]>(`/api/v1/communities/${id}/members?limit=${limit}`, { token }),
 
   update: (
-    token: string,
+    token: string | null,
     id: Uuid,
     input: { name?: string; description?: string; icon_url?: string },
   ) =>
@@ -123,23 +130,23 @@ export const communities = {
       token,
     }),
 
-  leave: (token: string, id: Uuid, userId: Uuid) =>
+  leave: (token: string | null, id: Uuid, userId: Uuid) =>
     request<void>(`/api/v1/communities/${id}/members/${userId}`, {
       method: 'DELETE',
       token,
     }),
 
-  delete: (token: string, id: Uuid) =>
+  delete: (token: string | null, id: Uuid) =>
     request<void>(`/api/v1/communities/${id}`, {
       method: 'DELETE',
       token,
     }),
 
-  roles: (token: string, id: Uuid) =>
+  roles: (token: string | null, id: Uuid) =>
     request<RoleWithPermissions[]>(`/api/v1/communities/${id}/roles`, { token }),
 
   createRole: (
-    token: string,
+    token: string | null,
     id: Uuid,
     input: { name: string; color?: string; position?: number; permissions?: string[] },
   ) =>
@@ -150,7 +157,7 @@ export const communities = {
     }),
 
   updateRole: (
-    token: string,
+    token: string | null,
     id: Uuid,
     roleId: Uuid,
     input: { name?: string; color?: string; position?: number; permissions?: string[] },
@@ -161,13 +168,13 @@ export const communities = {
       token,
     }),
 
-  removeRole: (token: string, id: Uuid, userId: Uuid, roleId: Uuid) =>
+  removeRole: (token: string | null, id: Uuid, userId: Uuid, roleId: Uuid) =>
     request<void>(`/api/v1/communities/${id}/members/${userId}/roles/${roleId}`, {
       method: 'DELETE',
       token,
     }),
 
-  assignRole: (token: string, id: Uuid, userId: Uuid, roleId: Uuid) =>
+  assignRole: (token: string | null, id: Uuid, userId: Uuid, roleId: Uuid) =>
     request<void>(`/api/v1/communities/${id}/members/${userId}/roles`, {
       method: 'POST',
       body: { role_id: roleId },
@@ -178,14 +185,14 @@ export const communities = {
    * The community screen in one call: the community and the caller's
    * permissions, its rooms, its members with their roles, and the role table.
    */
-  overview: (token: string, id: Uuid) =>
+  overview: (token: string | null, id: Uuid) =>
     request<CommunityOverviewResponse>(`/api/v1/communities/${id}/overview`, { token }),
 }
 
 // ── rooms ─────────────────────────────────────────────────────────────────
 
 export const rooms = {
-  discovery: (token: string, category?: string, limit?: number) => {
+  discovery: (token: string | null, category?: string, limit?: number) => {
     const params = new URLSearchParams()
     if (category) params.set('category', category)
     if (limit) params.set('limit', String(limit))
@@ -193,13 +200,13 @@ export const rooms = {
     return request<DiscoveryResponse>(`/api/v1/rooms/discovery${query}`, { token })
   },
 
-  trending: (token: string) =>
+  trending: (token: string | null) =>
     request<Room[]>('/api/v1/rooms/trending', { token }),
 
-  live: (token: string) =>
+  live: (token: string | null) =>
     request<Room[]>('/api/v1/rooms/live', { token }),
 
-  random: (token: string, category?: string, room_type?: RoomType) => {
+  random: (token: string | null, category?: string, room_type?: RoomType) => {
     const params = new URLSearchParams()
     if (category) params.set('category', category)
     if (room_type) params.set('room_type', room_type)
@@ -207,17 +214,17 @@ export const rooms = {
     return request<Room | null>(`/api/v1/rooms/random${query}`, { token })
   },
 
-  list: (token: string, communityId: Uuid) =>
+  list: (token: string | null, communityId: Uuid) =>
     request<Room[]>(`/api/v1/communities/${communityId}/rooms`, { token }),
 
-  get: (token: string, id: Uuid) =>
+  get: (token: string | null, id: Uuid) =>
     request<RoomWithPermissions>(`/api/v1/rooms/${id}`, { token }),
 
-  mine: (token: string) =>
+  mine: (token: string | null) =>
     request<UserRoom[]>('/api/v1/rooms/mine', { token }),
 
   createStandalone: (
-    token: string,
+    token: string | null,
     input: {
       name: string
       room_type: RoomType
@@ -237,7 +244,7 @@ export const rooms = {
     }),
 
   create: (
-    token: string,
+    token: string | null,
     communityId: Uuid,
     input: {
       name: string
@@ -257,24 +264,24 @@ export const rooms = {
       token,
     }),
 
-  join: (token: string, id: Uuid) =>
+  join: (token: string | null, id: Uuid) =>
     request<RoomWithPermissions>(`/api/v1/rooms/${id}/join`, {
       method: 'POST',
       body: {},
       token,
     }),
 
-  leave: (token: string, id: Uuid) =>
+  leave: (token: string | null, id: Uuid) =>
     request<void>(`/api/v1/rooms/${id}/leave`, {
       method: 'POST',
       body: {},
       token,
     }),
 
-  participants: (token: string, id: Uuid) =>
+  participants: (token: string | null, id: Uuid) =>
     request<RoomParticipant[]>(`/api/v1/rooms/${id}/participants`, { token }),
 
-  setPersona: (token: string, id: Uuid, is_anonymous: boolean) =>
+  setPersona: (token: string | null, id: Uuid, is_anonymous: boolean) =>
     request<RoomParticipant>(`/api/v1/rooms/${id}/persona`, {
       method: 'PATCH',
       body: { is_anonymous },
@@ -282,7 +289,7 @@ export const rooms = {
     }),
 
   update: (
-    token: string,
+    token: string | null,
     id: Uuid,
     input: {
       name?: string
@@ -300,13 +307,13 @@ export const rooms = {
       token,
     }),
 
-  delete: (token: string, id: Uuid) =>
+  delete: (token: string | null, id: Uuid) =>
     request<void>(`/api/v1/rooms/${id}`, {
       method: 'DELETE',
       token,
     }),
 
-  openDM: (token: string, targetUserId: Uuid) =>
+  openDM: (token: string | null, targetUserId: Uuid) =>
     request<Room>(`/api/v1/rooms/dm/${targetUserId}`, {
       method: 'POST',
       token,
@@ -319,7 +326,7 @@ export const rooms = {
    * A POST, not a read: entering a media room mints a credential. Use `get`
    * when you only want to look at the room.
    */
-  session: (token: string, id: Uuid) =>
+  session: (token: string | null, id: Uuid) =>
     request<RoomSessionResponse>(`/api/v1/rooms/${id}/session`, {
       method: 'POST',
       token,
@@ -336,40 +343,40 @@ export const messages = {
    * `next_before_id`. Sending only the timestamp still works, but can skip
    * messages that share one.
    */
-  history: (token: string, roomId: Uuid, before?: string, beforeId?: string, limit = 50) => {
+  history: (token: string | null, roomId: Uuid, before?: string, beforeId?: string, limit = 50) => {
     const params = new URLSearchParams({ limit: String(limit) })
     if (before) params.set('before', before)
     if (beforeId) params.set('before_id', beforeId)
     return request<MessagePage>(`/api/v1/rooms/${roomId}/messages?${params}`, { token })
   },
 
-  post: (token: string, roomId: Uuid, content: string, is_anonymous?: boolean) =>
+  post: (token: string | null, roomId: Uuid, content: string, is_anonymous?: boolean) =>
     request<Message>(`/api/v1/rooms/${roomId}/messages`, {
       method: 'POST',
       body: { content, is_anonymous },
       token,
     }),
 
-  edit: (token: string, messageId: Uuid, content: string) =>
+  edit: (token: string | null, messageId: Uuid, content: string) =>
     request<Message>(`/api/v1/messages/${messageId}`, {
       method: 'PATCH',
       body: { content },
       token,
     }),
 
-  remove: (token: string, messageId: Uuid) =>
+  remove: (token: string | null, messageId: Uuid) =>
     request<void>(`/api/v1/messages/${messageId}`, { method: 'DELETE', token }),
 
   // Both reaction calls return the message's *whole* new tally rather than a
   // delta, so the client never has to reconstruct a count it can be told.
-  react: (token: string, messageId: Uuid, reaction: string) =>
+  react: (token: string | null, messageId: Uuid, reaction: string) =>
     request<ReactionSummary[]>(`/api/v1/messages/${messageId}/reactions`, {
       method: 'PUT',
       body: { reaction },
       token,
     }),
 
-  unreact: (token: string, messageId: Uuid, reaction: string) =>
+  unreact: (token: string | null, messageId: Uuid, reaction: string) =>
     request<ReactionSummary[]>(`/api/v1/messages/${messageId}/reactions`, {
       method: 'DELETE',
       body: { reaction },
@@ -381,38 +388,38 @@ export const messages = {
 
 export const friends = {
   /** Accepted friends, as ids. Resolve them through `useProfiles`. */
-  list: (token: string) => request<Uuid[]>('/api/v1/friends', { token }),
+  list: (token: string | null) => request<Uuid[]>('/api/v1/friends', { token }),
 
   /** Requests awaiting this user's answer. */
-  pending: (token: string) =>
+  pending: (token: string | null) =>
     request<Friendship[]>('/api/v1/friends/requests', { token }),
 
   /** Requests this user has sent that nobody has answered yet. */
-  sent: (token: string) =>
+  sent: (token: string | null) =>
     request<Friendship[]>('/api/v1/friends/sent', { token }),
 
-  request: (token: string, userId: Uuid) =>
+  request: (token: string | null, userId: Uuid) =>
     request<Friendship>('/api/v1/friends', {
       method: 'POST',
       body: { user_id: userId },
       token,
     }),
 
-  respond: (token: string, requesterId: Uuid, accept: boolean) =>
+  respond: (token: string | null, requesterId: Uuid, accept: boolean) =>
     request<Friendship>(`/api/v1/friends/${requesterId}/respond`, {
       method: 'POST',
       body: { accept },
       token,
     }),
 
-  remove: (token: string, userId: Uuid) =>
+  remove: (token: string | null, userId: Uuid) =>
     request<void>(`/api/v1/friends/${userId}`, { method: 'DELETE', token }),
 }
 
 // ── notifications ─────────────────────────────────────────────────────────
 
 export const notifications = {
-  list: (token: string, before?: Timestamp, limit?: number) => {
+  list: (token: string | null, before?: Timestamp, limit?: number) => {
     const params = new URLSearchParams()
     if (before) params.set('before', before)
     if (limit) params.set('limit', String(limit))
@@ -420,10 +427,10 @@ export const notifications = {
     return request<NotificationPage>(`/api/v1/notifications${query}`, { token })
   },
 
-  markRead: (token: string, id: Uuid) =>
+  markRead: (token: string | null, id: Uuid) =>
     request<void>(`/api/v1/notifications/${id}/read`, { method: 'POST', token }),
 
-  markAllRead: (token: string) =>
+  markAllRead: (token: string | null) =>
     request<void>('/api/v1/notifications/read', { method: 'POST', token }),
 }
 
@@ -436,7 +443,7 @@ export const presence = {
    * Omitting `ids` returns everyone connected — what the friends list wants,
    * since it has no id list of its own until the friendships have loaded.
    */
-  online: (token: string, ids?: Uuid[]) => {
+  online: (token: string | null, ids?: Uuid[]) => {
     const query = ids && ids.length > 0 ? `?ids=${ids.join(',')}` : ''
     return request<{ online: Uuid[] }>(`/api/v1/presence${query}`, { token })
   },
@@ -447,30 +454,30 @@ export const social = {
    * The social screen in one call: friends, which of them are online, requests
    * in both directions, and the blocklist — five endpoints' worth.
    */
-  overview: (token: string) =>
+  overview: (token: string | null) =>
     request<SocialOverviewResponse>('/api/v1/me/social', { token }),
 }
 
 export const blocks = {
-  list: (token: string) => request<Uuid[]>('/api/v1/blocks', { token }),
+  list: (token: string | null) => request<Uuid[]>('/api/v1/blocks', { token }),
 
-  block: (token: string, userId: Uuid) =>
+  block: (token: string | null, userId: Uuid) =>
     request<void>(`/api/v1/blocks/${userId}`, { method: 'PUT', token }),
 
-  unblock: (token: string, userId: Uuid) =>
+  unblock: (token: string | null, userId: Uuid) =>
     request<void>(`/api/v1/blocks/${userId}`, { method: 'DELETE', token }),
 }
 
 // ── media ─────────────────────────────────────────────────────────────────
 
 export const media = {
-  join: (token: string, roomId: Uuid) =>
+  join: (token: string | null, roomId: Uuid) =>
     request<MediaJoinResponse>(`/api/v1/rooms/${roomId}/media/join`, {
       method: 'POST',
       token,
     }),
 
-  leave: (token: string, roomId: Uuid) =>
+  leave: (token: string | null, roomId: Uuid) =>
     request<void>(`/api/v1/rooms/${roomId}/media/leave`, { method: 'POST', token }),
 
   /**
@@ -481,7 +488,7 @@ export const media = {
    * one. Nothing here mints a token, so a ring that goes unheard costs the call
    * nothing — whoever opens the conversation still walks into it.
    */
-  ring: (token: string, roomId: Uuid, video: boolean) =>
+  ring: (token: string | null, roomId: Uuid, video: boolean) =>
     request<void>(`/api/v1/rooms/${roomId}/call/ring`, {
       method: 'POST',
       body: { video },
@@ -489,7 +496,7 @@ export const media = {
     }),
 
   /** Stop a call that has not connected — a hang-up before the answer, or a decline. */
-  endCall: (token: string, roomId: Uuid, reason: CallEndReason) =>
+  endCall: (token: string | null, roomId: Uuid, reason: CallEndReason) =>
     request<void>(`/api/v1/rooms/${roomId}/call/end`, {
       method: 'POST',
       body: { reason },

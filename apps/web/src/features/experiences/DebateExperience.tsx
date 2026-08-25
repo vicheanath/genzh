@@ -16,9 +16,9 @@ import { Avatar } from '@/components/Avatar'
 import { useToast } from '@/components/Toast'
 import { cx } from '@/lib/cx'
 import { type RoomWithPermissions } from '@/lib/api'
-import { chatApi as messagesApi } from '@/features/chat'
+import { useSendMessageMutation } from '@/features/api'
 import { useAuth } from '@/lib/auth'
-import { chatSocket } from '@/lib/ws/ChatSocket'
+import { useRoomBroadcast } from '@/features/realtime'
 import styles from './DebateExperience.module.css'
 
 interface DebatePoint {
@@ -47,7 +47,9 @@ const DEFAULT_POINTS: DebatePoint[] = [
 ]
 
 export function DebateExperience({ room }: { room: RoomWithPermissions }) {
-  const { user, getToken } = useAuth()
+  const { user } = useAuth()
+  const sendMessage = useSendMessageMutation(room.id)
+  const broadcast = useRoomBroadcast(room.id)
   const toast = useToast()
   const [proVotes, setProVotes] = useState(14)
   const [conVotes, setConVotes] = useState(9)
@@ -71,9 +73,8 @@ export function DebateExperience({ room }: { room: RoomWithPermissions }) {
     const msg = `🔥 **LIVE DEBATE STANDINGS** 🔥\n📌 Motion: *" ${topic} "*\n\n🟢 **PRO (Side A)**: ${pP}% (${proVotes} votes)\n🔴 **CON (Side B)**: ${pC}% (${conVotes} votes)\n\n*Cast your vote on the live meter above!*`
 
     try {
-      const token = await getToken()
-      await messagesApi.post(token, room.id, msg, room.is_anonymous)
-      chatSocket.sendMessage(room.id, msg, room.is_anonymous)
+      await sendMessage.mutateAsync({ content: msg, is_anonymous: room.is_anonymous })
+      broadcast(msg, room.is_anonymous)
       toast.success('Debate standings posted to chat!')
     } catch {
       toast.error('Could not post to chat')

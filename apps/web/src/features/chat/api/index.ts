@@ -1,3 +1,3 @@
 export * from './types'
-export * from './chatApi'
+export * from './cache'
 export * from './useChatApi'
