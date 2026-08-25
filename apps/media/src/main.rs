@@ -7,6 +7,7 @@
 mod auth;
 mod config;
 mod error;
+mod jobs;
 mod signaling;
 mod state;
 
@@ -75,40 +76,17 @@ async fn run() -> anyhow::Result<()> {
     let listener = TcpListener::bind(bind).await?;
     tracing::info!(%bind, "media server listening");
 
-    // Periodic cron job to clean up unused SFU resources (empty rooms and disconnected participants).
-    let (cleanup_shutdown_tx, mut cleanup_shutdown_rx) = tokio::sync::watch::channel(false);
-    let cleanup_rooms = state.rooms.clone();
-    let cleanup_task = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-        interval.tick().await; // skip initial immediate tick
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    let report = cleanup_rooms.prune().await;
-                    if report.rooms_removed > 0 || report.participants_removed > 0 {
-                        tracing::info!(
-                            rooms_removed = report.rooms_removed,
-                            participants_removed = report.participants_removed,
-                            "sfu cleanup completed"
-                        );
-                    }
-                }
-                Ok(()) = cleanup_shutdown_rx.changed() => {
-                    if *cleanup_shutdown_rx.borrow() {
-                        tracing::debug!("sfu cleanup cron task stopped");
-                        break;
-                    }
-                }
-            }
-        }
-    });
+    let scheduler = genzh_cron::CronScheduler::new().await?;
+    jobs::register(&scheduler, &state).await?;
+    scheduler.start().await?;
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
-    let _ = cleanup_shutdown_tx.send(true);
-    let _ = cleanup_task.await;
+    // Before the rooms are torn down below, so a sweep cannot race the
+    // shutdown and try to destroy a room that is already being closed.
+    scheduler.shutdown().await?;
 
     // Close every peer connection rather than letting the process exit with
     // sockets open; clients then see a clean disconnect instead of a timeout.

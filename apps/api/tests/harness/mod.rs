@@ -27,6 +27,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Router;
 use axum::body::Body;
@@ -264,6 +265,18 @@ fn api_config(database_url: String) -> api::Config {
         discord_client_id: None,
         discord_client_secret: None,
         discord_redirect_uri: None,
+
+        // Long enough that no sweep fires during a test run. The harness never
+        // starts the scheduler, so these only have to be values that parse —
+        // but a test that did start it should not have rows pruned underneath
+        // it either.
+        cron: api::config::CronConfig {
+            session_prune_interval: Duration::from_secs(3600),
+            room_prune_interval: Duration::from_secs(3600),
+            participant_stale_after: Duration::from_secs(3600),
+            room_empty_grace: Duration::from_secs(3600),
+            store_sweep_interval: Duration::from_secs(3600),
+        },
     }
 }
 
