@@ -26,6 +26,13 @@ pub struct Message {
     pub author_id: UserId,
     /// Message body.
     pub content: String,
+    /// The message this one answers, when it answers one.
+    ///
+    /// Nulled rather than cascaded when the parent is deleted: removing a
+    /// message must not remove the answers to it. A reply whose parent is gone
+    /// still happened, and still reads as a reply to something deleted.
+    #[serde(default)]
+    pub reply_to_id: Option<MessageId>,
     /// Whether this message was posted anonymously.
     #[serde(default)]
     pub is_anonymous: bool,

@@ -508,3 +508,89 @@ pub async fn templates() -> Json<Vec<CommunityTemplateResponse>> {
             .collect(),
     )
 }
+
+// ──────────────────────────── invite links ────────────────────────────
+
+/// `POST /api/v1/communities/{id}/invites` body.
+#[derive(Debug, Deserialize)]
+pub struct CreateInviteRequest {
+    /// Hours until it stops working. Absent means it never expires.
+    #[serde(default)]
+    pub expires_in_hours: Option<i64>,
+    /// How many times it may be redeemed. Absent means unlimited.
+    #[serde(default)]
+    pub max_uses: Option<i32>,
+}
+
+/// `POST /api/v1/communities/{id}/invites`
+pub async fn create_invite(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(community_id): Path<CommunityId>,
+    ApiJson(body): ApiJson<CreateInviteRequest>,
+) -> ApiResult<(StatusCode, Json<genzh_community::Invite>)> {
+    let invite = state
+        .invites
+        .create(
+            community_id,
+            caller.user_id,
+            body.expires_in_hours,
+            body.max_uses,
+        )
+        .await?;
+    Ok((StatusCode::CREATED, Json(invite)))
+}
+
+/// `GET /api/v1/communities/{id}/invites`
+pub async fn list_invites(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(community_id): Path<CommunityId>,
+) -> ApiResult<Json<Vec<genzh_community::Invite>>> {
+    Ok(Json(state.invites.list(community_id, caller.user_id).await?))
+}
+
+/// `GET /api/v1/invites/{code}`
+///
+/// What a link leads to, without joining it. Answers for anybody signed in,
+/// because that is what a link is for: you are handed one by somebody already
+/// inside, and you have to see what it is before deciding.
+pub async fn preview_invite(
+    State(state): State<AppState>,
+    _caller: CurrentUser,
+    Path(code): Path<String>,
+) -> ApiResult<Json<genzh_community::InvitePreview>> {
+    Ok(Json(state.invites.preview(&code).await?))
+}
+
+/// `POST /api/v1/invites/{code}`
+///
+/// Redeem: join the community the link points at. Returns the community so the
+/// client can navigate straight there.
+pub async fn redeem_invite(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(code): Path<String>,
+) -> ApiResult<Json<CommunityResponse>> {
+    let community_id = state.invites.redeem(&code, caller.user_id).await?;
+    let community = state.communities.get(community_id, caller.user_id).await?;
+    let context = state
+        .communities
+        .member_context(community_id, caller.user_id)
+        .await?;
+
+    Ok(Json(CommunityResponse {
+        community,
+        your_permissions: context.permissions.to_permissions(),
+    }))
+}
+
+/// `DELETE /api/v1/invites/{code}`
+pub async fn revoke_invite(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(code): Path<String>,
+) -> ApiResult<StatusCode> {
+    state.invites.revoke(&code, caller.user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}

@@ -11,6 +11,7 @@ pub mod authorization;
 pub mod directory;
 pub mod directs;
 pub mod media;
+pub mod read_state;
 pub mod repository;
 pub mod service;
 
@@ -20,3 +21,4 @@ pub use directs::DirectRooms;
 pub use media::{MediaJoinResponse, MediaServerSelector, MediaSessionService, StaticMediaServers};
 pub use repository::RoomRepository;
 pub use service::{CreateRoom, RoomService, UpdateRoom};
+pub use read_state::{ReadStateService, RoomUnread};

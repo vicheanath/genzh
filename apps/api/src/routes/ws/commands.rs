@@ -134,9 +134,12 @@ async fn send_message(
             .unwrap_or(false),
     };
 
+    // The socket path posts plain messages. Replying goes through REST, where
+    // a parent that is missing or in another room can be refused and reported
+    // — a socket send has no reply channel to refuse into.
     let posted = state
         .messaging
-        .post(room_id, user.user_id, content, is_anon)
+        .post(room_id, user.user_id, content, is_anon, None)
         .await;
 
     // Dropping a refusal here would leave the sender watching for a message

@@ -1608,3 +1608,379 @@ async fn me_reports_the_platform_role() {
     // and not whenever the access token happens to expire.
     assert_eq!(after["platform_role"], "admin");
 }
+
+/// A reply points at a message, and survives that message being deleted.
+#[tokio::test]
+async fn a_reply_outlives_the_message_it_answers() {
+    let Some(api) = boot().await else {
+        return skip("a_reply_outlives_the_message_it_answers");
+    };
+
+    let alice = api.register("alice").await;
+    let community_id = api.create_community(&alice, "Night Owls").await;
+    let room_id = api.create_room(&alice, &community_id, "lounge", "text").await;
+
+    let parent = api.post_message(&alice, &room_id, "the original").await;
+    let reply = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/messages"),
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "content": "answering that", "reply_to_id": parent })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED)
+        .json;
+    assert_eq!(reply["reply_to_id"], parent.as_str());
+
+    api.send(
+        "DELETE",
+        &format!("/api/v1/messages/{parent}"),
+        Some(&alice.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    // The reply is still there, now answering something that is gone. Deleting
+    // a message must not delete the answers to it.
+    let history = api
+        .send(
+            "GET",
+            &format!("/api/v1/rooms/{room_id}/messages"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    let messages = history["messages"].as_array().expect("messages");
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0]["content"], "answering that");
+    assert!(messages[0]["reply_to_id"].is_null());
+}
+
+/// A reply cannot quote a message from a room the author is not in.
+#[tokio::test]
+async fn a_reply_cannot_reach_into_another_room() {
+    let Some(api) = boot().await else {
+        return skip("a_reply_cannot_reach_into_another_room");
+    };
+
+    let alice = api.register("alice").await;
+    let community_id = api.create_community(&alice, "Night Owls").await;
+    let here = api.create_room(&alice, &community_id, "here", "text").await;
+    let elsewhere = api.create_room(&alice, &community_id, "elsewhere", "text").await;
+
+    let far_away = api.post_message(&alice, &elsewhere, "a secret").await;
+
+    // Otherwise the quoted excerpt renders content from a room the reader may
+    // not be able to open.
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{here}/messages"),
+        Some(&alice.access_token),
+        Some(serde_json::json!({ "content": "quoting", "reply_to_id": far_away })),
+    )
+    .await
+    .expect_status(StatusCode::NOT_FOUND);
+}
+
+/// Pinning is a moderation call, not an author's.
+#[tokio::test]
+async fn pinning_needs_manage_room_not_authorship() {
+    let Some(api) = boot().await else {
+        return skip("pinning_needs_manage_room_not_authorship");
+    };
+
+    let owner = api.register("owner").await;
+    let member = api.register("member").await;
+    let community_id = api.create_community(&owner, "Night Owls").await;
+    let room_id = api.create_room(&owner, &community_id, "lounge", "text").await;
+
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&member.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+
+    let theirs = api.post_message(&member, &room_id, "pin me").await;
+
+    // Their own message, and they still may not pin it.
+    api.send(
+        "PUT",
+        &format!("/api/v1/messages/{theirs}/pin"),
+        Some(&member.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::FORBIDDEN);
+
+    api.send(
+        "PUT",
+        &format!("/api/v1/messages/{theirs}/pin"),
+        Some(&owner.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    let pins = api
+        .send(
+            "GET",
+            &format!("/api/v1/rooms/{room_id}/pins"),
+            Some(&member.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(pins.as_array().expect("pins").len(), 1);
+
+    // Pinning twice is the same pin.
+    api.send(
+        "PUT",
+        &format!("/api/v1/messages/{theirs}/pin"),
+        Some(&owner.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+    let pins = api
+        .send(
+            "GET",
+            &format!("/api/v1/rooms/{room_id}/pins"),
+            Some(&owner.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(pins.as_array().expect("pins").len(), 1);
+}
+
+/// Search finds your own rooms and never anybody else's.
+#[tokio::test]
+async fn search_is_scoped_to_rooms_the_caller_is_in() {
+    let Some(api) = boot().await else {
+        return skip("search_is_scoped_to_rooms_the_caller_is_in");
+    };
+
+    let alice = api.register("alice").await;
+    let stranger = api.register("stranger").await;
+    let community_id = api.create_community(&alice, "Night Owls").await;
+    let room_id = api.create_room(&alice, &community_id, "lounge", "text").await;
+
+    api.post_message(&alice, &room_id, "the peregrine falcon is fast").await;
+    api.post_message(&alice, &room_id, "unrelated chatter").await;
+
+    let hits = api
+        .send(
+            "GET",
+            "/api/v1/search/messages?q=peregrine",
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(hits.as_array().expect("hits").len(), 1);
+
+    // The stranger is in no rooms, so the same query finds nothing — the scope
+    // is in the query, so there is nothing to find and then hide.
+    let none = api
+        .send(
+            "GET",
+            "/api/v1/search/messages?q=peregrine",
+            Some(&stranger.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert!(none.as_array().expect("hits").is_empty());
+}
+
+/// Unread counts drop when a room is read, and muting does not mark it read.
+#[tokio::test]
+async fn unread_counts_track_reading_and_muting_is_separate() {
+    let Some(api) = boot().await else {
+        return skip("unread_counts_track_reading_and_muting_is_separate");
+    };
+
+    let owner = api.register("owner").await;
+    let reader = api.register("reader").await;
+    let community_id = api.create_community(&owner, "Night Owls").await;
+    let room_id = api.create_room(&owner, &community_id, "lounge", "text").await;
+
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&reader.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+    // Joining the room is what makes them a participant, which is what the
+    // unread overview is keyed on.
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{room_id}/participants"),
+        Some(&reader.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await;
+
+    api.post_message(&owner, &room_id, "first").await;
+    api.post_message(&owner, &room_id, "second").await;
+
+    let unread_for = |token: String| async move {
+        api.send("GET", "/api/v1/me/unread", Some(&token), None)
+            .await
+            .expect_status(StatusCode::OK)
+            .json
+            .as_array()
+            .expect("rooms")
+            .iter()
+            .find(|entry| entry["room_id"] == room_id.as_str())
+            .cloned()
+    };
+
+    let before = unread_for(reader.access_token.clone()).await;
+    assert_eq!(before.as_ref().and_then(|e| e["unread"].as_i64()), Some(2));
+
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{room_id}/read"),
+        Some(&reader.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    let after = unread_for(reader.access_token.clone()).await;
+    assert_eq!(after.as_ref().and_then(|e| e["unread"].as_i64()), Some(0));
+
+    // Muting is about attention, not about marking things read: a new message
+    // still counts, the room just stops asking.
+    api.send(
+        "PUT",
+        &format!("/api/v1/rooms/{room_id}/mute"),
+        Some(&reader.access_token),
+        Some(serde_json::json!({ "muted": true })),
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    api.post_message(&owner, &room_id, "third").await;
+
+    let muted = unread_for(reader.access_token.clone()).await;
+    assert_eq!(muted.as_ref().and_then(|e| e["unread"].as_i64()), Some(1));
+    assert_eq!(muted.as_ref().and_then(|e| e["muted"].as_bool()), Some(true));
+}
+
+/// An invite link previews, redeems once per use, and can be revoked.
+#[tokio::test]
+async fn an_invite_link_lets_somebody_in_and_can_be_spent() {
+    let Some(api) = boot().await else {
+        return skip("an_invite_link_lets_somebody_in_and_can_be_spent");
+    };
+
+    let owner = api.register("owner").await;
+    let guest = api.register("guest").await;
+    let latecomer = api.register("latecomer").await;
+    let community_id = api.create_community(&owner, "Night Owls").await;
+
+    let code = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/invites"),
+            Some(&owner.access_token),
+            Some(serde_json::json!({ "max_uses": 1 })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED)
+        .json["code"]
+        .as_str()
+        .expect("code")
+        .to_owned();
+
+    // A stranger can see what the link leads to before deciding.
+    let preview = api
+        .send(
+            "GET",
+            &format!("/api/v1/invites/{code}"),
+            Some(&guest.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(preview["name"], "Night Owls");
+
+    api.send(
+        "POST",
+        &format!("/api/v1/invites/{code}"),
+        Some(&guest.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::OK);
+
+    // The single use is spent, so the next person is refused.
+    api.send(
+        "POST",
+        &format!("/api/v1/invites/{code}"),
+        Some(&latecomer.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NOT_FOUND);
+}
+
+/// A revoked link stops working.
+#[tokio::test]
+async fn revoking_an_invite_closes_the_door() {
+    let Some(api) = boot().await else {
+        return skip("revoking_an_invite_closes_the_door");
+    };
+
+    let owner = api.register("owner").await;
+    let guest = api.register("guest").await;
+    let community_id = api.create_community(&owner, "Night Owls").await;
+
+    let code = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/invites"),
+            Some(&owner.access_token),
+            Some(serde_json::json!({})),
+        )
+        .await
+        .expect_status(StatusCode::CREATED)
+        .json["code"]
+        .as_str()
+        .expect("code")
+        .to_owned();
+
+    api.send(
+        "DELETE",
+        &format!("/api/v1/invites/{code}"),
+        Some(&owner.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    api.send(
+        "GET",
+        &format!("/api/v1/invites/{code}"),
+        Some(&guest.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NOT_FOUND);
+}

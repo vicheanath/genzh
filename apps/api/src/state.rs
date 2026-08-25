@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use genzh_admin::{AuditLog, StaffService, SupportService};
 use genzh_auth::{AuthService, JwtService};
-use genzh_community::{CommunityService, RoleService};
+use genzh_community::{CommunityService, InviteService, RoleService};
 use genzh_graph::SocialService;
 use genzh_infrastructure::{
     DbPool, EventBus, FloodGuard, FloodPolicy, InMemoryEventBus, InMemoryFloodGuard,
@@ -18,7 +18,10 @@ use genzh_infrastructure::{
 use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
 use genzh_notification::NotificationService;
-use genzh_room::{DirectRooms, MediaSessionService, RoomDirectory, RoomService, StaticMediaServers};
+use genzh_room::{
+    DirectRooms, MediaSessionService, ReadStateService, RoomDirectory, RoomService,
+    StaticMediaServers,
+};
 
 use crate::config::Config;
 use crate::routes::ws::ChatServerEvent;
@@ -69,6 +72,10 @@ pub struct AppState {
     pub staff: StaffService,
     /// Reports and help requests.
     pub support: SupportService,
+    /// Invite links into communities.
+    pub invites: InviteService,
+    /// Where each person got to in each room.
+    pub read_state: ReadStateService,
     /// Media join authorization and token minting.
     pub media: Arc<MediaSessionService>,
     /// The configuration this process started with.
@@ -135,6 +142,8 @@ impl AppState {
         let audit = AuditLog::new(pool.clone());
         let staff = StaffService::new(pool.clone(), audit.clone());
         let support = SupportService::new(pool.clone(), audit.clone());
+        let invites = InviteService::new(pool.clone(), communities.clone());
+        let read_state = ReadStateService::new(pool.clone());
 
         let signer = Arc::new(MediaTokenSigner::new(
             config.media_token_secret.as_bytes(),
@@ -194,6 +203,8 @@ impl AppState {
             audit,
             staff,
             support,
+            invites,
+            read_state,
             media,
             flood,
             events: InMemoryEventBus::new(EVENT_BUFFER),

@@ -41,15 +41,16 @@ impl MessageRepository {
     /// Insert a message.
     pub async fn create(&self, message: &Message) -> RepositoryResult<Message> {
         sqlx::query_as(
-            "INSERT INTO messages (id, room_id, author_id, content, is_anonymous)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id, room_id, author_id, content, is_anonymous, edited_at, created_at",
+            "INSERT INTO messages (id, room_id, author_id, content, is_anonymous, reply_to_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, room_id, author_id, content, is_anonymous, reply_to_id, edited_at, created_at",
         )
         .bind(message.id)
         .bind(message.room_id)
         .bind(message.author_id)
         .bind(&message.content)
         .bind(message.is_anonymous)
+        .bind(message.reply_to_id)
         .fetch_one(&self.pool)
         .await
         .map_err(RepositoryError::from)
@@ -58,7 +59,7 @@ impl MessageRepository {
     /// Fetch one message.
     pub async fn find(&self, id: MessageId) -> RepositoryResult<Option<Message>> {
         sqlx::query_as(
-            "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
+            "SELECT id, room_id, author_id, content, is_anonymous, reply_to_id, edited_at, created_at
              FROM messages WHERE id = $1",
         )
         .bind(id)
@@ -90,7 +91,7 @@ impl MessageRepository {
             // between two timestamps.
             (Some(before), Some(before_id)) => {
                 sqlx::query_as(
-                    "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
+                    "SELECT id, room_id, author_id, content, is_anonymous, reply_to_id, edited_at, created_at
                      FROM messages
                      WHERE room_id = $1 AND (created_at, id) < ($2, $3)
                      ORDER BY created_at DESC, id DESC LIMIT $4",
@@ -107,7 +108,7 @@ impl MessageRepository {
             // skip a same-microsecond group at the boundary.
             (Some(before), None) => {
                 sqlx::query_as(
-                    "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
+                    "SELECT id, room_id, author_id, content, is_anonymous, reply_to_id, edited_at, created_at
                      FROM messages WHERE room_id = $1 AND created_at < $2
                      ORDER BY created_at DESC, id DESC LIMIT $3",
                 )
@@ -119,7 +120,7 @@ impl MessageRepository {
             }
             (None, _) => {
                 sqlx::query_as(
-                    "SELECT id, room_id, author_id, content, is_anonymous, edited_at, created_at
+                    "SELECT id, room_id, author_id, content, is_anonymous, reply_to_id, edited_at, created_at
                      FROM messages WHERE room_id = $1
                      ORDER BY created_at DESC, id DESC LIMIT $2",
                 )
@@ -153,7 +154,7 @@ impl MessageRepository {
             // `is_anonymous` is not optional here: `Message` has the field, and
             // omitting it from RETURNING makes every edit fail to deserialise.
             "UPDATE messages SET content = $2, edited_at = now() WHERE id = $1
-             RETURNING id, room_id, author_id, content, is_anonymous, edited_at, created_at",
+             RETURNING id, room_id, author_id, content, is_anonymous, reply_to_id, edited_at, created_at",
         )
         .bind(id)
         .bind(content)
@@ -275,6 +276,93 @@ impl MessageRepository {
         }
         Ok(grouped)
     }
+
+    // ── pins ─────────────────────────────────────────────────────────────
+
+    /// Pin a message. Pinning one twice is the same pin.
+    pub async fn pin(
+        &self,
+        room_id: RoomId,
+        message_id: MessageId,
+        pinned_by: UserId,
+    ) -> RepositoryResult<()> {
+        sqlx::query(
+            "INSERT INTO pinned_messages (room_id, message_id, pinned_by)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (room_id, message_id) DO NOTHING",
+        )
+        .bind(room_id)
+        .bind(message_id)
+        .bind(pinned_by)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn unpin(&self, room_id: RoomId, message_id: MessageId) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM pinned_messages WHERE room_id = $1 AND message_id = $2")
+            .bind(room_id)
+            .bind(message_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// A room's pinned messages, most recently pinned first.
+    pub async fn pins(&self, room_id: RoomId) -> RepositoryResult<Vec<Message>> {
+        sqlx::query_as::<_, Message>(
+            "SELECT m.id, m.room_id, m.author_id, m.content, m.is_anonymous, m.reply_to_id,
+                    m.edited_at, m.created_at
+             FROM pinned_messages p
+             JOIN messages m ON m.id = p.message_id
+             WHERE p.room_id = $1
+             ORDER BY p.pinned_at DESC
+             LIMIT 100",
+        )
+        .bind(room_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    // ── search ───────────────────────────────────────────────────────────
+
+    /// Full-text search, restricted to rooms the caller is a participant of.
+    ///
+    /// The room restriction is part of the query rather than a filter over its
+    /// results: anything else searches the whole table on behalf of somebody
+    /// who may read almost none of it, and leaks timing and result counts even
+    /// when it hides the rows.
+    pub async fn search(
+        &self,
+        user_id: UserId,
+        query: &str,
+        room_id: Option<RoomId>,
+        limit: i64,
+    ) -> RepositoryResult<Vec<Message>> {
+        sqlx::query_as::<_, Message>(
+            "SELECT m.id, m.room_id, m.author_id, m.content, m.is_anonymous, m.reply_to_id,
+                    m.edited_at, m.created_at
+             FROM messages m
+             WHERE m.content_tsv @@ websearch_to_tsquery('english', $2)
+               AND ($3::uuid IS NULL OR m.room_id = $3)
+               AND EXISTS (
+                   SELECT 1 FROM room_participants rp
+                   WHERE rp.room_id = m.room_id AND rp.user_id = $1
+               )
+             ORDER BY ts_rank(m.content_tsv, websearch_to_tsquery('english', $2)) DESC,
+                      m.created_at DESC
+             LIMIT $4",
+        )
+        .bind(user_id)
+        .bind(query)
+        .bind(room_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
 }
 
 /// One `GROUP BY message_id, reaction` row, before bucketing.

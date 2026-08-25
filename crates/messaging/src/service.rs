@@ -82,6 +82,7 @@ impl MessagingService {
         author_id: UserId,
         content: &str,
         is_anonymous: bool,
+        reply_to_id: Option<MessageId>,
     ) -> ServiceResult<Message> {
         let access = self.rooms.visible_access(room_id, author_id).await?;
         access.require(Permission::SendMessage)?;
@@ -99,12 +100,27 @@ impl MessagingService {
         )
         .await?;
 
+        // A reply must point at a message in the same room. Without this a
+        // reply could quote something out of a room the reader cannot see, and
+        // the quoted excerpt would leak it.
+        if let Some(parent_id) = reply_to_id {
+            let parent = self
+                .messages
+                .find(parent_id)
+                .await?
+                .ok_or_else(|| ServiceError::not_found("message"))?;
+            if parent.room_id != room_id {
+                return Err(ServiceError::not_found("message"));
+            }
+        }
+
         let candidate = Message {
             id: MessageId::new(),
             room_id,
             author_id,
             content,
             is_anonymous,
+            reply_to_id,
             edited_at: None,
             created_at: now(),
         };
@@ -304,6 +320,77 @@ impl MessagingService {
             }
         }
     }
+
+    // ── pins ─────────────────────────────────────────────────────────────
+
+    /// Pin a message to the top of its room.
+    ///
+    /// `manage_room`, not authorship: a pin is the room saying "this matters",
+    /// which is a moderation decision rather than something the author gets to
+    /// make about their own message.
+    pub async fn pin(&self, message_id: MessageId, user_id: UserId) -> ServiceResult<()> {
+        let message = self
+            .messages
+            .find(message_id)
+            .await?
+            .ok_or_else(|| ServiceError::not_found("message"))?;
+
+        let access = self.rooms.visible_access(message.room_id, user_id).await?;
+        access.require(Permission::ManageRoom)?;
+
+        Ok(self.messages.pin(message.room_id, message_id, user_id).await?)
+    }
+
+    /// Remove a pin. Same permission as adding one.
+    pub async fn unpin(&self, message_id: MessageId, user_id: UserId) -> ServiceResult<()> {
+        let message = self
+            .messages
+            .find(message_id)
+            .await?
+            .ok_or_else(|| ServiceError::not_found("message"))?;
+
+        let access = self.rooms.visible_access(message.room_id, user_id).await?;
+        access.require(Permission::ManageRoom)?;
+
+        Ok(self.messages.unpin(message.room_id, message_id).await?)
+    }
+
+    /// A room's pinned messages, newest pin first.
+    pub async fn pins(&self, room_id: RoomId, user_id: UserId) -> ServiceResult<Vec<Message>> {
+        // Reading pins needs only what reading the room needs.
+        self.rooms.visible_access(room_id, user_id).await?;
+        Ok(self.messages.pins(room_id).await?)
+    }
+
+    // ── search ───────────────────────────────────────────────────────────
+
+    /// Find messages the caller can already see.
+    ///
+    /// Scoped by the rooms they are in rather than filtered afterwards: a
+    /// search that queries everything and hides the rest still tells you how
+    /// many results it hid, and how long they took to find.
+    pub async fn search(
+        &self,
+        user_id: UserId,
+        query: &str,
+        room_id: Option<RoomId>,
+        limit: Option<i64>,
+    ) -> ServiceResult<Vec<Message>> {
+        let query = query.trim();
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if let Some(room_id) = room_id {
+            self.rooms.visible_access(room_id, user_id).await?;
+        }
+
+        Ok(self
+            .messages
+            .search(user_id, query, room_id, message::clamp_page_size(limit))
+            .await?)
+    }
+
 }
 
 /// What a throttled poster is told. Phrased as advice, not as an accusation —

@@ -25,6 +25,9 @@ pub struct PostMessageRequest {
     /// Whether this message should be sent anonymously.
     #[serde(default)]
     pub is_anonymous: Option<bool>,
+    /// The message this one answers. Must be in the same room.
+    #[serde(default)]
+    pub reply_to_id: Option<genzh_domain::MessageId>,
 }
 
 /// `PATCH /api/v1/messages/{id}` body.
@@ -168,7 +171,7 @@ pub async fn post(
 
     let message = state
         .messaging
-        .post(room_id, caller.user_id, &body.content, is_anonymous)
+        .post(room_id, caller.user_id, &body.content, is_anonymous, body.reply_to_id)
         .await?;
 
     let anonymous_author = if is_anonymous {
@@ -320,4 +323,117 @@ pub async fn unreact(
     }
 
     Ok(Json(reactions))
+}
+
+// ────────────────────────────── pins ──────────────────────────────────
+
+/// `PUT /api/v1/messages/{id}/pin`
+///
+/// `manage_room`, not authorship: a pin is the room saying "this matters",
+/// which is a moderation call rather than one the author makes about their own
+/// message.
+pub async fn pin(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(message_id): Path<MessageId>,
+) -> ApiResult<StatusCode> {
+    state.messaging.pin(message_id, caller.user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /api/v1/messages/{id}/pin`
+pub async fn unpin(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(message_id): Path<MessageId>,
+) -> ApiResult<StatusCode> {
+    state.messaging.unpin(message_id, caller.user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/v1/rooms/{id}/pins`
+pub async fn pins(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(room_id): Path<RoomId>,
+) -> ApiResult<Json<Vec<Message>>> {
+    Ok(Json(state.messaging.pins(room_id, caller.user_id).await?))
+}
+
+// ───────────────────────────── search ─────────────────────────────────
+
+/// `GET /api/v1/search/messages` query string.
+#[derive(Debug, Deserialize)]
+pub struct MessageSearch {
+    /// What to look for. `websearch` syntax: quotes and `-` work as expected.
+    pub q: String,
+    /// Narrow to one room. Absent searches every room the caller is in.
+    #[serde(default)]
+    pub room_id: Option<RoomId>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+/// `GET /api/v1/search/messages`
+///
+/// Only ever searches rooms the caller participates in — the restriction is
+/// part of the query rather than a filter over its results, so nothing is
+/// found and then hidden.
+pub async fn search(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Query(params): Query<MessageSearch>,
+) -> ApiResult<Json<Vec<Message>>> {
+    Ok(Json(
+        state
+            .messaging
+            .search(caller.user_id, &params.q, params.room_id, params.limit)
+            .await?,
+    ))
+}
+
+// ─────────────────────── read state and muting ────────────────────────
+
+/// `GET /api/v1/me/unread`
+///
+/// One call for the whole sidebar: a user in forty rooms would otherwise cost
+/// forty round-trips on every page load.
+pub async fn unread(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+) -> ApiResult<Json<Vec<genzh_room::RoomUnread>>> {
+    Ok(Json(state.read_state.overview(caller.user_id).await?))
+}
+
+/// `POST /api/v1/rooms/{id}/read`
+pub async fn mark_read(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(room_id): Path<RoomId>,
+) -> ApiResult<StatusCode> {
+    state.read_state.mark_read(caller.user_id, room_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `PUT /api/v1/rooms/{id}/mute` body.
+#[derive(Debug, Deserialize)]
+pub struct MuteRequest {
+    pub muted: bool,
+}
+
+/// `PUT /api/v1/rooms/{id}/mute`
+///
+/// Muting does not mark anything read: a muted room still knows what you have
+/// not seen, it just stops asking for attention.
+pub async fn set_muted(
+    State(state): State<AppState>,
+    caller: CurrentUser,
+    Path(room_id): Path<RoomId>,
+    ApiJson(body): ApiJson<MuteRequest>,
+) -> ApiResult<StatusCode> {
+    state
+        .read_state
+        .set_muted(caller.user_id, room_id, body.muted)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }

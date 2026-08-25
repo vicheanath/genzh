@@ -211,9 +211,9 @@ async fn main() -> anyhow::Result<()> {
             println!("    - Channel: #{} ({:?})", room.name, room.room_type);
 
             // Seed sample messages
-            let _ = messaging.post(room.id, primary_user, &format!("Welcome everyone to #{}!", room.name), false).await;
+            let _ = messaging.post(room.id, primary_user, &format!("Welcome everyone to #{}!", room.name), false, None).await;
             if user_ids.len() > 1 {
-                let msg = messaging.post(room.id, user_ids[1].1, "Hey! Happy to be here.", false).await?;
+                let msg = messaging.post(room.id, user_ids[1].1, "Hey! Happy to be here.", false, None).await?;
                 let _ = messaging.react(msg.id, primary_user, "🔥").await;
                 let _ = messaging.react(msg.id, user_ids[2].1, "👍").await;
             }
@@ -323,7 +323,7 @@ async fn main() -> anyhow::Result<()> {
 
         for (idx, comment) in anon_comments.iter().enumerate() {
             let author = user_ids[idx % user_ids.len()].1;
-            if let Ok(msg) = messaging.post(room.id, author, comment, is_anon).await {
+            if let Ok(msg) = messaging.post(room.id, author, comment, is_anon, None).await {
                 if idx % 2 == 0 {
                     let _ = messaging.react(msg.id, primary_user, "🔥").await;
                 }

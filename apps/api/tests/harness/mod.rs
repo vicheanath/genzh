@@ -8,8 +8,20 @@
 //! nothing installed, so when no database is configured each test prints what
 //! it skipped and returns.
 //!
-//! Point `TEST_DATABASE_URL` (or `DATABASE_URL`) at a database and they run.
-//! `docker compose up -d postgres` is enough.
+//! `docker compose up -d postgres` is enough to make them run.
+//!
+//! ## Why they never touch your development database
+//!
+//! Every test registers accounts and creates communities, and nothing deletes
+//! them afterwards. Pointed at the database you actually browse, a few hundred
+//! runs bury the handful of real accounts under thousands of `alice_9f3b…`
+//! ones — which is exactly what happened before this.
+//!
+//! So the harness derives its own database from `DATABASE_URL` by suffixing the
+//! name with `_test`, and drops and rebuilds it from the migrations once at the
+//! start of each `cargo test` run. `TEST_DATABASE_URL` overrides where it goes,
+//! but the name must still end in `_test` — the suite deletes it, and that
+//! guard is what keeps a slip of the wrist from deleting something real.
 
 #![allow(dead_code)]
 
@@ -53,9 +65,14 @@ pub async fn boot() -> Option<TestApi> {
 /// and drive the real router against it. Nothing but this closure changes,
 /// which is the property the ports exist to provide.
 pub async fn boot_with(configure: impl FnOnce(&mut api::AppState)) -> Option<TestApi> {
-    let url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .ok()?;
+    let url = test_database_url()?;
+
+    // Creating, migrating and emptying the database happens once per process,
+    // not once per test: Rust runs tests in parallel threads, and truncating
+    // per boot would wipe a sibling test's rows out from under it mid-run.
+    if !prepare_database(&url).await {
+        return None;
+    }
 
     let pool = match sqlx::postgres::PgPoolOptions::new()
         .max_connections(4)
@@ -70,11 +87,6 @@ pub async fn boot_with(configure: impl FnOnce(&mut api::AppState)) -> Option<Tes
         }
     };
 
-    if let Err(error) = genzh_infrastructure::run_migrations(&pool).await {
-        eprintln!("SKIP: migrations failed: {error}");
-        return None;
-    }
-
     let mut state = api::AppState::build(api_config(url)).await.ok()?;
     configure(&mut state);
 
@@ -84,9 +96,123 @@ pub async fn boot_with(configure: impl FnOnce(&mut api::AppState)) -> Option<Tes
     })
 }
 
+/// Where the tests are allowed to write.
+///
+/// `TEST_DATABASE_URL` wins outright. Otherwise `DATABASE_URL` has its database
+/// name suffixed with `_test` — deliberately *derived* rather than used as-is,
+/// so running the suite can never write to the database you browse, even if you
+/// forget to set anything.
+fn test_database_url() -> Option<String> {
+    if let Ok(explicit) = std::env::var("TEST_DATABASE_URL") {
+        return Some(explicit);
+    }
+
+    let base = std::env::var("DATABASE_URL").ok()?;
+    let (prefix, name) = base.rsplit_once('/')?;
+    // Strip any query string before suffixing, or the name becomes
+    // `genzh?sslmode=require_test`.
+    let (name, query) = match name.split_once('?') {
+        Some((name, query)) => (name, format!("?{query}")),
+        None => (name, String::new()),
+    };
+    Some(format!("{prefix}/{name}_test{query}"))
+}
+
+/// Create the database if it is missing, migrate it, and empty it — once.
+async fn prepare_database(url: &str) -> bool {
+    static PREPARED: tokio::sync::OnceCell<bool> = tokio::sync::OnceCell::const_new();
+    *PREPARED.get_or_init(|| prepare_once(url.to_owned())).await
+}
+
+async fn prepare_once(url: String) -> bool {
+    use sqlx::Connection;
+
+    let Some((prefix, tail)) = url.rsplit_once('/') else {
+        eprintln!("SKIP: could not read a database name out of the test URL");
+        return false;
+    };
+    let name = tail.split('?').next().unwrap_or(tail);
+
+    // The suite drops and recreates its database, so refuse to point at
+    // anything that is not obviously disposable. Without this, one careless
+    // `TEST_DATABASE_URL` deletes a real database.
+    if !name.ends_with("_test") {
+        eprintln!(
+            "SKIP: refusing to use `{name}` — the integration suite drops and recreates \
+             its database, so the name must end in `_test`"
+        );
+        return false;
+    }
+
+    // `CREATE DATABASE` has to be issued from another database, so this
+    // connects to `postgres` — the maintenance database every server has.
+    let mut admin = match sqlx::PgConnection::connect(&format!("{prefix}/postgres")).await {
+        Ok(admin) => admin,
+        Err(error) => {
+            eprintln!("SKIP: cannot reach PostgreSQL: {error}");
+            return false;
+        }
+    };
+
+    // Dropped and rebuilt rather than emptied.
+    //
+    // Truncating looked cheaper and was wrong: migration 0002 *seeds* the
+    // permission catalogue, and a truncate takes those rows with it while the
+    // migration — already recorded as applied — never runs again. Every
+    // registration then failed on a missing permission. Rebuilding from the
+    // migrations is the only version that cannot drift from them.
+    //
+    // `AssertSqlSafe` because a database name is an identifier and cannot be a
+    // bind parameter. Audited: the name is derived from the developer's own
+    // `DATABASE_URL`, is never request-supplied, has been checked to end in
+    // `_test`, and is double-quoted.
+    if let Err(error) = sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"DROP DATABASE IF EXISTS "{name}" WITH (FORCE)"#
+    )))
+    .execute(&mut admin)
+    .await
+    {
+        eprintln!("SKIP: could not drop the test database: {error}");
+        return false;
+    }
+
+    if let Err(error) = sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"CREATE DATABASE "{name}""#
+    )))
+    .execute(&mut admin)
+    .await
+    {
+        eprintln!("SKIP: could not create the test database: {error}");
+        return false;
+    }
+
+    let pool = match sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .acquire_timeout(std::time::Duration::from_secs(3))
+        .connect(&url)
+        .await
+    {
+        Ok(pool) => pool,
+        Err(error) => {
+            eprintln!("SKIP: cannot reach the test database: {error}");
+            return false;
+        }
+    };
+
+    if let Err(error) = genzh_infrastructure::run_migrations(&pool).await {
+        eprintln!("SKIP: migrations failed: {error}");
+        return false;
+    }
+
+    true
+}
+
 /// Announce a skip so it shows up in `cargo test -- --nocapture`.
 pub fn skip(test: &str) {
-    eprintln!("SKIP {test}: set TEST_DATABASE_URL (or DATABASE_URL) to run the integration tests");
+    eprintln!(
+        "SKIP {test}: set DATABASE_URL (the suite uses a derived `…_test` database) \
+         or TEST_DATABASE_URL to run the integration tests"
+    );
 }
 
 fn api_config(database_url: String) -> api::Config {

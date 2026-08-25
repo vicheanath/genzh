@@ -75,6 +75,13 @@ pub fn build(state: AppState) -> Router {
             "/support/tickets/{id}/messages",
             post(routes::admin::reply_to_my_ticket),
         )
+        // ---- invite links ----
+        .route(
+            "/invites/{code}",
+            get(routes::communities::preview_invite)
+                .post(routes::communities::redeem_invite)
+                .delete(routes::communities::revoke_invite),
+        )
         // ---- communities ----
         .route(
             "/communities",
@@ -136,6 +143,10 @@ pub fn build(state: AppState) -> Router {
         .route("/rooms/live", get(routes::rooms::live))
         .route("/rooms/random", get(routes::rooms::random_room))
         .route(
+            "/communities/{id}/invites",
+            get(routes::communities::list_invites).post(routes::communities::create_invite),
+        )
+        .route(
             "/communities/{id}/rooms",
             get(routes::rooms::list).post(routes::rooms::create_community_room),
         )
@@ -165,6 +176,15 @@ pub fn build(state: AppState) -> Router {
             "/messages/{id}",
             patch(routes::messages::edit).delete(routes::messages::delete),
         )
+        .route(
+            "/messages/{id}/pin",
+            put(routes::messages::pin).delete(routes::messages::unpin),
+        )
+        .route("/rooms/{id}/pins", get(routes::messages::pins))
+        .route("/search/messages", get(routes::messages::search))
+        .route("/me/unread", get(routes::messages::unread))
+        .route("/rooms/{id}/read", post(routes::messages::mark_read))
+        .route("/rooms/{id}/mute", put(routes::messages::set_muted))
         .route(
             "/messages/{id}/reactions",
             put(routes::messages::react).delete(routes::messages::unreact),
