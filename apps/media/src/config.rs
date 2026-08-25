@@ -6,6 +6,7 @@
 
 use std::env::VarError;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use genzh_media_core::codec::CodecRegistry;
 use genzh_media_core::ice::IceConfig;
@@ -43,6 +44,13 @@ pub struct Config {
     /// Inert below this many participants, so it only ever affects rooms large
     /// enough for everyone-hears-everyone to be wasteful.
     pub speaker_limit: usize,
+
+    /// How often abandoned rooms and dead peer connections are swept up.
+    ///
+    /// Shorter than the API's equivalent because what leaks here is sockets and
+    /// forwarding tasks rather than rows, and because the sweep is cheap: it
+    /// walks rooms this process already holds and touches nothing off-box.
+    pub prune_interval: Duration,
 }
 
 /// A configuration value that is missing or unusable.
@@ -118,8 +126,24 @@ impl Config {
                 "MEDIA_SPEAKER_LIMIT",
                 genzh_media_room::DEFAULT_SPEAKER_LIMIT,
             )?,
+            prune_interval: seconds("MEDIA_PRUNE_INTERVAL_SECONDS", 30)?,
         })
     }
+}
+
+/// A duration read as a whole number of seconds.
+///
+/// Zero is rejected rather than read as "disabled": a zero-second schedule is a
+/// job that spins, which is not what anybody setting it to zero meant.
+fn seconds(name: &'static str, default: u64) -> Result<Duration, ConfigError> {
+    let value = number(name, default)?;
+    if value == 0 {
+        return Err(ConfigError::Invalid {
+            name,
+            reason: "must be greater than zero".to_owned(),
+        });
+    }
+    Ok(Duration::from_secs(value))
 }
 
 /// Which local addresses the SFU binds UDP sockets on.

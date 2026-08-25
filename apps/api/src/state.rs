@@ -13,10 +13,10 @@ use genzh_admin::{
 use genzh_auth::{AuthService, JwtService};
 use genzh_community::{CommunityService, InviteService, RoleService};
 use genzh_graph::SocialService;
+use genzh_cron::CronScheduler;
 use genzh_infrastructure::{
     DbPool, EventBus, FloodGuard, FloodPolicy, InMemoryEventBus, InMemoryFloodGuard,
-    InMemoryPresenceStore, InMemoryRateLimiter, PgConfig, PresenceStore, RateLimiter,
-    RepositoryResult, connect,
+    InMemoryPresenceStore, InMemoryRateLimiter, PgConfig, PresenceStore, RateLimiter, connect,
 };
 use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
@@ -108,6 +108,12 @@ pub struct AppState {
     pub events: Arc<dyn EventBus<ChatServerEvent>>,
     /// Who is currently connected, derived from live WebSockets.
     pub presence: Arc<dyn PresenceStore>,
+    /// Runs the recurring maintenance in [`crate::jobs`].
+    ///
+    /// Held here rather than in `main` so the admin telemetry routes can read
+    /// what the background work has been doing, and so a job can be triggered
+    /// by hand without waiting for its next tick.
+    pub scheduler: Arc<CronScheduler>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -118,7 +124,7 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     /// Wire everything together from the configuration.
-    pub async fn build(config: Config) -> RepositoryResult<Self> {
+    pub async fn build(config: Config) -> anyhow::Result<Self> {
         let mut pg = PgConfig::new(&config.database_url);
         pg.max_connections = config.database_max_connections;
         let pool = connect(&pg).await?;
@@ -143,7 +149,7 @@ impl AppState {
         // The one guard both message paths share. Handing the same `Arc` to the
         // service and to the socket loop is deliberate: a flood that switches
         // from REST to WebSocket halfway through is still one flood.
-        let flood = InMemoryFloodGuard::new(FloodPolicy {
+        let flood: Arc<dyn FloodGuard> = InMemoryFloodGuard::new(FloodPolicy {
             burst: config.message_burst_limit,
             window: std::time::Duration::from_secs(config.message_burst_window_seconds),
             repeat_window: std::time::Duration::from_secs(config.message_repeat_window_seconds),
@@ -198,22 +204,31 @@ impl AppState {
             config.ice.clone(),
         ));
 
+        let rate_limiter: Arc<dyn RateLimiter> = InMemoryRateLimiter::new(
+            config.rate_limit_per_minute,
+            std::time::Duration::from_secs(60),
+        );
+        // Login and registration are where credential stuffing lands, and each
+        // attempt costs an Argon2 verification.
+        let auth_rate_limiter: Arc<dyn RateLimiter> = InMemoryRateLimiter::new(
+            config.auth_rate_limit_per_minute,
+            std::time::Duration::from_secs(60),
+        );
+
+        // Empty: the jobs are registered by `crate::jobs::register` once the
+        // state exists, because every one of them needs a service off it. This
+        // constructor's business is wiring services together, not deciding what
+        // runs on a timer.
+        let scheduler = Arc::new(CronScheduler::new().await?);
+
         // ── volatile state ──────────────────────────────────────────────────
         // The only place in the process that names a concrete implementation of
         // these ports. Running more than one API instance means swapping these
         // three constructors for shared-store equivalents; every call site
         // already talks to the trait.
         Ok(Self {
-            rate_limiter: InMemoryRateLimiter::new(
-                config.rate_limit_per_minute,
-                std::time::Duration::from_secs(60),
-            ),
-            // Login and registration are where credential stuffing lands, and
-            // each attempt costs an Argon2 verification.
-            auth_rate_limiter: InMemoryRateLimiter::new(
-                config.auth_rate_limit_per_minute,
-                std::time::Duration::from_secs(60),
-            ),
+            rate_limiter,
+            auth_rate_limiter,
             pool,
             auth,
             communities,
@@ -240,6 +255,7 @@ impl AppState {
             flood,
             events: InMemoryEventBus::new(EVENT_BUFFER),
             presence: InMemoryPresenceStore::new(),
+            scheduler,
             config: Arc::new(config),
         })
     }

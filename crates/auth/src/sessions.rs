@@ -129,4 +129,9 @@ impl SessionManager {
         }
         Ok(())
     }
+
+    /// Prune expired sessions older than 1 day.
+    pub async fn prune_expired(&self) -> AuthResult<u64> {
+        Ok(self.sessions.delete_expired().await?)
+    }
 }

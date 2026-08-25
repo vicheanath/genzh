@@ -25,6 +25,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 
 use crate::store::StoreResult;
+use crate::sweep::Sweep;
 
 /// The verdict on one request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,8 +59,13 @@ impl Decision {
 }
 
 /// Decides whether a caller may proceed.
+///
+/// [`Sweep`] is a supertrait so that a caller holding `Arc<dyn RateLimiter>`
+/// can hand it to the maintenance scheduler as `Arc<dyn Sweep>` without the
+/// wiring having to keep a second handle to the concrete type. Implementations
+/// with nothing to reclaim take the default and say so in one line.
 #[async_trait]
-pub trait RateLimiter: Send + Sync + 'static {
+pub trait RateLimiter: Sweep + Send + Sync + 'static {
     /// Record one request against `key` and report the verdict.
     ///
     /// Recording and deciding are one call, not two, because they have to be
@@ -102,6 +108,21 @@ impl InMemoryRateLimiter {
     /// while traffic is arriving, so the sweep can ride along with it.
     fn sweep(buckets: &mut HashMap<String, Bucket>, now: Instant, window: Duration) {
         buckets.retain(|_, bucket| now.duration_since(bucket.window_started) < window);
+    }
+
+}
+
+impl Sweep for InMemoryRateLimiter {
+    fn label(&self) -> &'static str {
+        "rate_limit"
+    }
+
+    fn sweep_stale(&self) -> usize {
+        let now = Instant::now();
+        let mut buckets = self.buckets.lock();
+        let before = buckets.len();
+        Self::sweep(&mut buckets, now, self.window);
+        before.saturating_sub(buckets.len())
     }
 }
 
@@ -160,6 +181,12 @@ impl UnlimitedRateLimiter {
 impl RateLimiter for UnlimitedRateLimiter {
     async fn check(&self, _key: &str) -> StoreResult<Decision> {
         Ok(Decision::allowed(u32::MAX, Duration::ZERO))
+    }
+}
+
+impl Sweep for UnlimitedRateLimiter {
+    fn label(&self) -> &'static str {
+        "rate_limit_unlimited"
     }
 }
 

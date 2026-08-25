@@ -61,6 +61,7 @@ impl MediaState {
             auto_subscribe_video: false,
             room_capacity: 16,
             speaker_limit: genzh_media_room::DEFAULT_SPEAKER_LIMIT,
+            prune_interval: std::time::Duration::from_secs(30),
         };
 
         Self {

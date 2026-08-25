@@ -51,6 +51,7 @@ pub mod flood;
 pub mod presence;
 pub mod rate_limit;
 pub mod store;
+pub mod sweep;
 
 pub use bus::{EventBus, EventStream, InMemoryEventBus};
 pub use db::{DbPool, PgConfig, connect, run_migrations};
@@ -61,3 +62,4 @@ pub use presence::{
 };
 pub use rate_limit::{Decision, InMemoryRateLimiter, RateLimiter, UnlimitedRateLimiter};
 pub use store::{StoreError, StoreResult};
+pub use sweep::Sweep;

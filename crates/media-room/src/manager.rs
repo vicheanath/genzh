@@ -29,7 +29,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::{MediaRoomError, MediaRoomResult};
-use crate::participant::Participant;
+use crate::participant::{ConnectionState, Participant};
 use crate::room::{MediaRoom, RoomConfig};
 use crate::track::PublishedTrack;
 
@@ -162,6 +162,72 @@ impl MediaRoomManager {
             }
         }
     }
+
+    /// Drop participants whose connection has closed, then destroy the rooms
+    /// that leaves empty.
+    ///
+    /// The clean paths already do this: a participant who leaves properly goes
+    /// through [`Self::leave`], which destroys the room behind them. This is for
+    /// the unclean ones — a peer connection that failed, a browser tab closed
+    /// mid-call — where the connection is known to be dead but nothing ever came
+    /// back to say so. Without a sweep those rooms stay in the registry holding
+    /// their tracks open for the life of the process.
+    pub async fn prune(&self) -> PruneReport {
+        // Snapshot first: the per-room work below awaits, and holding the
+        // registry lock across it would block every join for the duration.
+        let rooms: Vec<(Uuid, Arc<MediaRoom>)> = self
+            .rooms
+            .read()
+            .await
+            .iter()
+            .map(|(&id, room)| (id, Arc::clone(room)))
+            .collect();
+
+        let mut report = PruneReport::default();
+
+        for (room_id, room) in rooms {
+            for participant in room.participants().await {
+                if participant.state().await.connection != ConnectionState::Closed {
+                    continue;
+                }
+
+                if room.remove_participant(participant.id()).await.is_some() {
+                    report.participants_removed += 1;
+                    tracing::debug!(
+                        %room_id,
+                        participant_id = %participant.id(),
+                        "pruned participant with a closed connection"
+                    );
+                }
+            }
+
+            // Re-checked under the registry write lock rather than here, so a
+            // join arriving between the emptiness check and the removal cannot
+            // have its room dropped underneath it.
+            if self.destroy_if_empty(room_id).await {
+                report.rooms_removed += 1;
+            }
+        }
+
+        report
+    }
+}
+
+/// Statistics from a prune cycle.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PruneReport {
+    /// Number of empty rooms destroyed.
+    pub rooms_removed: usize,
+    /// Number of closed / disconnected participants cleaned up.
+    pub participants_removed: usize,
+}
+
+impl PruneReport {
+    /// Whether the sweep found nothing to do, so the caller can stay quiet.
+    /// Most passes reclaim nothing and are not worth a log line.
+    pub fn is_empty(&self) -> bool {
+        self.rooms_removed == 0 && self.participants_removed == 0
+    }
 }
 
 #[cfg(test)]
@@ -292,5 +358,40 @@ mod tests {
         assert_eq!(manager.room_count().await, 0);
         assert!(alice_sink.is_closed().await);
         assert!(bob_sink.is_closed().await);
+    }
+
+    #[tokio::test]
+    async fn prune_cleans_up_closed_participants_and_empty_rooms() {
+        let manager = MediaRoomManager::new(RoomConfig::default());
+        let room_id = Uuid::new_v4();
+        let (alice, alice_sink) = member("Alice");
+        let (bob, _) = member("Bob");
+
+        manager.join(room_id, alice.clone()).await.expect("join");
+        manager.join(room_id, bob.clone()).await.expect("join");
+
+        // Alice drops connection abruptly (connection state Closed)
+        alice
+            .update_state(|s| s.connection = ConnectionState::Closed)
+            .await;
+
+        let report = manager.prune().await;
+        assert_eq!(report.participants_removed, 1);
+        assert_eq!(report.rooms_removed, 0);
+        assert_eq!(manager.participant_count().await, 1);
+
+        // Bob leaves cleanly
+        manager.leave(room_id, bob.id()).await.expect("leave");
+        assert_eq!(manager.room_count().await, 0);
+
+        // Also test an explicitly orphaned empty room
+        let empty_room_id = Uuid::new_v4();
+        let _ = manager.get_or_create(empty_room_id).await;
+        assert_eq!(manager.room_count().await, 1);
+
+        let report = manager.prune().await;
+        assert_eq!(report.rooms_removed, 1);
+        assert_eq!(manager.room_count().await, 0);
+        assert!(alice_sink.is_closed().await);
     }
 }

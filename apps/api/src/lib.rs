@@ -33,6 +33,7 @@
 pub mod config;
 pub mod error;
 pub mod extract;
+pub mod jobs;
 pub mod middleware;
 pub mod notify;
 pub mod oauth;

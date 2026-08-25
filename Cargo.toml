@@ -15,6 +15,7 @@ members = [
     "crates/media-room",
     "crates/media-signaling",
     "crates/infrastructure",
+    "crates/cron",
 ]
 
 [workspace.package]
@@ -38,12 +39,14 @@ genzh-media-core = { path = "crates/media-core" }
 genzh-media-room = { path = "crates/media-room" }
 genzh-media-signaling = { path = "crates/media-signaling" }
 genzh-infrastructure = { path = "crates/infrastructure" }
+genzh-cron = { path = "crates/cron" }
 
 # ---- async / runtime ----
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
 async-trait = "0.1"
+tokio-cron-scheduler = { version = "0.15", default-features = false }
 
 # ---- http ----
 axum = { version = "0.8", features = ["ws", "macros"] }

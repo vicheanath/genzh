@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 genzh-domain.workspace = true
 genzh-infrastructure.workspace = true
+genzh-cron.workspace = true
 genzh-auth.workspace = true
 genzh-community.workspace = true
 genzh-graph.workspace = true

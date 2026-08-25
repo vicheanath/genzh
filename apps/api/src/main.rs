@@ -41,6 +41,13 @@ async fn run() -> anyhow::Result<()> {
         genzh_infrastructure::run_migrations(&state.pool).await?;
     }
 
+    // Registered after the state exists and started before the first request:
+    // a job that fired against a half-built process would be querying tables
+    // the migration above may not have created yet.
+    api::jobs::register(&state).await?;
+    let scheduler = state.scheduler.clone();
+    scheduler.start().await?;
+
     let app = router::build(state);
     let listener = TcpListener::bind(bind).await?;
 
@@ -54,6 +61,9 @@ async fn run() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
+    // After the server has drained, so a job cannot start against a pool that
+    // is on its way out.
+    scheduler.shutdown().await?;
     tracing::info!("api stopped");
     Ok(())
 }

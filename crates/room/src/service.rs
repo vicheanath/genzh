@@ -1,5 +1,6 @@
 //! The room application service.
 
+use std::time::Duration;
 
 use genzh_community::CommunityService;
 use genzh_community::authorization::apply_room_overrides;
@@ -14,7 +15,7 @@ use genzh_domain::{
 use genzh_infrastructure::{DbPool, ServiceError, ServiceResult};
 
 use crate::authorization::RoomAccess;
-use crate::repository::RoomRepository;
+use crate::repository::{PruneOutcome, RoomRepository};
 
 /// Input for creating a room.
 #[derive(Debug, Clone)]
@@ -448,5 +449,22 @@ impl RoomService {
         }
         tracing::info!(%room_id, "room deleted");
         Ok(())
+    }
+
+    /// Drop participants who stopped sending heartbeats, and end rooms that have
+    /// been empty longer than `empty_grace`.
+    ///
+    /// Housekeeping rather than a user action, so unlike everything else on this
+    /// service it authorizes nobody: the only caller is the scheduler, and there
+    /// is no actor to check.
+    pub async fn prune_stale_participants(
+        &self,
+        stale_after: Duration,
+        empty_grace: Duration,
+    ) -> ServiceResult<PruneOutcome> {
+        Ok(self
+            .rooms
+            .prune_stale_participants(stale_after, empty_grace)
+            .await?)
     }
 }

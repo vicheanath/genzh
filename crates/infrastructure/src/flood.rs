@@ -30,6 +30,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 
 use crate::store::StoreResult;
+use crate::sweep::Sweep;
 
 /// The verdict on one post.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,8 +98,12 @@ impl Default for FloodPolicy {
 }
 
 /// Decides whether an account may post right now.
+///
+/// [`Sweep`] is a supertrait for the same reason it is one on
+/// [`RateLimiter`](crate::RateLimiter): the scheduler that reclaims this map
+/// should not have to be handed the concrete guard to do it.
 #[async_trait]
-pub trait FloodGuard: Send + Sync + 'static {
+pub trait FloodGuard: Sweep + Send + Sync + 'static {
     /// Record one post by `key` and report the verdict.
     ///
     /// `key` scopes the budget — a user in a room, a user's reactions — and
@@ -155,6 +160,21 @@ impl InMemoryFloodGuard {
             Some((_, at)) => now.duration_since(at) < idle,
             None => now.duration_since(entry.window_started) < idle,
         });
+    }
+
+}
+
+impl Sweep for InMemoryFloodGuard {
+    fn label(&self) -> &'static str {
+        "flood"
+    }
+
+    fn sweep_stale(&self) -> usize {
+        let now = Instant::now();
+        let mut recent = self.recent.lock();
+        let before = recent.len();
+        Self::sweep(&mut recent, now, &self.policy);
+        before.saturating_sub(recent.len())
     }
 }
 
@@ -239,6 +259,12 @@ impl PermissiveFloodGuard {
 impl FloodGuard for PermissiveFloodGuard {
     async fn check(&self, _key: &str, _digest: u64) -> StoreResult<FloodVerdict> {
         Ok(FloodVerdict::Allowed)
+    }
+}
+
+impl Sweep for PermissiveFloodGuard {
+    fn label(&self) -> &'static str {
+        "flood_permissive"
     }
 }
 

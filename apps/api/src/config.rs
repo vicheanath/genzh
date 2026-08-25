@@ -10,6 +10,7 @@
 
 use std::env::VarError;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use genzh_media_core::ice::IceConfig;
 use genzh_media_core::token::DEFAULT_TOKEN_TTL_SECONDS;
@@ -83,6 +84,55 @@ pub struct Config {
     pub discord_client_id: Option<String>,
     pub discord_client_secret: Option<String>,
     pub discord_redirect_uri: Option<String>,
+
+    /// How often the background maintenance jobs run.
+    pub cron: CronConfig,
+}
+
+/// Timings for the recurring maintenance jobs.
+///
+/// Grouped rather than flattened into [`Config`] because they are read by one
+/// caller — the job wiring — and because the two *pairs* below only make sense
+/// together: a sweep interval means nothing without the staleness threshold it
+/// is sweeping against.
+#[derive(Debug, Clone)]
+pub struct CronConfig {
+    /// How often expired refresh sessions are deleted.
+    ///
+    /// Nothing depends on this being prompt — an expired session is already
+    /// refused on presentation, so this only reclaims rows.
+    pub session_prune_interval: Duration,
+
+    /// How often room participants are checked for staleness.
+    pub room_prune_interval: Duration,
+
+    /// How long a participant may go unheard from before they are presumed
+    /// gone. Must comfortably exceed the client heartbeat, or a slow network
+    /// will evict people who are still in the call.
+    pub participant_stale_after: Duration,
+
+    /// How long a room must sit empty before it is ended.
+    ///
+    /// Longer than [`Self::room_prune_interval`] on purpose: a room is empty
+    /// for a moment every time the last person leaves and another arrives, and
+    /// ending it on the first sweep that sees zero would close calls people are
+    /// still walking back into.
+    pub room_empty_grace: Duration,
+
+    /// How often the in-process rate-limit and flood maps are swept.
+    pub store_sweep_interval: Duration,
+}
+
+impl CronConfig {
+    fn from_env() -> Result<Self, ConfigError> {
+        Ok(Self {
+            session_prune_interval: seconds("CRON_SESSION_PRUNE_SECONDS", 3600)?,
+            room_prune_interval: seconds("CRON_ROOM_PRUNE_SECONDS", 60)?,
+            participant_stale_after: seconds("ROOM_PARTICIPANT_STALE_SECONDS", 300)?,
+            room_empty_grace: seconds("ROOM_EMPTY_GRACE_SECONDS", 600)?,
+            store_sweep_interval: seconds("CRON_STORE_SWEEP_SECONDS", 300)?,
+        })
+    }
 }
 
 /// A configuration value that is missing or unusable.
@@ -202,6 +252,8 @@ impl Config {
             discord_client_id: optional("DISCORD_CLIENT_ID"),
             discord_client_secret: optional("DISCORD_CLIENT_SECRET"),
             discord_redirect_uri: optional("DISCORD_REDIRECT_URI"),
+
+            cron: CronConfig::from_env()?,
         })
     }
 }
@@ -222,6 +274,22 @@ fn optional(name: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_owned())
         .filter(|v| !v.is_empty())
+}
+
+/// A duration read as a whole number of seconds.
+///
+/// Zero is rejected rather than accepted as "disabled": a zero-second schedule
+/// is a job that runs in a tight loop, which is the opposite of what anybody
+/// setting it to zero meant.
+fn seconds(name: &'static str, default: u64) -> Result<Duration, ConfigError> {
+    let value = number(name, default)?;
+    if value == 0 {
+        return Err(ConfigError::Invalid {
+            name,
+            reason: "must be greater than zero".to_owned(),
+        });
+    }
+    Ok(Duration::from_secs(value))
 }
 
 fn number<T>(name: &'static str, default: T) -> Result<T, ConfigError>

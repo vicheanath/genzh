@@ -19,6 +19,6 @@ pub use authorization::RoomAccess;
 pub use directory::RoomDirectory;
 pub use directs::DirectRooms;
 pub use media::{MediaJoinResponse, MediaServerSelector, MediaSessionService, StaticMediaServers};
-pub use repository::RoomRepository;
+pub use repository::{PruneOutcome, RoomRepository};
 pub use service::{CreateRoom, RoomService, UpdateRoom};
 pub use read_state::{ReadStateService, RoomUnread};

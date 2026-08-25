@@ -6,11 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# NOTE: deliberately no sqlx and no control-plane crates.
+# NOTE: deliberately no sqlx and no control-plane crates. `genzh-cron` is safe
+# to take because it carries neither — that is why it is not a module of
+# `genzh-infrastructure`.
 [dependencies]
 genzh-media-core.workspace = true
 genzh-media-room.workspace = true
 genzh-media-signaling.workspace = true
+genzh-cron.workspace = true
 chrono.workspace = true
 
 axum.workspace = true

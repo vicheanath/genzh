@@ -1,5 +1,7 @@
 //! Persistence for rooms, anonymous identities, participants, and permission overrides.
 
+use std::time::Duration;
+
 use genzh_community::authorization::RoomOverride;
 use genzh_domain::room::{
     Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,
@@ -22,6 +24,57 @@ struct OverrideRow {
 enum PermissionEffect {
     Allow,
     Deny,
+}
+
+/// What one sweep of [`RoomRepository::prune_stale_participants`] reclaimed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PruneOutcome {
+    /// Participant rows dropped for having gone silent.
+    pub participants_removed: u64,
+    /// Rooms moved to `ended` for having been empty past the grace window.
+    pub rooms_ended: u64,
+}
+
+impl PruneOutcome {
+    /// Whether the sweep changed anything, so a caller can stay quiet when it
+    /// did not — most passes reclaim nothing and should not be logged.
+    pub fn is_empty(&self) -> bool {
+        self.participants_removed == 0 && self.rooms_ended == 0
+    }
+}
+
+/// Seconds as PostgreSQL's `make_interval(secs => …)` wants them.
+///
+/// Sub-second precision survives the conversion, which matters only in tests;
+/// every real caller passes whole minutes.
+fn as_seconds(duration: Duration) -> f64 {
+    duration.as_secs_f64()
+}
+
+/// Bring `current_participants` and `emptied_at` back in line with the
+/// participant rows for one room.
+///
+/// Every path that adds or removes a participant ends here, so the derived
+/// columns have exactly one definition instead of one per call site — which is
+/// what let them drift far enough that the background sweep had to guess.
+async fn recount_participants(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    room_id: RoomId,
+) -> RepositoryResult<()> {
+    sqlx::query(
+        "UPDATE rooms SET
+            current_participants = (SELECT COUNT(*) FROM room_participants WHERE room_id = $1),
+            emptied_at = CASE
+                WHEN (SELECT COUNT(*) FROM room_participants WHERE room_id = $1) > 0 THEN NULL
+                ELSE COALESCE(emptied_at, now())
+            END
+         WHERE id = $1",
+    )
+    .bind(room_id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
 }
 
 /// Rooms Repository.
@@ -515,14 +568,7 @@ impl RoomRepository {
         .fetch_one(&mut *tx)
         .await?;
 
-        sqlx::query(
-            "UPDATE rooms SET
-                current_participants = (SELECT COUNT(*) FROM room_participants WHERE room_id = $1)
-             WHERE id = $1",
-        )
-        .bind(room_id)
-        .execute(&mut *tx)
-        .await?;
+        recount_participants(&mut tx, room_id).await?;
 
         tx.commit().await?;
         Ok(participant)
@@ -582,14 +628,7 @@ impl RoomRepository {
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query(
-            "UPDATE rooms SET
-                current_participants = (SELECT COUNT(*) FROM room_participants WHERE room_id = $1)
-             WHERE id = $1",
-        )
-        .bind(room_id)
-        .execute(&mut *tx)
-        .await?;
+        recount_participants(&mut tx, room_id).await?;
 
         tx.commit().await?;
         Ok(result.rows_affected() > 0)
@@ -608,6 +647,82 @@ impl RoomRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::from)
+    }
+
+    /// Drop participants who stopped sending heartbeats, and end the rooms that
+    /// leaves permanently empty.
+    ///
+    /// `stale_after` is how long a participant may go unheard from before their
+    /// row is presumed abandoned — a lid closed mid-call leaves no `leave_room`
+    /// behind, and without this the room stays full of people who are gone.
+    ///
+    /// `empty_grace` is the separate question of how long a room must have been
+    /// empty before it is ended. It has to be separate: an empty room is the
+    /// normal state of a room between the last person leaving and the next one
+    /// arriving, and ending one the moment its count reaches zero would close
+    /// calls out from under people who are still rejoining.
+    pub async fn prune_stale_participants(
+        &self,
+        stale_after: Duration,
+        empty_grace: Duration,
+    ) -> RepositoryResult<PruneOutcome> {
+        let mut tx = self.pool.begin().await?;
+
+        // `make_interval` rather than `$1 * INTERVAL '1 second'`: the
+        // multiplication operator is only defined for `double precision`, so a
+        // bound integer parameter fails to resolve at plan time.
+        let departed = sqlx::query(
+            "DELETE FROM room_participants
+              WHERE last_seen_at < now() - make_interval(secs => $1)",
+        )
+        .bind(as_seconds(stale_after))
+        .execute(&mut *tx)
+        .await?;
+
+        // Recount everything the delete could have touched, and stamp or clear
+        // `emptied_at` in the same statement so the two never disagree.
+        sqlx::query(
+            "UPDATE rooms r
+                SET current_participants = counted.total,
+                    emptied_at = CASE
+                        WHEN counted.total > 0 THEN NULL
+                        ELSE COALESCE(r.emptied_at, now())
+                    END
+               FROM (
+                     SELECT r2.id,
+                            (SELECT COUNT(*)
+                               FROM room_participants p
+                              WHERE p.room_id = r2.id) AS total
+                       FROM rooms r2
+                      WHERE r2.status <> 'ended'
+                    ) AS counted
+              WHERE r.id = counted.id
+                AND (r.current_participants IS DISTINCT FROM counted.total
+                     OR (counted.total = 0 AND r.emptied_at IS NULL)
+                     OR (counted.total > 0 AND r.emptied_at IS NOT NULL))",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        let ended = sqlx::query(
+            "UPDATE rooms
+                SET status = 'ended',
+                    ended_at = now()
+              WHERE status = 'active'
+                AND current_participants = 0
+                AND emptied_at IS NOT NULL
+                AND emptied_at < now() - make_interval(secs => $1)",
+        )
+        .bind(as_seconds(empty_grace))
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(PruneOutcome {
+            participants_removed: departed.rows_affected(),
+            rooms_ended: ended.rows_affected(),
+        })
     }
 
     // ── Overrides ─────────────────────────────────────────────────────────────

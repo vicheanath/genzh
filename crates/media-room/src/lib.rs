@@ -37,7 +37,7 @@ pub use keyframe::{KEYFRAME_COOLDOWN, KeyframeGate};
 pub use sequence::SequenceRewriter;
 pub use speakers::{ActiveSpeakers, DEFAULT_SPEAKER_LIMIT};
 pub use stats::{TrackStats, TrackStatsSnapshot};
-pub use manager::MediaRoomManager;
+pub use manager::{MediaRoomManager, PruneReport};
 pub use participant::{ConnectionState, MediaState, Participant, SubscriberSink};
 pub use room::{AutoSubscribe, MediaRoom, RoomConfig};
 pub use sfu::{ParticipantPeers, PeerFactory, SfuConfig};
