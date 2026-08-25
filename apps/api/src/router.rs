@@ -37,6 +37,44 @@ pub fn build(state: AppState) -> Router {
         // Composite views: one round-trip for a whole screen (see routes::bff).
         .route("/me/overview", get(routes::bff::me_overview))
         .route("/me/social", get(routes::bff::social_overview))
+        // ---- platform console ----
+        //
+        // Gated by extractor, not by path: `StaffUser` and `AdminUser` are
+        // arguments to the handlers, so a route here cannot be added without
+        // stating who may call it.
+        .route("/admin/audit", get(routes::admin::audit))
+        .route("/admin/audit/actions", get(routes::admin::audit_actions))
+        .route("/admin/staff", get(routes::admin::list_staff))
+        .route("/admin/users", get(routes::admin::search_users))
+        .route("/admin/users/{id}", get(routes::admin::get_user))
+        .route("/admin/users/{id}/suspend", post(routes::admin::suspend_user))
+        .route(
+            "/admin/users/{id}/reinstate",
+            post(routes::admin::reinstate_user),
+        )
+        .route(
+            "/admin/users/{id}/platform-role",
+            put(routes::admin::set_platform_role),
+        )
+        .route("/admin/tickets", get(routes::admin::list_tickets))
+        .route(
+            "/admin/tickets/{id}",
+            get(routes::admin::get_ticket).patch(routes::admin::update_ticket),
+        )
+        .route(
+            "/admin/tickets/{id}/messages",
+            post(routes::admin::reply_to_ticket),
+        )
+        // ---- support, as the person who raised it sees it ----
+        .route(
+            "/support/tickets",
+            get(routes::admin::my_tickets).post(routes::admin::open_ticket),
+        )
+        .route("/support/tickets/{id}", get(routes::admin::my_ticket))
+        .route(
+            "/support/tickets/{id}/messages",
+            post(routes::admin::reply_to_my_ticket),
+        )
         // ---- communities ----
         .route(
             "/communities",

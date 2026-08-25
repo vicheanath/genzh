@@ -76,6 +76,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "futures",
+ "genzh-admin",
  "genzh-auth",
  "genzh-community",
  "genzh-domain",
@@ -1055,6 +1056,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "genzh-admin"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genzh-domain",
+ "genzh-infrastructure",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "genzh-auth"
 version = "0.1.0"
 dependencies = [
@@ -1095,6 +1110,7 @@ dependencies = [
  "bitflags 2.13.1",
  "chrono",
  "serde",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.20",
  "uuid",

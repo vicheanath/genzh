@@ -5,6 +5,7 @@
 //! making decisions, that decision belongs in a service where it can be tested
 //! without a socket.
 
+pub mod admin;
 pub mod auth;
 pub mod bff;
 pub mod communities;

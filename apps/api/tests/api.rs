@@ -1192,3 +1192,419 @@ async fn omitting_a_template_still_gives_a_general_channel() {
 
     assert!(rooms.contains(&"general".to_owned()), "{rooms:?}");
 }
+
+/// Make an account staff, the way an operator bootstraps the first one.
+///
+/// Direct SQL on purpose: there is no endpoint that grants the *first* admin,
+/// because an endpoint that could would be one an ordinary account might reach.
+async fn grant_platform_role(api: &harness::TestApi, user_id: &str, role: &str) {
+    sqlx::query("UPDATE users SET platform_role = $2::platform_role WHERE id = $1")
+        .bind(uuid::Uuid::parse_str(user_id).expect("user id"))
+        .bind(role)
+        .execute(&api.pool)
+        .await
+        .expect("grant platform role");
+}
+
+/// The console is invisible to an ordinary account.
+#[tokio::test]
+async fn the_platform_console_is_not_reachable_without_staff() {
+    let Some(api) = boot().await else {
+        return skip("the_platform_console_is_not_reachable_without_staff");
+    };
+
+    let alice = api.register("alice").await;
+
+    // Not `403`: confirming the console exists is itself something an ordinary
+    // account does not need to learn by probing.
+    for path in [
+        "/api/v1/admin/tickets",
+        "/api/v1/admin/users?q=alice",
+        "/api/v1/admin/audit",
+        "/api/v1/admin/staff",
+    ] {
+        api.send("GET", path, Some(&alice.access_token), None)
+            .await
+            .expect_status(StatusCode::NOT_FOUND);
+    }
+}
+
+/// Support answers the queue; only an admin enforces or reads the log.
+#[tokio::test]
+async fn support_can_work_the_queue_but_cannot_enforce() {
+    let Some(api) = boot().await else {
+        return skip("support_can_work_the_queue_but_cannot_enforce");
+    };
+
+    let agent = api.register("agent").await;
+    let subject = api.register("subject").await;
+    grant_platform_role(&api, &agent.user_id, "support").await;
+
+    // The queue is theirs to read.
+    api.send("GET", "/api/v1/admin/tickets", Some(&agent.access_token), None)
+        .await
+        .expect_status(StatusCode::OK);
+
+    // Enforcement and the audit log are not.
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/users/{}/suspend", subject.user_id),
+        Some(&agent.access_token),
+        Some(serde_json::json!({ "reason": "spam" })),
+    )
+    .await
+    .expect_status(StatusCode::FORBIDDEN);
+
+    api.send("GET", "/api/v1/admin/audit", Some(&agent.access_token), None)
+        .await
+        .expect_status(StatusCode::FORBIDDEN);
+}
+
+/// A report survives being filed, is visible to staff, and is answered.
+#[tokio::test]
+async fn a_report_reaches_the_queue_and_gets_an_answer() {
+    let Some(api) = boot().await else {
+        return skip("a_report_reaches_the_queue_and_gets_an_answer");
+    };
+
+    let reporter = api.register("reporter").await;
+    let agent = api.register("agent").await;
+    grant_platform_role(&api, &agent.user_id, "support").await;
+
+    let ticket_id = api
+        .send(
+            "POST",
+            "/api/v1/support/tickets",
+            Some(&reporter.access_token),
+            Some(serde_json::json!({
+                "kind": "report",
+                "category": "Harassment",
+                "subject": "Someone is following me between rooms",
+                "details": "They keep joining every room I open and repeating the same thing.",
+            })),
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json["id"]
+        .as_str()
+        .expect("ticket id")
+        .to_owned();
+
+    // Staff see it in the queue.
+    let queue = api
+        .send("GET", "/api/v1/admin/tickets", Some(&agent.access_token), None)
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert!(
+        queue["tickets"]
+            .as_array()
+            .expect("tickets")
+            .iter()
+            .any(|t| t["id"] == ticket_id.as_str()),
+        "the report is not in the queue",
+    );
+    assert!(queue["open_count"].as_i64().unwrap_or(0) >= 1);
+
+    // The category is normalised, so the queue groups by it.
+    let detail = api
+        .send(
+            "GET",
+            &format!("/api/v1/admin/tickets/{ticket_id}"),
+            Some(&agent.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(detail["ticket"]["category"], "harassment");
+
+    // Answering moves it to `pending` — waiting on the reporter, not on staff.
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/tickets/{ticket_id}/messages"),
+        Some(&agent.access_token),
+        Some(serde_json::json!({ "body": "Thanks — we are looking into it." })),
+    )
+    .await
+    .expect_status(StatusCode::OK);
+
+    let after = api
+        .send(
+            "GET",
+            &format!("/api/v1/support/tickets/{ticket_id}"),
+            Some(&reporter.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(after["ticket"]["status"], "pending");
+    assert_eq!(after["messages"].as_array().expect("messages").len(), 1);
+}
+
+/// An internal note is for staff, and the reporter never sees it.
+#[tokio::test]
+async fn staff_notes_are_not_shown_to_the_reporter() {
+    let Some(api) = boot().await else {
+        return skip("staff_notes_are_not_shown_to_the_reporter");
+    };
+
+    let reporter = api.register("reporter").await;
+    let agent = api.register("agent").await;
+    grant_platform_role(&api, &agent.user_id, "support").await;
+
+    let ticket_id = api
+        .send(
+            "POST",
+            "/api/v1/support/tickets",
+            Some(&reporter.access_token),
+            Some(serde_json::json!({
+                "kind": "help",
+                "category": "account",
+                "subject": "Cannot join voice",
+                "details": "The button does nothing on my laptop.",
+            })),
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json["id"]
+        .as_str()
+        .expect("ticket id")
+        .to_owned();
+
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/tickets/{ticket_id}/messages"),
+        Some(&agent.access_token),
+        Some(serde_json::json!({ "body": "Third report today, same browser.", "staff_only": true })),
+    )
+    .await
+    .expect_status(StatusCode::OK);
+
+    // Staff see the note.
+    let staff_view = api
+        .send(
+            "GET",
+            &format!("/api/v1/admin/tickets/{ticket_id}"),
+            Some(&agent.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(staff_view["messages"].as_array().expect("messages").len(), 1);
+
+    // The person who raised it does not.
+    let reporter_view = api
+        .send(
+            "GET",
+            &format!("/api/v1/support/tickets/{ticket_id}"),
+            Some(&reporter.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert!(
+        reporter_view["messages"].as_array().expect("messages").is_empty(),
+        "an internal note leaked to the reporter",
+    );
+}
+
+/// Somebody else's ticket is not readable, and does not confirm it exists.
+#[tokio::test]
+async fn a_ticket_is_private_to_its_reporter_and_staff() {
+    let Some(api) = boot().await else {
+        return skip("a_ticket_is_private_to_its_reporter_and_staff");
+    };
+
+    let reporter = api.register("reporter").await;
+    let nosy = api.register("nosy").await;
+
+    let ticket_id = api
+        .send(
+            "POST",
+            "/api/v1/support/tickets",
+            Some(&reporter.access_token),
+            Some(serde_json::json!({
+                "kind": "help",
+                "category": "account",
+                "subject": "Billing question",
+                "details": "I was charged twice.",
+            })),
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json["id"]
+        .as_str()
+        .expect("ticket id")
+        .to_owned();
+
+    api.send(
+        "GET",
+        &format!("/api/v1/support/tickets/{ticket_id}"),
+        Some(&nosy.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NOT_FOUND);
+}
+
+/// Suspension takes effect on the sessions the account already has open.
+#[tokio::test]
+async fn suspending_an_account_stops_its_live_session_and_is_audited() {
+    let Some(api) = boot().await else {
+        return skip("suspending_an_account_stops_its_live_session_and_is_audited");
+    };
+
+    let admin = api.register("admin").await;
+    let offender = api.register("offender").await;
+    grant_platform_role(&api, &admin.user_id, "admin").await;
+
+    // The offender is signed in *before* the suspension, which is the case that
+    // matters: a check only at login would leave them working until they
+    // happened to sign in again.
+    api.send("GET", "/api/v1/me", Some(&offender.access_token), None)
+        .await
+        .expect_status(StatusCode::OK);
+
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/users/{}/suspend", offender.user_id),
+        Some(&admin.access_token),
+        Some(serde_json::json!({ "reason": "coordinated spam" })),
+    )
+    .await
+    .expect_status(StatusCode::OK);
+
+    // `403 ACCOUNT_INACTIVE`, not `401`: the token is still valid and the
+    // account behind it is not, which is a different thing to say — and the
+    // client needs to tell them apart to know whether refreshing would help.
+    let refused = api
+        .send("GET", "/api/v1/me", Some(&offender.access_token), None)
+        .await
+        .expect_status(StatusCode::FORBIDDEN);
+    assert_eq!(refused.json["error"]["code"], "ACCOUNT_INACTIVE");
+
+    // …and it left a record naming who did it and why.
+    // Narrowed to this offender: the log is shared across runs, so matching on
+    // the action alone would happily find somebody else's suspension.
+    let log = api
+        .send(
+            "GET",
+            &format!("/api/v1/admin/audit?subject_id={}", offender.user_id),
+            Some(&admin.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    let entry = log
+        .as_array()
+        .expect("audit array")
+        .iter()
+        .find(|e| e["action"] == "user.suspended")
+        .expect("a suspension entry");
+    assert!(
+        entry["actor_handle"]
+            .as_str()
+            .expect("actor handle")
+            .starts_with("admin"),
+        "the entry does not name who did it: {entry:?}",
+    );
+    assert_eq!(entry["metadata"]["reason"], "coordinated spam");
+    assert_eq!(entry["subject_type"], "user");
+
+    // Reinstating puts them back.
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/users/{}/reinstate", offender.user_id),
+        Some(&admin.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::OK);
+}
+
+/// A suspension needs a reason, because the audit entry is made of it.
+#[tokio::test]
+async fn a_suspension_without_a_reason_is_refused() {
+    let Some(api) = boot().await else {
+        return skip("a_suspension_without_a_reason_is_refused");
+    };
+
+    let admin = api.register("admin").await;
+    let target = api.register("target").await;
+    grant_platform_role(&api, &admin.user_id, "admin").await;
+
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/users/{}/suspend", target.user_id),
+        Some(&admin.access_token),
+        Some(serde_json::json!({ "reason": "   " })),
+    )
+    .await
+    .expect_status(StatusCode::BAD_REQUEST);
+}
+
+/// An admin cannot suspend themselves, or another admin.
+#[tokio::test]
+async fn enforcement_does_not_point_at_admins() {
+    let Some(api) = boot().await else {
+        return skip("enforcement_does_not_point_at_admins");
+    };
+
+    let admin = api.register("admin").await;
+    let peer = api.register("peer").await;
+    grant_platform_role(&api, &admin.user_id, "admin").await;
+    grant_platform_role(&api, &peer.user_id, "admin").await;
+
+    // Suspending yourself locks you out of undoing it.
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/users/{}/suspend", admin.user_id),
+        Some(&admin.access_token),
+        Some(serde_json::json!({ "reason": "oops" })),
+    )
+    .await
+    .expect_status(StatusCode::FORBIDDEN);
+
+    // Suspending a peer admin is how one admin removes everyone who could
+    // reverse it.
+    api.send(
+        "POST",
+        &format!("/api/v1/admin/users/{}/suspend", peer.user_id),
+        Some(&admin.access_token),
+        Some(serde_json::json!({ "reason": "disagreement" })),
+    )
+    .await
+    .expect_status(StatusCode::FORBIDDEN);
+}
+
+/// `/me` says what the caller is, so a client knows whether to offer the console.
+#[tokio::test]
+async fn me_reports_the_platform_role() {
+    let Some(api) = boot().await else {
+        return skip("me_reports_the_platform_role");
+    };
+
+    let alice = api.register("alice").await;
+    let me = api
+        .send("GET", "/api/v1/me", Some(&alice.access_token), None)
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    assert_eq!(me["platform_role"], "user");
+
+    grant_platform_role(&api, &alice.user_id, "admin").await;
+
+    let after = api
+        .send("GET", "/api/v1/me", Some(&alice.access_token), None)
+        .await
+        .expect_status(StatusCode::OK)
+        .json;
+    // Read live rather than from the token, so revoking staff takes effect now
+    // and not whenever the access token happens to expire.
+    assert_eq!(after["platform_role"], "admin");
+}

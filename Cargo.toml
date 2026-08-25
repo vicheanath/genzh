@@ -10,6 +10,7 @@ members = [
     "crates/room",
     "crates/messaging",
     "crates/notification",
+    "crates/admin",
     "crates/media-core",
     "crates/media-room",
     "crates/media-signaling",
@@ -30,6 +31,7 @@ genzh-auth = { path = "crates/auth" }
 genzh-community = { path = "crates/community" }
 genzh-graph = { path = "crates/social" }
 genzh-notification = { path = "crates/notification" }
+genzh-admin = { path = "crates/admin" }
 genzh-room = { path = "crates/room" }
 genzh-messaging = { path = "crates/messaging" }
 genzh-media-core = { path = "crates/media-core" }

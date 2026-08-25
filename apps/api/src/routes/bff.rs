@@ -155,12 +155,15 @@ pub async fn me_overview(
         },
     };
 
+    let platform_role = state.staff.role_of(user_id).await?;
+
     Ok(Json(MeOverviewResponse {
         me: UserResponse {
             id: user.user.id,
             handle: user.user.handle,
             email: user.user.email,
             profile: user.profile,
+            platform_role,
         },
         communities,
         rooms,

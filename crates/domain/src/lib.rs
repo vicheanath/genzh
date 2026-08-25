@@ -15,6 +15,7 @@
 //! by the API — see [`genzh_media_core::token`]. That keeps database concerns
 //! out of the RTP path and lets the two planes be deployed and scaled apart.
 
+pub mod audit;
 pub mod community;
 pub mod error;
 pub mod ids;
@@ -22,9 +23,11 @@ pub mod mention;
 pub mod message;
 pub mod notification;
 pub mod permission;
+pub mod platform;
 pub mod room;
 pub mod social;
 pub mod spam;
+pub mod support;
 pub mod user;
 
 pub use error::{DomainError, DomainResult};
@@ -32,6 +35,7 @@ pub use ids::{
     CommunityId, MessageId, NotificationId, RoleId, RoomId, SessionId, UserId,
 };
 pub use permission::{Permission, PermissionSet};
+pub use platform::PlatformRole;
 pub use room::{
     Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,
     RoomVisibility,

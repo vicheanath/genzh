@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use genzh_admin::{AuditLog, StaffService, SupportService};
 use genzh_auth::{AuthService, JwtService};
 use genzh_community::{CommunityService, RoleService};
 use genzh_graph::SocialService;
@@ -62,6 +63,12 @@ pub struct AppState {
     pub social: SocialService,
     /// Recorded notifications.
     pub notifications: NotificationService,
+    /// The record of what staff did. Append-only.
+    pub audit: AuditLog,
+    /// Platform staff, and enforcement against accounts.
+    pub staff: StaffService,
+    /// Reports and help requests.
+    pub support: SupportService,
     /// Media join authorization and token minting.
     pub media: Arc<MediaSessionService>,
     /// The configuration this process started with.
@@ -122,6 +129,13 @@ impl AppState {
         let messaging = MessagingService::new(pool.clone(), rooms.clone(), flood.clone());
         let notifications = NotificationService::new(pool.clone());
 
+        // The audit log is handed to the services that write to it rather than
+        // being reached for globally, so what is audited is visible in the
+        // wiring instead of buried in call sites.
+        let audit = AuditLog::new(pool.clone());
+        let staff = StaffService::new(pool.clone(), audit.clone());
+        let support = SupportService::new(pool.clone(), audit.clone());
+
         let signer = Arc::new(MediaTokenSigner::new(
             config.media_token_secret.as_bytes(),
             &config.jwt_issuer,
@@ -177,6 +191,9 @@ impl AppState {
             messaging,
             social,
             notifications,
+            audit,
+            staff,
+            support,
             media,
             flood,
             events: InMemoryEventBus::new(EVENT_BUFFER),

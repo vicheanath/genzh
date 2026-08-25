@@ -15,6 +15,7 @@ genzh-graph.workspace = true
 genzh-room.workspace = true
 genzh-messaging.workspace = true
 genzh-notification.workspace = true
+genzh-admin.workspace = true
 genzh-media-core.workspace = true
 
 axum.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "genzh-domain"
+name = "genzh-admin"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,10 +7,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+genzh-domain.workspace = true
+genzh-infrastructure.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 uuid.workspace = true
 chrono.workspace = true
-thiserror.workspace = true
-bitflags.workspace = true
-sqlx.workspace = true
+tracing.workspace = true

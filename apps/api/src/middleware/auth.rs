@@ -13,7 +13,8 @@
 use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
-use genzh_domain::{SessionId, UserId};
+use genzh_domain::platform::PlatformRole;
+use genzh_domain::{DomainError, SessionId, UserId};
 
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -88,5 +89,76 @@ mod tests {
         assert_eq!(bearer("Bearer"), None);
         assert_eq!(bearer("Bearer "), None);
         assert_eq!(bearer(""), None);
+    }
+}
+
+/// A caller who works the support queue — `support` or `admin`.
+///
+/// The role is read from the database on every request rather than carried in
+/// the access token. A token is good for its whole lifetime, so authority baked
+/// into one keeps working for minutes after it is revoked — and staff authority
+/// is exactly the kind that has to stop the moment somebody decides it should.
+/// One extra indexed lookup on a handful of endpoints is the right price.
+#[derive(Debug, Clone, Copy)]
+pub struct StaffUser {
+    pub user_id: UserId,
+    pub session_id: SessionId,
+    pub role: PlatformRole,
+}
+
+impl FromRequestParts<AppState> for StaffUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let caller = CurrentUser::from_request_parts(parts, state).await?;
+        let role = state
+            .staff
+            .role_of(caller.user_id)
+            .await
+            .map_err(|_| ApiError::Unauthenticated)?;
+
+        if !role.is_staff() {
+            // Not found rather than forbidden: the console's existence is not
+            // something an ordinary account needs confirmed by probing it.
+            return Err(ApiError::Domain(DomainError::NotFound("resource")));
+        }
+
+        Ok(StaffUser {
+            user_id: caller.user_id,
+            session_id: caller.session_id,
+            role,
+        })
+    }
+}
+
+/// A caller who may enforce: suspend accounts, remove content, read the log.
+#[derive(Debug, Clone, Copy)]
+pub struct AdminUser {
+    pub user_id: UserId,
+    pub session_id: SessionId,
+}
+
+impl FromRequestParts<AppState> for AdminUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let staff = StaffUser::from_request_parts(parts, state).await?;
+
+        if !staff.role.is_admin() {
+            // Support reaching an admin-only route is a real caller hitting a
+            // real endpoint they may not use, so this one is honest about it.
+            return Err(ApiError::Forbidden("platform_admin".to_string()));
+        }
+
+        Ok(AdminUser {
+            user_id: staff.user_id,
+            session_id: staff.session_id,
+        })
     }
 }

@@ -5,6 +5,7 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::http::header::USER_AGENT;
 use genzh_auth::{LoginInput, RegisterInput, SessionContext, TokenPair, UpdateProfile};
+use genzh_domain::platform::PlatformRole;
 use genzh_domain::user::Profile;
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +55,10 @@ pub struct UserResponse {
     pub email: String,
     /// Public profile.
     pub profile: Profile,
+    /// Authority above any one community, so a client knows whether to offer
+    /// the console at all. `user` for almost everybody.
+    #[serde(default)]
+    pub platform_role: PlatformRole,
 }
 
 /// A successful authentication.
@@ -97,6 +102,8 @@ pub async fn register(
             handle: user.user.handle,
             email: user.user.email,
             profile: user.profile,
+            // A brand-new account has no platform authority, by definition.
+            platform_role: PlatformRole::User,
         },
         tokens,
     }))
@@ -119,12 +126,15 @@ pub async fn login(
         )
         .await?;
 
+    let platform_role = state.staff.role_of(user.user.id).await?;
+
     Ok(Json(AuthResponse {
         user: UserResponse {
             id: user.user.id,
             handle: user.user.handle,
             email: user.user.email,
             profile: user.profile,
+            platform_role,
         },
         tokens,
     }))
@@ -161,11 +171,17 @@ pub async fn me(
     caller: CurrentUser,
 ) -> ApiResult<Json<UserResponse>> {
     let user = state.auth.current_user(caller.user_id).await?;
+    // Read separately rather than folded into `current_user`: the auth service
+    // has no business knowing about platform staff, and this is one indexed
+    // lookup on a route that already does several.
+    let platform_role = state.staff.role_of(caller.user_id).await?;
+
     Ok(Json(UserResponse {
         id: user.user.id,
         handle: user.user.handle,
         email: user.user.email,
         profile: user.profile,
+        platform_role,
     }))
 }
 
