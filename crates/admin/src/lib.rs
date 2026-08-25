@@ -10,5 +10,5 @@ pub mod staff;
 pub mod support;
 
 pub use audit::{AuditLog, AuditQuery, AuditRecord};
-pub use staff::{StaffService, StaffUserView};
+pub use staff::{AdminStats, StaffService, StaffUserView};
 pub use support::{NewTicket, SupportService, TicketQuery};

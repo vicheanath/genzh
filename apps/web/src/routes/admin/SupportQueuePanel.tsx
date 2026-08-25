@@ -39,25 +39,41 @@ const STATUS_TONE: Record<TicketStatus, 'danger' | 'accent' | 'success' | 'neutr
 export function SupportQueuePanel() {
   const [status, setStatus] = useState<TicketStatus | 'all'>('open')
   const [selected, setSelected] = useState<string | null>(null)
+  const [ticketSearch, setTicketSearch] = useState<string>('')
 
   const queue = useSupportQueue(status === 'all' ? {} : { status })
-  const tickets = queue.data?.tickets ?? []
+  const tickets = (queue.data?.tickets ?? []).filter((ticket) => {
+    if (!ticketSearch.trim()) return true
+    const q = ticketSearch.toLowerCase()
+    return (
+      ticket.subject.toLowerCase().includes(q) ||
+      ticket.category.toLowerCase().includes(q) ||
+      ticket.details.toLowerCase().includes(q)
+    )
+  })
 
   return (
     <div className={styles.split}>
       <div className={styles.list}>
         <div className={styles.listHeader}>
-          <Select
-            aria-label="Filter by status"
-            value={status}
-            onValueChange={(next) => {
-              setStatus(next)
-              // The selected ticket may not be in the new filter; keeping it
-              // would leave a thread open beside a list that no longer has it.
-              setSelected(null)
-            }}
-            options={[{ value: 'all' as const, label: 'All' }, ...STATUSES]}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <Select
+              aria-label="Filter by status"
+              value={status}
+              onValueChange={(next) => {
+                setStatus(next)
+                setSelected(null)
+              }}
+              options={[{ value: 'all' as const, label: 'All Statuses' }, ...STATUSES]}
+            />
+            <Input
+              label="Search queue"
+              aria-label="Search tickets"
+              placeholder="Filter queue by keyword…"
+              value={ticketSearch}
+              onChange={(e) => setTicketSearch(e.target.value)}
+            />
+          </div>
         </div>
 
         {queue.isLoading && <Skeleton height="4rem" />}
@@ -65,7 +81,7 @@ export function SupportQueuePanel() {
           <Callout tone="danger">{errorText(queue.error, 'Could not load the queue')}</Callout>
         )}
         {!queue.isLoading && tickets.length === 0 && (
-          <p className={styles.empty}>Nothing waiting. </p>
+          <p className={styles.empty}>No tickets match your filters.</p>
         )}
 
         {tickets.map((ticket) => (
@@ -82,7 +98,7 @@ export function SupportQueuePanel() {
         {selected ? (
           <TicketThread ticketId={selected} />
         ) : (
-          <p className={styles.empty}>Pick a ticket to read it.</p>
+          <p className={styles.empty}>Pick a ticket to view the thread and respond.</p>
         )}
       </div>
     </div>
@@ -117,6 +133,21 @@ function TicketRow({
     </button>
   )
 }
+
+const CANNED_REPLIES = [
+  {
+    label: 'Investigating',
+    text: 'Thank you for bringing this to our attention. Our moderation team is currently reviewing this report.',
+  },
+  {
+    label: 'Action Taken',
+    text: 'We have reviewed this report and taken the appropriate moderation action in accordance with our platform guidelines.',
+  },
+  {
+    label: 'Need More Info',
+    text: 'Could you please provide more context or details regarding what occurred so we can assist further?',
+  },
+]
 
 /** One ticket: what was said, and the two things staff can do about it. */
 function TicketThread({ ticketId }: { ticketId: string }) {
@@ -162,15 +193,18 @@ function TicketThread({ ticketId }: { ticketId: string }) {
   return (
     <article className={styles.thread}>
       <header className={styles.threadHeader}>
-        <h2 className={styles.threadSubject}>{ticket.subject}</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
+          <h2 className={styles.threadSubject}>{ticket.subject}</h2>
+          <Badge tone={STATUS_TONE[ticket.status]}>{ticket.status}</Badge>
+        </div>
         <p className={styles.rowMeta}>
           {ticket.kind === 'report' ? 'Report' : 'Help request'} · {ticket.category} ·{' '}
           {formatFull(ticket.created_at)}
         </p>
         {ticket.subject_type && (
           <p className={styles.rowMeta}>
-            About a {ticket.subject_type}
-            {ticket.subject_id ? ` (${ticket.subject_id})` : ''}
+            About a <strong>{ticket.subject_type}</strong>
+            {ticket.subject_id ? ` (ID: ${ticket.subject_id})` : ''}
           </p>
         )}
       </header>
@@ -191,6 +225,20 @@ function TicketThread({ ticketId }: { ticketId: string }) {
       </div>
 
       <div className={styles.composer}>
+        <div className={styles.cannedResponses}>
+          <span className={styles.cannedLabel}>Quick Templates:</span>
+          {CANNED_REPLIES.map((canned) => (
+            <button
+              key={canned.label}
+              type="button"
+              className={styles.chip}
+              onClick={() => setBody(canned.text)}
+            >
+              {canned.label}
+            </button>
+          ))}
+        </div>
+
         <Input
           label={staffOnly ? 'Internal note (the reporter never sees this)' : 'Reply'}
           value={body}
@@ -214,12 +262,17 @@ function TicketThread({ ticketId }: { ticketId: string }) {
           </Button>
           {ticket.status !== 'resolved' && (
             <Button variant="secondary" onClick={() => void move('resolved')}>
-              Resolve
+              Mark Resolved
             </Button>
           )}
           {ticket.status !== 'closed' && (
             <Button variant="ghost" onClick={() => void move('closed')}>
-              Close
+              Close Ticket
+            </Button>
+          )}
+          {ticket.status === 'closed' && (
+            <Button variant="ghost" onClick={() => void move('open')}>
+              Re-open Ticket
             </Button>
           )}
         </div>

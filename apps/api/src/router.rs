@@ -42,6 +42,7 @@ pub fn build(state: AppState) -> Router {
         // Gated by extractor, not by path: `StaffUser` and `AdminUser` are
         // arguments to the handlers, so a route here cannot be added without
         // stating who may call it.
+        .route("/admin/stats", get(routes::admin::stats))
         .route("/admin/audit", get(routes::admin::audit))
         .route("/admin/audit/actions", get(routes::admin::audit_actions))
         .route("/admin/staff", get(routes::admin::list_staff))

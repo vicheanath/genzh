@@ -186,6 +186,7 @@ export {
   usePlatformRole,
   useIsStaff,
   useIsPlatformAdmin,
+  useAdminStats,
   useAuditLog,
   useAuditActions,
   useUserSearch,
@@ -203,6 +204,7 @@ export {
   useReplyToMyTicketMutation,
 } from './admin/api'
 export type {
+  AdminStats,
   AuditEntry,
   OpenTicketInput,
   PlatformRole,

@@ -82,6 +82,13 @@ function UserCard({ account, canEnforce }: { account: StaffUserView; canEnforce:
 
   const [reason, setReason] = useState('')
 
+  const PRESET_REASONS = [
+    'Spam & Bot Activity',
+    'Harassment & Hate Speech',
+    'TOS Violation',
+    'Compromised Account',
+  ]
+
   async function handleSuspend() {
     // The reason is required by the server too — it is what the audit entry
     // will say, and an entry reading "suspended, no reason given" is useless to
@@ -157,32 +164,54 @@ function UserCard({ account, canEnforce }: { account: StaffUserView; canEnforce:
       )}
 
       {canEnforce && (
-        <div className={styles.cardActions}>
-          {account.is_active ? (
-            <>
-              <Input
-                label="Reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="why this account is being suspended"
-                maxLength={280}
-              />
-              <Button variant="danger" onClick={() => void handleSuspend()}>
-                Suspend
-              </Button>
-            </>
-          ) : (
-            <Button variant="secondary" onClick={() => void handleReinstate()}>
-              Reinstate
-            </Button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+          {account.is_active && (
+            <div className={styles.cannedResponses}>
+              <span className={styles.cannedLabel}>Quick reasons:</span>
+              {PRESET_REASONS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={styles.chip}
+                  onClick={() => setReason(preset)}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
           )}
 
-          <Select
-            aria-label={`Platform role for ${account.handle}`}
-            value={account.platform_role}
-            onValueChange={(role) => void handleRole(role)}
-            options={ROLES}
-          />
+          <div className={styles.cardActions}>
+            {account.is_active ? (
+              <>
+                <div style={{ flex: 1, minWidth: '14rem' }}>
+                  <Input
+                    label="Suspension Reason"
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder="Why this account is being suspended"
+                    maxLength={280}
+                  />
+                </div>
+                <Button variant="danger" onClick={() => void handleSuspend()}>
+                  Suspend
+                </Button>
+              </>
+            ) : (
+              <Button variant="secondary" onClick={() => void handleReinstate()}>
+                Reinstate Account
+              </Button>
+            )}
+
+            <div style={{ minWidth: '14rem' }}>
+              <Select
+                aria-label={`Platform role for ${account.handle}`}
+                value={account.platform_role}
+                onValueChange={(role) => void handleRole(role)}
+                options={ROLES}
+              />
+            </div>
+          </div>
         </div>
       )}
     </article>

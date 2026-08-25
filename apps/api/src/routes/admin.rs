@@ -72,6 +72,16 @@ pub async fn audit_actions(_admin: AdminUser) -> Json<Vec<&'static str>> {
     Json(AuditAction::ALL.iter().map(|a| a.key()).collect())
 }
 
+/// `GET /api/v1/admin/stats`
+///
+/// System overview metrics for the admin console.
+pub async fn stats(
+    State(state): State<AppState>,
+    _staff: StaffUser,
+) -> ApiResult<Json<genzh_admin::AdminStats>> {
+    Ok(Json(state.staff.stats().await?))
+}
+
 // ──────────────────────────────── users ───────────────────────────────
 
 /// `GET /api/v1/admin/users` query string.

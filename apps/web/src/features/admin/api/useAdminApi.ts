@@ -7,6 +7,7 @@ import type { OpenTicketInput, PlatformRole, TicketStatus, Uuid } from './types'
 
 export const adminKeys = {
   all: ['admin'] as const,
+  stats: () => [...adminKeys.all, 'stats'] as const,
   audit: (filter: string) => [...adminKeys.all, 'audit', filter] as const,
   auditActions: () => [...adminKeys.all, 'audit', 'actions'] as const,
   users: (query: string) => [...adminKeys.all, 'users', query] as const,
@@ -47,6 +48,16 @@ export function useIsPlatformAdmin(): boolean {
 }
 
 // ── the console ───────────────────────────────────────────────────────────
+
+export function useAdminStats() {
+  const isStaff = useIsStaff()
+  return useQuery({
+    queryKey: adminKeys.stats(),
+    queryFn: () => admin.stats(null),
+    enabled: isStaff,
+    refetchInterval: 15_000,
+  })
+}
 
 export function useAuditLog(filter: { action?: string; subject_id?: Uuid } = {}) {
   const isAdmin = useIsPlatformAdmin()

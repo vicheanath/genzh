@@ -1837,16 +1837,20 @@ async fn unread_counts_track_reading_and_muting_is_separate() {
     api.post_message(&owner, &room_id, "first").await;
     api.post_message(&owner, &room_id, "second").await;
 
-    let unread_for = |token: String| async move {
-        api.send("GET", "/api/v1/me/unread", Some(&token), None)
-            .await
-            .expect_status(StatusCode::OK)
-            .json
-            .as_array()
-            .expect("rooms")
-            .iter()
-            .find(|entry| entry["room_id"] == room_id.as_str())
-            .cloned()
+    let unread_for = |token: String| {
+        let api = api.clone();
+        let room_id = room_id.clone();
+        async move {
+            api.send("GET", "/api/v1/me/unread", Some(&token), None)
+                .await
+                .expect_status(StatusCode::OK)
+                .json
+                .as_array()
+                .expect("rooms")
+                .iter()
+                .find(|entry| entry["room_id"] == room_id.as_str())
+                .cloned()
+        }
     };
 
     let before = unread_for(reader.access_token.clone()).await;

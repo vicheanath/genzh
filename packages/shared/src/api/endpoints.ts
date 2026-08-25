@@ -1,5 +1,6 @@
 import { request } from './client'
 import type {
+  AdminStats,
   AuditEntry,
   AuthConfig,
   AuthResponse,
@@ -661,6 +662,9 @@ export const support = {
  * account needs confirmed by probing it.
  */
 export const admin = {
+  /** Platform overview stats. */
+  stats: (token: string | null) => request<AdminStats>('/api/v1/admin/stats', { token }),
+
   /** The audit log, newest first. Admin only. */
   audit: (
     token: string | null,

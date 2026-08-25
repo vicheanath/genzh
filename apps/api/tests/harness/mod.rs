@@ -42,6 +42,7 @@ use tower::ServiceExt;
 pub const TEST_MEDIA_SECRET: &str = "integration-test-media-secret-value-32b";
 
 /// A running API, wired to a real database.
+#[derive(Clone)]
 pub struct TestApi {
     router: Router,
     /// Kept so tests can assert directly against the schema.
@@ -430,6 +431,29 @@ impl TestApi {
         .json["id"]
             .as_str()
             .expect("room id")
+            .to_owned()
+    }
+
+    /// Post a message to a room.
+    pub async fn post_message(
+        &self,
+        account: &Account,
+        room_id: &str,
+        content: &str,
+    ) -> String {
+        let resp = self.send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/messages"),
+            Some(&account.access_token),
+            Some(serde_json::json!({ "content": content })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+
+        resp.json["message"]["id"]
+            .as_str()
+            .or_else(|| resp.json["id"].as_str())
+            .expect("message id")
             .to_owned()
     }
 }

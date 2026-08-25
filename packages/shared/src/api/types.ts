@@ -518,6 +518,19 @@ export interface SupportQueue {
   open_count: number
 }
 
+/** System overview statistics for the admin dashboard. */
+export interface AdminStats {
+  total_users: number
+  active_users: number
+  suspended_users: number
+  staff_users: number
+  open_tickets: number
+  resolved_tickets: number
+  total_communities: number
+  total_rooms: number
+  total_audit_entries: number
+}
+
 /** What somebody raising a report or asking for help supplies. */
 export interface OpenTicketInput {
   kind: TicketKind

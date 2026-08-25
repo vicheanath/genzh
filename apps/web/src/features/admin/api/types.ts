@@ -1,4 +1,5 @@
 import type {
+  AdminStats,
   AuditEntry,
   OpenTicketInput,
   PlatformRole,
@@ -15,6 +16,7 @@ import type {
 } from '@/lib/api'
 
 export type {
+  AdminStats,
   AuditEntry,
   OpenTicketInput,
   PlatformRole,

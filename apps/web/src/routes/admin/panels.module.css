@@ -194,6 +194,19 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.cannedResponses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.cannedLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
 .checkbox {
   display: inline-flex;
   align-items: center;
@@ -208,9 +221,72 @@
   flex-wrap: wrap;
 }
 
+.filterBar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.chip {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid var(--border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.chip:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+  border-color: var(--border-hover);
+}
+
+.chipActive {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+.chipActive:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
 .entrySummary {
   margin: 0;
   color: var(--color-text);
+}
+
+.metaHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.metaToggle {
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.metaToggle:hover {
+  text-decoration: underline;
 }
 
 .metadata {
