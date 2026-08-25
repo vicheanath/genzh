@@ -100,7 +100,7 @@ pub const H264: CodecProfile = CodecProfile {
 };
 
 /// Every codec this build knows how to describe.
-pub const ALL_CODECS: &[CodecProfile] = &[OPUS, VP8, VP9, H264];
+pub const ALL_CODECS: &[CodecProfile] = &[OPUS, VP9, H264, VP8];
 
 /// The set of codecs a media server will negotiate.
 #[derive(Debug, Clone, PartialEq, Eq)]

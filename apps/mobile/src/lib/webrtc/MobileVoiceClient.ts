@@ -157,8 +157,9 @@ export class MobileVoiceClient {
         audio: false,
         video: {
           facingMode: facing,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
+          aspectRatio: { ideal: 1.7777777778 },
           frameRate: { ideal: 30 },
         },
       });
@@ -167,6 +168,9 @@ export class MobileVoiceClient {
       if (!track) return null;
 
       this.cameraTrack = track;
+      if ('contentHint' in track) {
+        track.contentHint = 'motion';
+      }
 
       if (this.publisher) {
         this.send({
@@ -176,6 +180,7 @@ export class MobileVoiceClient {
         });
 
         this.cameraSender = this.publisher.addTrack(track, stream);
+        await this.applyVideoSenderParams(this.cameraSender, 2_500_000, 'balanced');
         await this.negotiatePublisher();
       }
 
@@ -258,11 +263,20 @@ export class MobileVoiceClient {
     if (this.screenTrack) return this.state.screenStream;
 
     try {
-      const stream = await mediaDevices.getDisplayMedia({ video: true });
+      const stream = await mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920, max: 2560 },
+          height: { ideal: 1080, max: 1440 },
+          frameRate: { ideal: 30, max: 60 },
+        },
+      });
       const track = stream.getVideoTracks()[0];
       if (!track) return null;
 
       this.screenTrack = track;
+      if ('contentHint' in track) {
+        track.contentHint = 'detail';
+      }
       track.onended = () => {
         void this.stopScreenShare();
       };
@@ -275,6 +289,7 @@ export class MobileVoiceClient {
         });
 
         this.screenSender = this.publisher.addTrack(track, stream);
+        await this.applyVideoSenderParams(this.screenSender, 5_000_000, 'maintain-resolution');
         await this.negotiatePublisher();
       }
 
@@ -689,6 +704,29 @@ export class MobileVoiceClient {
         // Ignored
       }
       this.localStream = null;
+    }
+  }
+
+  private async applyVideoSenderParams(
+    sender: any,
+    maxBitrate: number,
+    degradationPreference: 'balanced' | 'maintain-framerate' | 'maintain-resolution',
+  ): Promise<void> {
+    if (!sender || typeof sender.getParameters !== 'function' || typeof sender.setParameters !== 'function') {
+      return;
+    }
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      if (params.encodings[0]) {
+        params.encodings[0].maxBitrate = maxBitrate;
+      }
+      params.degradationPreference = degradationPreference;
+      await sender.setParameters(params);
+    } catch {
+      // Ignored if unsupported on specific native WebRTC builds
     }
   }
 }

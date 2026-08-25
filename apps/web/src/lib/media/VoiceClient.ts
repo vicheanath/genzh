@@ -265,8 +265,10 @@ export class VoiceClient {
     try {
       this.send({ type: 'publish_intent', kind: 'camera', client_track_id: track.id })
       this.cameraSender = this.publisher.addTrack(track, cameraStream)
+      const transceiver = this.publisher.getTransceivers().find((t) => t.sender === this.cameraSender)
+      preferHighEfficiencyCodecs(transceiver)
       await applyVideoSenderParameters(this.cameraSender, {
-        maxBitrate: 2_000_000,
+        maxBitrate: 3_500_000,
         degradationPreference: 'balanced',
       })
       await this.renegotiatePublisher()
@@ -341,8 +343,8 @@ export class VoiceClient {
         // browsers pre-select the whole screen, and sharing one window or one
         // tab is the common case.
         video: {
-          width: { ideal: 1920, max: 3840 },
-          height: { ideal: 1080, max: 2160 },
+          width: { ideal: 2560, max: 3840 },
+          height: { ideal: 1440, max: 2160 },
           frameRate: { ideal: 30, max: 60 },
         },
         // The SFU carries one audio track per participant — the microphone —
@@ -376,8 +378,10 @@ export class VoiceClient {
     try {
       this.send({ type: 'publish_intent', kind: 'screen_share', client_track_id: track.id })
       this.screenSender = this.publisher.addTrack(track, screenStream)
+      const transceiver = this.publisher.getTransceivers().find((t) => t.sender === this.screenSender)
+      preferHighEfficiencyCodecs(transceiver)
       await applyVideoSenderParameters(this.screenSender, {
-        maxBitrate: 4_000_000,
+        maxBitrate: 8_000_000,
         degradationPreference: 'maintain-resolution',
       })
       await this.renegotiatePublisher()
@@ -1039,11 +1043,43 @@ async function captureAudio(deviceId: string): Promise<MediaStream> {
 }
 
 /**
+ * Prefer higher efficiency codecs (VP9, H264) for video and screen sharing.
+ */
+function preferHighEfficiencyCodecs(transceiver?: RTCRtpTransceiver): void {
+  if (!transceiver || typeof transceiver.setCodecPreferences !== 'function') return
+  if (typeof RTCRtpSender.getCapabilities !== 'function') return
+  const capabilities = RTCRtpSender.getCapabilities('video')
+  if (!capabilities?.codecs || capabilities.codecs.length === 0) return
+
+  const codecs = [...capabilities.codecs]
+  codecs.sort((a, b) => {
+    const score = (mime: string) => {
+      const lower = mime.toLowerCase()
+      if (lower.includes('vp9')) return 3
+      if (lower.includes('h264')) return 2
+      if (lower.includes('vp8')) return 1
+      return 0
+    }
+    return score(b.mimeType) - score(a.mimeType)
+  })
+
+  try {
+    transceiver.setCodecPreferences(codecs)
+  } catch {
+    // Some browsers or custom stacks might reject specific codec preference configurations.
+  }
+}
+
+/**
  * Apply bandwidth and quality degradation preferences to a video sender.
  */
 async function applyVideoSenderParameters(
   sender: RTCRtpSender,
-  options: { maxBitrate: number; degradationPreference: RTCDegradationPreference },
+  options: {
+    maxBitrate: number
+    degradationPreference: RTCDegradationPreference
+    scaleResolutionDownBy?: number
+  },
 ): Promise<void> {
   try {
     const params = sender.getParameters()
@@ -1053,6 +1089,9 @@ async function applyVideoSenderParameters(
     const encoding = params.encodings[0]
     if (encoding) {
       encoding.maxBitrate = options.maxBitrate
+      if (options.scaleResolutionDownBy !== undefined) {
+        encoding.scaleResolutionDownBy = options.scaleResolutionDownBy
+      }
     }
     params.degradationPreference = options.degradationPreference
     await sender.setParameters(params)
@@ -1066,6 +1105,7 @@ async function captureVideo(deviceId: string): Promise<MediaStream> {
   const video: MediaTrackConstraints = {
     width: { ideal: 1920, max: 1920 },
     height: { ideal: 1080, max: 1080 },
+    aspectRatio: { ideal: 1.7777777778 },
     frameRate: { ideal: 30, max: 60 },
   }
   // The microphone is published separately and independently of this, so asking
