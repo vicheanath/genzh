@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import {
@@ -10,10 +12,12 @@ import {
   MoonIcon,
   PhoneOffIcon,
   SettingsIcon,
+  ShieldIcon,
   SignOutIcon,
   SunIcon,
 } from '@/components/Icons'
 import { Menu, MenuItem, MenuSeparator } from '@/components/Menu'
+import { useIsStaff } from '@/features/api'
 import { NotificationBell } from '@/features/notifications'
 import { useAuth } from '@/lib/auth'
 import { useAppStore } from '@/lib/store'
@@ -37,6 +41,8 @@ const THEME_ITEMS: ReadonlyArray<{ value: Theme; label: string; icon: typeof Sun
  */
 export function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const isStaff = useIsStaff()
   const isMobile = useIsMobile()
   const { theme, setTheme } = useTheme()
   const isMuted = useAppStore((s) => s.isMuted)
@@ -109,6 +115,15 @@ export function UserBar({ onOpenSettings }: { onOpenSettings: () => void }) {
         <MenuItem icon={<SettingsIcon size={15} />} onClick={onOpenSettings}>
           User settings
         </MenuItem>
+
+        {/* Only staff are shown the way in. The route redirects and every
+            endpoint behind it refuses regardless, so this is discoverability
+            rather than a gate. */}
+        {isStaff && (
+          <MenuItem icon={<ShieldIcon size={15} />} onClick={() => void navigate('/admin')}>
+            Platform console
+          </MenuItem>
+        )}
 
         <MenuSeparator />
 

@@ -1,0 +1,31 @@
+import type {
+  AuditEntry,
+  OpenTicketInput,
+  PlatformRole,
+  StaffUserView,
+  SupportMessage,
+  SupportQueue,
+  SupportTicket,
+  SupportTicketDetail,
+  TicketKind,
+  TicketStatus,
+  TicketSubjectType,
+  Timestamp,
+  Uuid,
+} from '@/lib/api'
+
+export type {
+  AuditEntry,
+  OpenTicketInput,
+  PlatformRole,
+  StaffUserView,
+  SupportMessage,
+  SupportQueue,
+  SupportTicket,
+  SupportTicketDetail,
+  TicketKind,
+  TicketStatus,
+  TicketSubjectType,
+  Timestamp,
+  Uuid,
+}

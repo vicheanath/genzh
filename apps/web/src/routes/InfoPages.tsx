@@ -20,7 +20,9 @@ import { Input } from '@/components/Input'
 import { Select, type SelectOption } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
+import { useOpenTicketMutation } from '@/features/api'
 import { useAuth } from '@/lib/auth'
+import { errorText } from '@/lib/errors'
 import { cx } from '@/lib/cx'
 
 import styles from './InfoPages.module.css'
@@ -492,22 +494,56 @@ const REPORT_CATEGORIES: ReadonlyArray<SelectOption<string>> = [
 
 function ReportSection() {
   const toast = useToast()
+  const { user } = useAuth()
+  const openTicket = useOpenTicketMutation()
+
   const [category, setCategory] = useState<string>('harassment')
   const [targetIdentifier, setTargetIdentifier] = useState('')
   const [details, setDetails] = useState('')
-  const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+
+  const busy = openTicket.isPending
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setBusy(true)
-    setTimeout(() => {
-      setBusy(false)
+    if (!details.trim()) return
+
+    try {
+      await openTicket.mutateAsync({
+        kind: 'report',
+        category,
+        // The identifier is free text — a handle, a room name, a pasted URL —
+        // so it goes in the subject line rather than being guessed at as an id
+        // the server would then fail to resolve.
+        subject: `Report: ${targetIdentifier.trim() || 'unspecified target'}`,
+        details: details.trim(),
+      })
       setSubmitted(true)
-      toast.success('Report submitted', 'Our trust & safety team has received your report.')
       setTargetIdentifier('')
       setDetails('')
-    }, 700)
+      toast.success('Report submitted', 'Our trust & safety team has received your report.')
+    } catch (cause) {
+      // It used to say this had been received no matter what. Telling somebody
+      // their report was filed when it was not is worse than telling them it
+      // failed, because they stop expecting anything to happen.
+      toast.error('Could not submit the report', errorText(cause))
+    }
+  }
+
+  if (!user) {
+    return (
+      <article className={styles.article}>
+        <header className={styles.articleHeader}>
+          <Badge tone="danger" dot>Trust & Safety</Badge>
+          <h1 className={styles.title}>Report Abuse or Violations</h1>
+        </header>
+        <Callout tone="info">
+          Please sign in to file a report. Reports are tied to your account so our
+          team can follow up with you — and so we can tell a real report from a
+          flood of anonymous ones.
+        </Callout>
+      </article>
+    )
   }
 
   return (
@@ -522,7 +558,8 @@ function ReportSection() {
 
       {submitted && (
         <Callout tone="info">
-          Thank you for helping keep genzh safe. Our moderation team reviews all reports promptly and takes appropriate action.
+          Thank you for helping keep genzh safe. Your report is in the queue — you
+          can follow it, and any reply, from your account.
         </Callout>
       )}
 

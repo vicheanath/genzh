@@ -1,5 +1,6 @@
 import { request } from './client'
 import type {
+  AuditEntry,
   AuthConfig,
   AuthResponse,
   CallEndReason,
@@ -29,6 +30,14 @@ import type {
   SocialOverviewResponse,
   TokenPair,
   NotificationPage,
+  OpenTicketInput,
+  PlatformRole,
+  StaffUserView,
+  SupportMessage,
+  SupportQueue,
+  SupportTicket,
+  SupportTicketDetail,
+  TicketStatus,
   Timestamp,
   UpdateProfileInput,
   UserRoom,
@@ -520,6 +529,130 @@ export const media = {
     request<void>(`/api/v1/rooms/${roomId}/call/end`, {
       method: 'POST',
       body: { reason },
+      token,
+    }),
+}
+
+// ── support, as the person who raised it sees it ──────────────────────────
+
+export const support = {
+  /**
+   * Raise a report or ask for help.
+   *
+   * Open to any signed-in account, including one that has been reported: the
+   * queue is where abuse is judged, and refusing input from somebody already
+   * accused would be judging it at the door.
+   */
+  open: (token: string | null, input: OpenTicketInput) =>
+    request<SupportTicket>('/api/v1/support/tickets', {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+
+  /** The caller's own tickets. */
+  mine: (token: string | null) =>
+    request<SupportTicket[]>('/api/v1/support/tickets', { token }),
+
+  /**
+   * One of the caller's tickets, with its thread.
+   *
+   * The thread comes back without staff notes even when the caller *is* staff:
+   * this is the reporter's view of their own ticket.
+   */
+  get: (token: string | null, id: Uuid) =>
+    request<SupportTicketDetail>(`/api/v1/support/tickets/${id}`, { token }),
+
+  reply: (token: string | null, id: Uuid, body: string) =>
+    request<SupportMessage>(`/api/v1/support/tickets/${id}/messages`, {
+      method: 'POST',
+      body: { body },
+      token,
+    }),
+}
+
+// ── the platform console ──────────────────────────────────────────────────
+
+/**
+ * Staff-only. Every one of these 404s for an account without a platform role,
+ * rather than 403 — the console's existence is not something an ordinary
+ * account needs confirmed by probing it.
+ */
+export const admin = {
+  /** The audit log, newest first. Admin only. */
+  audit: (
+    token: string | null,
+    params: {
+      actor_id?: Uuid
+      action?: string
+      subject_id?: Uuid
+      before?: Timestamp
+      limit?: number
+    } = {},
+  ) => request<AuditEntry[]>('/api/v1/admin/audit', { token, params }),
+
+  /** The actions the server actually writes, for the filter list. */
+  auditActions: (token: string | null) =>
+    request<string[]>('/api/v1/admin/audit/actions', { token }),
+
+  /** Search accounts by handle or e-mail. Never a full listing. */
+  searchUsers: (token: string | null, q: string, limit?: number) =>
+    request<StaffUserView[]>('/api/v1/admin/users', { token, params: { q, limit } }),
+
+  getUser: (token: string | null, id: Uuid) =>
+    request<StaffUserView>(`/api/v1/admin/users/${id}`, { token }),
+
+  /** Everyone with platform authority. Admin only. */
+  listStaff: (token: string | null) =>
+    request<StaffUserView[]>('/api/v1/admin/staff', { token }),
+
+  suspendUser: (token: string | null, id: Uuid, reason: string) =>
+    request<StaffUserView>(`/api/v1/admin/users/${id}/suspend`, {
+      method: 'POST',
+      body: { reason },
+      token,
+    }),
+
+  reinstateUser: (token: string | null, id: Uuid) =>
+    request<StaffUserView>(`/api/v1/admin/users/${id}/reinstate`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+
+  setPlatformRole: (token: string | null, id: Uuid, role: PlatformRole) =>
+    request<StaffUserView>(`/api/v1/admin/users/${id}/platform-role`, {
+      method: 'PUT',
+      body: { role },
+      token,
+    }),
+
+  /** The support queue. */
+  tickets: (
+    token: string | null,
+    params: { status?: TicketStatus; kind?: string; assignee_id?: Uuid; limit?: number } = {},
+  ) => request<SupportQueue>('/api/v1/admin/tickets', { token, params }),
+
+  /** One ticket and its thread, staff notes included. */
+  ticket: (token: string | null, id: Uuid) =>
+    request<SupportTicketDetail>(`/api/v1/admin/tickets/${id}`, { token }),
+
+  replyToTicket: (token: string | null, id: Uuid, body: string, staffOnly = false) =>
+    request<SupportMessage>(`/api/v1/admin/tickets/${id}/messages`, {
+      method: 'POST',
+      body: { body, staff_only: staffOnly },
+      token,
+    }),
+
+  /** `assignee_id: null` unassigns; omitting it leaves the assignee alone. */
+  updateTicket: (
+    token: string | null,
+    id: Uuid,
+    patch: { status?: TicketStatus; assignee_id?: Uuid | null },
+  ) =>
+    request<SupportTicket>(`/api/v1/admin/tickets/${id}`, {
+      method: 'PATCH',
+      body: patch,
       token,
     }),
 }

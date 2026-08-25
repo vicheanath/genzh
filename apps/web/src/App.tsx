@@ -11,6 +11,7 @@ import { useIsMobile } from '@/lib/useMediaQuery'
 import { CallProvider } from '@/lib/useCall'
 
 import { AccountRoute } from './routes/AccountRoute'
+import { AdminRoute } from './routes/AdminRoute'
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
 import { CommunitySettingsRoute } from './routes/CommunitySettingsRoute'
@@ -113,6 +114,10 @@ function Router() {
             redirected rather than rendering a second, worse version of it. */}
         <Route path="/notifications" element={<MobileOnly to="/"><NotificationsRoute /></MobileOnly>} />
         <Route path="/me" element={<MobileOnly to="/"><AccountRoute /></MobileOnly>} />
+        {/* The console redirects a non-staff visitor rather than 404ing, and
+            the server refuses every endpoint behind it regardless — this route
+            decides what to render, not who is allowed. */}
+        <Route path="/admin" element={<AdminRoute />} />
         <Route path="/c/:communityId" element={<CommunityRoute />} />
         {/* Settings is a screen on a phone and a dialog on a desktop, where the
             route redirects onto the server it belongs to and opens the dialog

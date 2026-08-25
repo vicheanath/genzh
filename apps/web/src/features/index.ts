@@ -1,4 +1,5 @@
 export * from './api'
+export * as adminFeature from './admin'
 export * as authFeature from './auth'
 export * as bffFeature from './bff'
 export * as chatFeature from './chat'

@@ -401,3 +401,103 @@ The media server exposes the same two, plus live counters:
 ```json
 { "status": "ready", "rooms": 3, "participants": 11, "relay_available": false }
 ```
+
+---
+
+## Platform staff, support and the audit log
+
+`Permission` is scoped to one community — by design, so nobody can be given
+power over a community they were not invited to. That leaves nobody able to
+answer a support ticket or to suspend an account abusing several communities at
+once. `users.platform_role` is that tier, and it is deliberately small:
+
+| Role      | Can                                                                     |
+| --------- | ----------------------------------------------------------------------- |
+| `user`    | Nothing. Everybody, by default.                                          |
+| `support` | Read the support queue, reply, resolve, and look up accounts.            |
+| `admin`   | All of the above, plus suspend/reinstate, change roles, read this log.   |
+
+`GET /me` returns `platform_role`, so a client knows whether to offer the
+console. It is read from the database on every staff request rather than carried
+in the access token: staff authority is exactly the kind that must stop working
+the moment it is revoked, not whenever a JWT happens to expire.
+
+### Bootstrapping the first admin
+
+There is no endpoint that grants the *first* one — an endpoint that could would
+be one an ordinary account might reach. Do it in SQL:
+
+```sql
+UPDATE users SET platform_role = 'admin' WHERE handle = 'your-handle';
+```
+
+After that, `PUT /admin/users/{id}/platform-role` grants the rest.
+
+### Console
+
+| Method  | Path                                  | Requires  |
+| ------- | ------------------------------------- | --------- |
+| `GET`   | `/admin/tickets`                      | `support` |
+| `GET`   | `/admin/tickets/{id}`                 | `support` |
+| `PATCH` | `/admin/tickets/{id}`                 | `support` |
+| `POST`  | `/admin/tickets/{id}/messages`        | `support` |
+| `GET`   | `/admin/users?q=`                     | `support` |
+| `GET`   | `/admin/users/{id}`                   | `support` |
+| `GET`   | `/admin/staff`                        | `admin`   |
+| `POST`  | `/admin/users/{id}/suspend`           | `admin`   |
+| `POST`  | `/admin/users/{id}/reinstate`         | `admin`   |
+| `PUT`   | `/admin/users/{id}/platform-role`     | `admin`   |
+| `GET`   | `/admin/audit`                        | `admin`   |
+| `GET`   | `/admin/audit/actions`                | `admin`   |
+
+An account without a platform role gets **`404`**, not `403`: the console's
+existence is not something an ordinary account needs confirmed by probing it.
+`support` reaching an admin-only route does get `403`, because that is a real
+caller hitting a real endpoint they may not use.
+
+Accounts are **searched, never listed** — support is given a handle and needs to
+find it, which is not the same as being able to page through every account.
+
+Suspension flips `is_active`, which login, refresh and session validation already
+check, so it takes effect on sessions that are *already open* rather than only at
+the next sign-in. A suspended caller gets `403 ACCOUNT_INACTIVE` — distinct from
+`401`, because the token is valid and the account is not, and a client needs to
+tell those apart to know whether refreshing would help. A suspension requires a
+`reason`: it is what the audit entry will say. Admins cannot be suspended, and
+nobody can suspend themselves or change their own role — otherwise one admin can
+remove everyone able to reverse it.
+
+### Support
+
+| Method | Path                             | Requires       |
+| ------ | -------------------------------- | -------------- |
+| `POST` | `/support/tickets`               | authentication |
+| `GET`  | `/support/tickets`               | authentication |
+| `GET`  | `/support/tickets/{id}`          | reporter/staff |
+| `POST` | `/support/tickets/{id}/messages` | reporter/staff |
+
+Reports and help requests are one object with a `kind`, because to the person
+handling them they are the same shape: something arrives, somebody picks it up,
+somebody answers, it closes.
+
+A report's `subject_id` is **not** a foreign key. The reported message is often
+deleted before anyone reads the report, and cascading would destroy the only
+remaining evidence at exactly that moment.
+
+`support_messages.staff_only` marks an internal note. The server strips these
+from the reporter's view — including when the reporter *is* staff, since that
+view is "my own ticket", not a console read.
+
+A staff reply moves a live ticket to `pending` (waiting on the reporter); a
+reporter reply moves it back to `open`. Notes change nothing, because nobody has
+been answered.
+
+### Audit log
+
+Append-only: there is no `updated_at`, and the API exposes no update or delete.
+A trail its own subjects can revise is decoration. Entries carry `actor_handle`
+denormalised, so they still name somebody after that account is deleted.
+
+Writes are best-effort *after* the action commits. The alternative is telling
+somebody their suspension failed when it did not; a failed write is logged as an
+error instead, because a silently missing entry is its own incident.

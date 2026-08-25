@@ -155,6 +155,43 @@ export type {
   PollOption,
 } from './experiences/api'
 
+// Platform staff, the audit log, and support
+export {
+  adminKeys,
+  supportKeys,
+  usePlatformRole,
+  useIsStaff,
+  useIsPlatformAdmin,
+  useAuditLog,
+  useAuditActions,
+  useUserSearch,
+  useStaffList,
+  useSupportQueue,
+  useSupportTicket,
+  useSuspendUserMutation,
+  useReinstateUserMutation,
+  useSetPlatformRoleMutation,
+  useStaffReplyMutation,
+  useUpdateTicketMutation,
+  useMyTickets,
+  useMyTicket,
+  useOpenTicketMutation,
+  useReplyToMyTicketMutation,
+} from './admin/api'
+export type {
+  AuditEntry,
+  OpenTicketInput,
+  PlatformRole,
+  StaffUserView,
+  SupportMessage,
+  SupportQueue,
+  SupportTicket,
+  SupportTicketDetail,
+  TicketKind,
+  TicketStatus,
+  TicketSubjectType,
+} from './admin/api'
+
 // Composite screen views (the BFF layer)
 export {
   bffKeys,

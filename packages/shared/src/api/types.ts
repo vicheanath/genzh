@@ -54,6 +54,14 @@ export interface CurrentUser {
   handle: string
   email: string
   profile: Profile
+  /**
+   * Authority above any one community, so a client knows whether to offer the
+   * console at all. `user` for almost everybody.
+   *
+   * Optional because an older server does not send it — treat a missing value
+   * as `user`, never as staff.
+   */
+  platform_role?: PlatformRole
 }
 
 export interface PublicProfile {
@@ -382,3 +390,98 @@ export interface SocialOverviewResponse {
   blocked: Uuid[]
 }
 
+
+
+// ── platform staff, support and the audit log ────────────────────────────
+
+/**
+ * Authority above any one community.
+ *
+ * `Permission` answers "what may this member do *here*" and is scoped to the
+ * community that granted it. This is the tier above that: who may answer a
+ * support ticket, and who may suspend an account across the whole platform.
+ */
+export type PlatformRole = 'user' | 'support' | 'admin'
+
+/** An account as staff see it. Deliberately no credentials of any kind. */
+export interface StaffUserView {
+  id: Uuid
+  handle: string
+  email: string
+  display_name: string | null
+  is_active: boolean
+  platform_role: PlatformRole
+  suspended_at: Timestamp | null
+  suspension_reason: string | null
+  created_at: Timestamp
+}
+
+/** One entry in the audit log. */
+export interface AuditEntry {
+  id: Uuid
+  /** Null once the actor's account is deleted — the entry outlives them. */
+  actor_id: Uuid | null
+  /** Denormalised, so the entry still names somebody after that deletion. */
+  actor_handle: string | null
+  action: string
+  subject_type: string | null
+  subject_id: Uuid | null
+  summary: string
+  metadata: Record<string, unknown>
+  created_at: Timestamp
+}
+
+export type TicketKind = 'report' | 'help'
+export type TicketStatus = 'open' | 'pending' | 'resolved' | 'closed'
+export type TicketSubjectType = 'message' | 'user' | 'room' | 'community'
+
+export interface SupportTicket {
+  id: Uuid
+  kind: TicketKind
+  reporter_id: Uuid
+  subject_type: TicketSubjectType | null
+  subject_id: Uuid | null
+  category: string
+  subject: string
+  details: string
+  status: TicketStatus
+  assignee_id: Uuid | null
+  created_at: Timestamp
+  updated_at: Timestamp
+  resolved_at: Timestamp | null
+}
+
+export interface SupportMessage {
+  id: Uuid
+  ticket_id: Uuid
+  /** Null for anything the system wrote. */
+  author_id: Uuid | null
+  body: string
+  /**
+   * An internal note. Only ever true on a staff read — the server strips these
+   * from the reporter's view of their own ticket.
+   */
+  staff_only: boolean
+  created_at: Timestamp
+}
+
+export interface SupportTicketDetail {
+  ticket: SupportTicket
+  messages: SupportMessage[]
+}
+
+export interface SupportQueue {
+  tickets: SupportTicket[]
+  /** Every waiting ticket, not just the page returned — it drives the badge. */
+  open_count: number
+}
+
+/** What somebody raising a report or asking for help supplies. */
+export interface OpenTicketInput {
+  kind: TicketKind
+  subject_type?: TicketSubjectType
+  subject_id?: Uuid
+  category: string
+  subject: string
+  details: string
+}
