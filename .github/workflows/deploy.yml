@@ -1,0 +1,253 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Publish images without re-running the suite (use for a rollback only)"
+        type: boolean
+        default: false
+
+concurrency:
+  # Never cancel a deploy in flight — a half-applied `docker compose up` is
+  # worse than a queued one. Later pushes wait their turn instead.
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ── Gate: nothing is published until the suite is green ────────────────────
+  test:
+    if: ${{ !inputs.skip_tests }}
+    uses: ./.github/workflows/ci.yml
+
+  # ── Build and publish the three images ────────────────────────────────────
+  images:
+    name: build ${{ matrix.service }}
+    needs: [test]
+    # `always()` plus an explicit result check, because `needs` on a skipped
+    # job would otherwise skip this one too — which is exactly the case when
+    # skip_tests is set for a rollback.
+    if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # Three independent images; one failing should not cancel the others,
+      # because knowing all three states is more useful than failing fast.
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            dockerfile: Dockerfile.api
+          - service: media
+            dockerfile: Dockerfile.media
+          - service: web
+            dockerfile: Dockerfile.web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # metadata-action lowercases the repository name; `ghcr.io` rejects
+          # uppercase, and `github.repository` preserves whatever case the
+          # owner registered with.
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Two Rust images compile the same dependency graph. The registry
+          # cache lets the second reuse the first's layers, and lets tomorrow's
+          # build reuse today's — without it every push is a cold ~15 minute
+          # cargo build.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          provenance: false
+
+  # ── Ship it ───────────────────────────────────────────────────────────────
+  deploy:
+    name: deploy to ${{ vars.DEPLOY_HOST }}
+    needs: [images]
+    runs-on: ubuntu-latest
+
+    # Skipped rather than failed when the server has not been configured yet,
+    # so the build half of this workflow is useful on its own from day one.
+    # Set the DEPLOY_HOST repository *variable* to turn it on.
+    if: ${{ needs.images.result == 'success' && vars.DEPLOY_HOST != '' }}
+
+    permissions:
+      contents: read
+      packages: read
+
+    environment:
+      name: production
+      url: http://${{ vars.DEPLOY_HOST }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image references
+        id: images
+        # Pinned to this commit's SHA, not `latest`. A server that pulls
+        # `latest` cannot tell you what it is running, and a rollback becomes
+        # a re-tag race instead of an edit.
+        run: |
+          repo=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          sha=${{ github.sha }}
+          {
+            echo "api=${{ env.REGISTRY }}/$repo/api:$sha"
+            echo "media=${{ env.REGISTRY }}/$repo/media:$sha"
+            echo "web=${{ env.REGISTRY }}/$repo/web:$sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write the server's .env
+        # Assembled here rather than kept on the server, so the secrets have
+        # exactly one home (GitHub) and a rotation is a secret edit plus a
+        # re-run rather than an ssh session.
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          WEB_PORT: ${{ vars.WEB_PORT || '80' }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MEDIA_TOKEN_SECRET: ${{ secrets.MEDIA_TOKEN_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          TURN_URL: ${{ secrets.TURN_URL }}
+          TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
+          TURN_PASSWORD: ${{ secrets.TURN_PASSWORD }}
+        run: |
+          umask 077
+          cat > deploy/.env <<EOF
+          DEPLOY_HOST=$DEPLOY_HOST
+          WEB_PORT=$WEB_PORT
+
+          IMAGE_API=${{ steps.images.outputs.api }}
+          IMAGE_MEDIA=${{ steps.images.outputs.media }}
+          IMAGE_WEB=${{ steps.images.outputs.web }}
+
+          JWT_SECRET=$JWT_SECRET
+          MEDIA_TOKEN_SECRET=$MEDIA_TOKEN_SECRET
+          POSTGRES_USER=social
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          POSTGRES_DB=social
+
+          APP_ENV=production
+          ALLOW_PASSWORD_SIGNUP=${{ vars.ALLOW_PASSWORD_SIGNUP || 'true' }}
+
+          GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+          GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
+          GOOGLE_REDIRECT_URI=http://$DEPLOY_HOST/api/v1/auth/oauth/google/callback
+          DISCORD_CLIENT_ID=$DISCORD_CLIENT_ID
+          DISCORD_CLIENT_SECRET=$DISCORD_CLIENT_SECRET
+          DISCORD_REDIRECT_URI=http://$DEPLOY_HOST/api/v1/auth/oauth/discord/callback
+
+          STUN_URL=${{ vars.STUN_URL || 'stun:stun.l.google.com:19302' }}
+          TURN_URL=$TURN_URL
+          TURN_USERNAME=$TURN_USERNAME
+          TURN_PASSWORD=$TURN_PASSWORD
+
+          RUST_LOG=${{ vars.RUST_LOG || 'info' }}
+          LOG_FORMAT=json
+          EOF
+
+      - name: Set up SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_deploy
+
+          if [ -n "$KNOWN_HOSTS" ]; then
+            # Pinned. The runner will refuse to talk to anything but the host
+            # whose key you recorded.
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            # Trust-on-first-use, every time — which means no verification at
+            # all against an attacker who can answer for this address. It is
+            # here so a first deploy works without a setup ritual; record the
+            # output below as the DEPLOY_KNOWN_HOSTS secret to close the gap.
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set — the host key is being accepted unverified. Save the line below as that secret to pin it."
+            ssh-keyscan -p "$PORT" -H "$HOST" 2>/dev/null | tee ~/.ssh/known_hosts
+          fi
+
+      - name: Copy the stack to the server
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+          SSH_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+          PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+          DIR: ${{ vars.DEPLOY_DIR || '/opt/genzh' }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$PORT" "$SSH_USER@$HOST" "mkdir -p '$DIR'"
+          scp -i ~/.ssh/id_deploy -P "$PORT" \
+            deploy/docker-compose.prod.yml \
+            deploy/deploy.sh \
+            deploy/.env \
+            "$SSH_USER@$HOST:$DIR/"
+
+      - name: Deploy
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+          SSH_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+          PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+          DIR: ${{ vars.DEPLOY_DIR || '/opt/genzh' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The registry token is this run's own GITHUB_TOKEN: valid for the
+          # length of the job and no longer, so the server never stores a
+          # standing credential for the registry.
+          ssh -i ~/.ssh/id_deploy -p "$PORT" "$SSH_USER@$HOST" \
+            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin" <<< "$GHCR_TOKEN"
+
+          ssh -i ~/.ssh/id_deploy -p "$PORT" "$SSH_USER@$HOST" \
+            "chmod +x '$DIR/deploy.sh' && '$DIR/deploy.sh'"
+
+          ssh -i ~/.ssh/id_deploy -p "$PORT" "$SSH_USER@$HOST" "docker logout ghcr.io" || true
+
+      - name: Summary
+        if: always()
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          {
+            echo "### Deployed to \`$HOST\`"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| site | http://$HOST/ |"
+            echo "| commit | \`${{ github.sha }}\` |"
+            echo "| api | \`${{ steps.images.outputs.api }}\` |"
+            echo "| media | \`${{ steps.images.outputs.media }}\` |"
+            echo "| web | \`${{ steps.images.outputs.web }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,47 @@
+# Without this file the build context is ~50 GB — `target/` alone is 45 — and
+# every `docker build` spends minutes uploading files no image stage reads.
+
+# Compiled Rust. The builder stage compiles from source inside the image, so
+# a host `target/` is not just useless but actively wrong: it is macOS
+# object code being shipped to a Linux builder.
+target/
+
+# Node installs, at every depth. The `**/` matters: .dockerignore patterns are
+# matched against the whole relative path and do NOT recurse on their own, so
+# a bare `node_modules/` would exclude only the root one and let
+# `apps/web/node_modules` (165 MB of macOS-native binaries) into the context —
+# where `COPY apps/web/ apps/web/` would then bury the Linux install the
+# builder just made.
+**/node_modules
+
+# The Expo client. None of the three server images build from it, and it
+# carries ~3 GB of Android build output. `pnpm install --frozen-lockfile`
+# still succeeds without it — the lockfile lists it as an importer, but a
+# filtered install never visits that importer.
+apps/mobile/
+
+# Build output — regenerated inside the image.
+**/dist
+
+# Local state. `.env` holds the real JWT_SECRET and MEDIA_TOKEN_SECRET; a
+# COPY that swept it into a layer would publish both to anyone who pulls
+# the image.
+.env
+.env.*
+**/*.log
+**/.DS_Store
+
+# Not read by any build stage.
+.git/
+.github/
+.claude/
+docs/
+README.md
+Makefile
+docker-compose.yml
+
+# `deploy/` is NOT excluded: Dockerfile.web copies deploy/nginx.conf into the
+# runtime stage. Only the compose files and docs under it are dead weight.
+deploy/README.md
+deploy/docker-compose.prod.yml
+deploy/env.prod.example

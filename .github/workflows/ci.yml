@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    # main is covered by Deploy, which calls this workflow before it publishes
+    # anything. Listening here as well would run the whole suite twice for
+    # every push to main.
+    branches-ignore: [main]
+  pull_request:
+  workflow_call:
+
+concurrency:
+  # Keyed on the workflow as well as the ref, not the ref alone.
+  #
+  # Deploy calls this workflow, and a called workflow reports `github.workflow`
+  # as the *caller's* name. Without that in the key, the CI run and the
+  # deploy's copy of it would land in the same group on the same ref and
+  # cancel each other — which looks exactly like a flaky runner.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # CI has no interactive terminal to recover in, so a failed network fetch
+  # should retry rather than fail the job.
+  CARGO_NET_RETRY: 3
+  # Debug info is the bulk of a debug build's size and nothing here opens a
+  # debugger. Cuts the cache by roughly half.
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  # ── Rust: the real suite, against a real PostgreSQL ────────────────────────
+  rust-test:
+    name: rust tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: social
+          POSTGRES_PASSWORD: social
+          POSTGRES_DB: social
+        ports:
+          - 5432:5432
+        # The harness connects to the `postgres` maintenance database to issue
+        # CREATE DATABASE, so the job must not start until the server really
+        # accepts connections.
+        options: >-
+          --health-cmd "pg_isready -U social"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # The integration harness derives its own database by suffixing this
+      # name with `_test`, then drops and rebuilds it from the migrations on
+      # every run. It never writes to the database named here.
+      DATABASE_URL: postgres://social:social@localhost:5432/social
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Distinct from the lint job's cache: different profiles and feature
+          # unification produce different artefacts, and sharing one key makes
+          # both jobs thrash it.
+          key: test
+
+      - name: cargo test --workspace
+        # `shell: bash` rather than the default, because it is what turns on
+        # `pipefail`. Without it the step's exit code comes from `tee` and a
+        # failing test suite reports success.
+        shell: bash
+        # `--nocapture` so the harness's own stderr reaches the log, which the
+        # next step reads.
+        run: cargo test --workspace -- --nocapture 2>&1 | tee test-output.log
+
+      - name: Assert the integration suite actually ran
+        # This is the important one.
+        #
+        # apps/api/tests/harness deliberately *skips* — printing "SKIP: …" and
+        # returning Ok — when it cannot reach a database, so that a fresh clone
+        # with nothing installed still passes `cargo test`. The failure mode is
+        # that a broken database service in CI produces a green run reporting
+        # "ok. 0 failed" while every integration test silently did nothing.
+        #
+        # So the skip marker is treated as a failure here, where a database is
+        # guaranteed and a skip can only mean the service is misconfigured.
+        shell: bash
+        run: |
+          # Two different markers, because the harness emits two shapes:
+          # `SKIP: <reason>` once from the database setup, and
+          # `SKIP <test_name>: …` from each individual test. Matching plain
+          # `SKIP` catches both. Case matters — several test *names* contain
+          # the word "skips" in lowercase.
+          if grep -q 'SKIP' test-output.log; then
+            echo "::error::Integration tests skipped instead of running — they verified nothing. A skip here can only mean the PostgreSQL service is misconfigured."
+            grep 'SKIP' test-output.log
+            exit 1
+          fi
+          echo "integration suite ran against PostgreSQL"
+
+  # ── TypeScript: typecheck, lint, and the bundle that gets deployed ─────────
+  web-build:
+    name: web build
+    runs-on: ubuntu-latest
+
+    env:
+      # pnpm re-verifies the workspace before every `pnpm run`, sees it was
+      # installed with a filter, and silently starts a full unfiltered install
+      # to reconcile it — which here means pulling apps/mobile's React Native
+      # toolchain that no step below touches. Off, so the filtered install is
+      # the final word.
+      PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        # Only the two importers the web bundle needs. `apps/mobile` is a
+        # workspace member with a 2.9 GB tree and its own toolchain; a filtered
+        # install skips it entirely and the frozen lockfile still verifies.
+        run: pnpm install --frozen-lockfile --filter web --filter @genzh/shared
+
+      - name: Typecheck
+        # `tsc -b` covers apps/web *and* packages/shared, because the web app
+        # imports the shared package from source through a vite alias — there
+        # is no separate build of it to typecheck.
+        run: pnpm --filter web exec tsc -b
+
+      - name: Lint
+        run: pnpm --filter web run lint
+
+      - name: Build
+        # No VITE_API_URL: the bundle then calls /api on its own origin and
+        # nginx proxies it, which is what keeps one build usable on any host.
+        run: pnpm --filter web run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 14
+          if-no-files-found: error
+
+  # ── Advisory only ─────────────────────────────────────────────────────────
+  lint:
+    name: rust lint (advisory)
+    runs-on: ubuntu-latest
+    # Reports, does not gate.
+    #
+    # At the time this workflow was written the tree had 72 files that
+    # `cargo fmt` would rewrite and 36 clippy warnings. Making either one
+    # blocking would have turned main red on the first push and taught
+    # everyone to ignore the badge, which is worse than no check.
+    #
+    # Clear the backlog with `make fmt` and `cargo clippy --fix`, then delete
+    # the two `continue-on-error` lines below and add `-- -D warnings` to the
+    # clippy step to make this a real gate.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint
+
+      - name: cargo fmt --check
+        continue-on-error: true
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        continue-on-error: true
+        run: cargo clippy --workspace --all-targets
