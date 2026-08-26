@@ -139,6 +139,9 @@
 
 .previewBanner {
   height: 4rem;
+  overflow: hidden;
+  /* The accent wash is the floor, not the ceiling: an equipped banner paints
+     over it, and without one this is exactly what it always was. */
   background: linear-gradient(
     120deg,
     var(--preview-accent, var(--color-accent)),
@@ -155,6 +158,9 @@
 .previewText { padding: var(--space-2) var(--space-4) var(--space-4); }
 
 .previewName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--text-base);
   font-weight: 650;
   line-height: 1.3;

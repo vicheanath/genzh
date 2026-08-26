@@ -17,6 +17,8 @@ import {
   Flag,
   Flame,
   Gamepad2,
+  Gem,
+  Gift,
   Globe,
   Hand,
   Hash,
@@ -37,6 +39,7 @@ import {
   Moon,
   MoreHorizontal,
   Music,
+  Package,
   Palette,
   Pencil,
   Phone,
@@ -49,6 +52,7 @@ import {
   Reply,
   RotateCcw,
   ScreenShare,
+  Store,
   ScreenShareOff,
   Search,
   Send,
@@ -205,3 +209,8 @@ export const DiscordIcon: IconComponent = ({ size = 18, className }) => (
   </svg>
 )
 
+/* ── Points, referrals & the cosmetics store ────────────────────────────── */
+export const GemIcon: IconComponent = (props: IconProps) => <Gem size={18} {...props} />
+export const GiftIcon: IconComponent = (props: IconProps) => <Gift size={18} {...props} />
+export const StoreIcon: IconComponent = (props: IconProps) => <Store size={18} {...props} />
+export const PackageIcon: IconComponent = (props: IconProps) => <Package size={18} {...props} />

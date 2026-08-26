@@ -78,10 +78,17 @@
 .identityText { min-width: 0; }
 
 .identityName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
   font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.identityName > :first-child {
   overflow: hidden;
   text-overflow: ellipsis;
 }

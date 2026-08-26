@@ -22,6 +22,7 @@ import { SecurityPanel } from './routes/admin/SecurityPanel'
 import { StaffUsersPanel } from './routes/admin/StaffUsersPanel'
 import { SupportQueuePanel } from './routes/admin/SupportQueuePanel'
 import { RecommendationsPanel } from './routes/admin/RecommendationsPanel'
+import { StoreItemsPanel } from './routes/admin/StoreItemsPanel'
 import { SystemHealthPanel } from './routes/admin/SystemHealthPanel'
 import { AppShell } from './routes/AppShell'
 import { CommunityRoute } from './routes/CommunityRoute'
@@ -29,6 +30,7 @@ import { CommunitySettingsRoute } from './routes/CommunitySettingsRoute'
 import { ExploreRoute } from './routes/ExploreRoute'
 import { FriendsRoute } from './routes/FriendsRoute'
 import { HomeRoute } from './routes/HomeRoute'
+import { RewardsRoute } from './features/rewards'
 import { NotificationsRoute } from './routes/NotificationsRoute'
 import { RoomRoute } from './routes/RoomRoute'
 import { InfoPage } from './routes/InfoPages'
@@ -101,6 +103,9 @@ function Router() {
         <Route path="/report-abuse" element={<InfoPage page="report" />} />
         <Route path="/invite/:code" element={<InviteRoute />} />
         <Route path="/invites/:code" element={<InviteRoute />} />
+        {/* A referral link is an invitation to sign up, so signed out it lands
+            on the sign-in screen with the code kept in the URL. */}
+        <Route path="/join" element={<SignInRoute />} />
         <Route path="*" element={<SignInRoute />} />
       </Routes>
     )
@@ -120,11 +125,15 @@ function Router() {
       <Route path="/report-abuse" element={<InfoPage page="report" />} />
       <Route path="/invite/:code" element={<InviteRoute />} />
       <Route path="/invites/:code" element={<InviteRoute />} />
+      {/* Already signed in and following somebody's referral link: the hub is
+          where the code is actually entered. */}
+      <Route path="/join" element={<Navigate to="/rewards" replace />} />
 
       <Route element={<AppShell />}>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/friends" element={<FriendsRoute />} />
         <Route path="/explore" element={<ExploreRoute />} />
+        <Route path="/rewards" element={<RewardsRoute />} />
         {/* Phone destinations. Desktop shows both as chrome — a popover off the
             user bar, and the user bar itself — so visiting the URL there is
             redirected rather than rendering a second, worse version of it. */}
@@ -144,6 +153,7 @@ function Router() {
           <Route path="automod" element={<AutoModPanel />} />
           <Route path="security" element={<SecurityPanel />} />
           <Route path="health" element={<SystemHealthPanel />} />
+          <Route path="store" element={<StoreItemsPanel />} />
           <Route path="recommendations" element={<RecommendationsPanel />} />
           <Route path="audit" element={<AuditLogPanel />} />
         </Route>

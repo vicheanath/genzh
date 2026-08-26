@@ -6,6 +6,7 @@ import {
 } from 'react'
 
 import { Avatar } from '@/components/Avatar'
+import { CosmeticBadge, CosmeticName, DecoratedAvatar } from '@/components/Cosmetics'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
@@ -45,6 +46,7 @@ import {
   applyMessageCreated,
   applyMessageDeleted,
   applyMessageUpdated,
+  useCosmeticsFor,
   useDeleteMessageMutation,
   useEditMessageMutation,
   usePinMessageMutation,
@@ -67,6 +69,7 @@ import {
   withinGroupingWindow,
 } from '@/lib/time'
 import { useProfiles } from '@/lib/useProfiles'
+import type { EquippedCosmetics } from '@/features/rewards/api'
 
 import { ProfileDialog } from './ProfileDialog'
 import { useAppStore } from '@/lib/store'
@@ -153,7 +156,10 @@ export function Chat({
   const itemsMap = useRef(new Map<Uuid, Message>())
   itemsMap.current = new Map(items.map((m) => [m.id, m]))
 
-  const lookup = useProfiles([...new Set(items.map((message) => message.author_id))])
+  const authorIds = [...new Set(items.map((message) => message.author_id))]
+  const lookup = useProfiles(authorIds)
+  // One request for every author on the page, not one per message row.
+  const cosmetics = useCosmeticsFor(authorIds)
 
   const scrollToMessage = useCallback((messageId: Uuid) => {
     const el = document.getElementById(`msg-${messageId}`)
@@ -524,6 +530,7 @@ export function Chat({
               <MessageRow
                 message={message}
                 author={lookup(message.author_id)}
+                cosmetics={cosmetics.data?.get(message.author_id)}
                 repliedMessage={repliedMsg}
                 repliedAuthorName={repliedAuthorName}
                 grouped={grouped}
@@ -619,6 +626,8 @@ export function Chat({
 interface MessageRowProps {
   message: Message
   author: PublicProfile | null
+  /** What the author is wearing. Ignored for an anonymous message. */
+  cosmetics?: EquippedCosmetics | null
   repliedMessage?: Message | null
   repliedAuthorName?: string
   grouped: boolean
@@ -641,6 +650,7 @@ interface MessageRowProps {
 function MessageRow({
   message,
   author,
+  cosmetics,
   repliedMessage,
   repliedAuthorName,
   grouped,
@@ -725,12 +735,15 @@ function MessageRow({
               if (!isAnonymous) onOpenProfile?.(message.author_id)
             }}
           >
-            <Avatar
+            <DecoratedAvatar
               name={name}
               src={avatarUrl}
               color={avatarColor}
               size="md"
               className={styles.messageAvatar}
+              // An anonymous message must not carry the cosmetics that would
+              // identify who wrote it — that is the whole point of the alias.
+              cosmetics={isAnonymous ? null : cosmetics}
             />
           </div>
         )}
@@ -754,13 +767,19 @@ function MessageRow({
             <div className={styles.messageHeader}>
               <span
                 className={styles.author}
-                style={{ cursor: isAnonymous ? 'default' : 'pointer', color: avatarColor ?? undefined }}
+                style={{ cursor: isAnonymous ? 'default' : 'pointer' }}
                 onClick={() => {
                   if (!isAnonymous) onOpenProfile?.(message.author_id)
                 }}
               >
-                {name}
+                <CosmeticName
+                  item={isAnonymous ? null : cosmetics?.name_color}
+                  fallbackColor={avatarColor}
+                >
+                  {name}
+                </CosmeticName>
               </span>
+              {!isAnonymous && <CosmeticBadge item={cosmetics?.badge} />}
               {isOwn && <span className={styles.youTag}>you</span>}
               <time
                 className={styles.time}

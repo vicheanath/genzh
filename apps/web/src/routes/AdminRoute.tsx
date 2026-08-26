@@ -13,6 +13,7 @@ import {
   RadioIcon,
   ShieldIcon,
   SparkleIcon,
+  StoreIcon,
   UsersIcon,
 } from '@/components/Icons'
 import { LoadingPanel } from '@/components/Spinner'
@@ -208,6 +209,14 @@ export function AdminRoute() {
                 }
               >
                 <ActivityIcon size={15} /> System Health
+              </NavLink>
+              <NavLink
+                to="/admin/store"
+                className={({ isActive }) =>
+                  `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+                }
+              >
+                <StoreIcon size={15} /> Store
               </NavLink>
               <NavLink
                 to="/admin/recommendations"

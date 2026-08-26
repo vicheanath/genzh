@@ -803,3 +803,204 @@ export interface RecommendationExplain {
   /** Shape depends on `surface`; each entry carries `score` and `reasons`. */
   items: Array<Record<string, unknown>>
 }
+
+// ── points, referrals & the cosmetics store ────────────────────────────────
+
+/** Where on a profile an item is worn. One item per slot. */
+export type ItemType = 'frame' | 'badge' | 'banner' | 'name_color'
+
+/** Presentation only — rarity gates nothing. */
+export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary'
+
+/**
+ * One item in the cosmetics catalog.
+ *
+ * Everything here is created by staff in the platform console, prices
+ * included. There is no seeded catalog, so an empty store is a real state the
+ * UI has to render rather than an error.
+ */
+export interface StoreItem {
+  id: Uuid
+  sku: string
+  name: string
+  description: string
+  item_type: ItemType
+  rarity: ItemRarity
+  price_points: number
+  /** SVG / animated WebP. Null for items drawn entirely from `style_config`. */
+  asset_url: string | null
+  /** Gradients, glow colours and animation keys the client renders directly. */
+  style_config: CosmeticStyle
+  is_active: boolean
+  is_limited: boolean
+  /** Null is unlimited. */
+  stock_limit: number | null
+  sort_order: number
+  created_by: Uuid | null
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+/**
+ * The free-form render hints on an item.
+ *
+ * Staff type this as JSON in the console, so every field is optional and the
+ * renderer falls back rather than throwing on a key nobody filled in.
+ */
+export interface CosmeticStyle {
+  /** CSS gradient or colour, for name colours and frames. */
+  gradient?: string
+  /** Flat colour, when a gradient would be too much. */
+  color?: string
+  /** Glow colour behind a badge or frame. */
+  glow?: string
+  /** Named animation the client knows how to play: `pulse`, `spin`, `aurora`, `shimmer`. */
+  animation?: string
+  /** Emoji or icon key drawn when there is no `asset_url`. */
+  icon?: string
+  /** Background for a banner, when no image is set. */
+  background?: string
+  [key: string]: unknown
+}
+
+/** A catalog row with the viewer's own relationship to it attached. */
+export interface StoreListing extends StoreItem {
+  owned: boolean
+  equipped: boolean
+  owned_count: number
+  in_stock: boolean
+}
+
+/** An item somebody owns. */
+export interface InventoryItem {
+  id: Uuid
+  user_id: Uuid
+  item: StoreItem
+  /** What it cost at the time, which repricing does not rewrite. */
+  paid_points: number
+  source: 'purchase' | 'grant' | 'reward' | string
+  acquired_at: Timestamp
+  equipped: boolean
+}
+
+/** What somebody is wearing, resolved to whole items. */
+export interface EquippedCosmetics {
+  user_id: Uuid
+  frame: StoreItem | null
+  badge: StoreItem | null
+  banner: StoreItem | null
+  name_color: StoreItem | null
+  updated_at: Timestamp | null
+}
+
+/**
+ * One slot change.
+ *
+ * An omitted key leaves that slot alone; an explicit `null` clears it. Sending
+ * `{}` is therefore a no-op rather than a strip-everything.
+ */
+export interface EquipInput {
+  frame_item_id?: Uuid | null
+  badge_item_id?: Uuid | null
+  banner_item_id?: Uuid | null
+  name_color_item_id?: Uuid | null
+}
+
+export interface BalanceTransaction {
+  id: Uuid
+  user_id: Uuid
+  amount: number
+  reason: string
+  metadata: Record<string, unknown>
+  created_at: Timestamp
+}
+
+export interface BalanceOverview {
+  balance: number
+  lifetime_earned: number
+  daily_streak: number
+  can_claim_daily: boolean
+  /** When the next check-in unlocks; null when it already has. */
+  next_claim_at: Timestamp | null
+  /** What the next check-in pays, streak included. */
+  next_claim_points: number
+  recent_transactions: BalanceTransaction[]
+}
+
+export interface DailyCheckinResult {
+  points_awarded: number
+  new_balance: number
+  daily_streak: number
+}
+
+export interface ReferralRecord {
+  id: Uuid
+  referrer_id: Uuid
+  referee_id: Uuid | null
+  referral_code: string
+  status: string
+  reward_points: number
+  created_at: Timestamp
+  completed_at: Timestamp | null
+  referee_handle: string | null
+  referee_display_name: string | null
+  referee_avatar_url: string | null
+}
+
+export interface ReferralMilestone {
+  label: string
+  invites: number
+  bonus_points: number
+  reached: boolean
+}
+
+export interface ReferralOverview {
+  referral_code: string
+  /** Already assembled by the server — paste it, do not rebuild it. */
+  share_url: string
+  total_referred: number
+  total_earned_points: number
+  has_claimed_code: boolean
+  referrals: ReferralRecord[]
+  milestones: ReferralMilestone[]
+}
+
+export interface ClaimReferralResult {
+  message: string
+  points_awarded: number
+  new_balance: number
+}
+
+/**
+ * Create or edit a catalog item.
+ *
+ * Everything is optional because the same shape serves both: a create needs
+ * `sku`, `name`, `item_type` and a price, and an update leaves out whatever it
+ * is not changing.
+ */
+export interface StoreItemInput {
+  sku?: string
+  name?: string
+  description?: string
+  item_type?: ItemType
+  rarity?: ItemRarity
+  price_points?: number
+  asset_url?: string | null
+  style_config?: CosmeticStyle
+  is_active?: boolean
+  is_limited?: boolean
+  stock_limit?: number | null
+  sort_order?: number
+}
+
+export interface GrantPointsInput {
+  user_id: Uuid
+  /** Negative corrects a balance downwards. */
+  amount: number
+  note?: string
+}
+
+export interface GrantPointsResult {
+  amount: number
+  new_balance: number
+}

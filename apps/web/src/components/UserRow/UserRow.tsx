@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
-import { Avatar } from '@/components/Avatar'
+import { CosmeticBadge, CosmeticName, DecoratedAvatar } from '@/components/Cosmetics'
+import type { EquippedCosmetics } from '@/features/rewards/api'
 import type { Presence } from '@/components/PresenceDot'
 import { cx } from '@/lib/cx'
 
@@ -16,6 +17,14 @@ export interface UserRowProps {
   secondary?: ReactNode
   /** Paint the name in the user's accent, as the member list does. */
   tintName?: boolean
+  /**
+   * What this person is wearing, if anything.
+   *
+   * Resolved rather than a user id, so this component stays presentational and
+   * a caller decides where it came from — usually one batched `useCosmeticsFor`
+   * for the whole list, not one request per row.
+   */
+  cosmetics?: EquippedCosmetics | null
   size?: 'sm' | 'md'
   /**
    * Makes the identity activate — usually opening a profile.
@@ -50,6 +59,7 @@ export function UserRow({
   presence,
   secondary,
   tintName,
+  cosmetics,
   size = 'md',
   onSelect,
   actions,
@@ -57,19 +67,25 @@ export function UserRow({
 }: UserRowProps) {
   const identity = (
     <>
-      <Avatar
+      <DecoratedAvatar
         name={name}
         src={avatarUrl}
         color={accentColor}
         size={size}
         presence={presence}
+        cosmetics={cosmetics}
       />
       <span className={styles.text}>
-        <span
-          className={styles.name}
-          style={tintName && accentColor ? { color: accentColor } : undefined}
-        >
-          {name}
+        <span className={styles.name}>
+          {/* An equipped name colour outranks the accent: it is the thing the
+              person spent points on, and the accent is what they get for free. */}
+          <CosmeticName
+            item={cosmetics?.name_color}
+            fallbackColor={tintName ? accentColor : null}
+          >
+            {name}
+          </CosmeticName>
+          <CosmeticBadge item={cosmetics?.badge} />
         </span>
         {secondary !== undefined && <span className={styles.secondary}>{secondary}</span>}
       </span>

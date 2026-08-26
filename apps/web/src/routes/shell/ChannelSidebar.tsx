@@ -5,6 +5,7 @@ import {
   CompassIcon,
   FlameIcon,
   GamepadIcon,
+  GemIcon,
   HashIcon,
   LockIcon,
   MicIcon,
@@ -119,6 +120,11 @@ export function ChannelSidebar({
                 to="/explore"
                 label="Explore Communities"
                 leading={<CompassIcon size={17} className={styles.navIcon} />}
+              />
+              <NavItem
+                to="/rewards"
+                label="Rewards & Store"
+                leading={<GemIcon size={17} className={styles.navIcon} />}
               />
             </NavGroup>
 

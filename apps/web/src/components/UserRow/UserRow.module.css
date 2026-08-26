@@ -38,9 +38,18 @@
 }
 
 .name {
+  /* A row is a flex line so an equipped badge sits beside the name rather than
+     wrapping under it; the name itself still ellipsises when the row is tight. */
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text);
+}
+
+.name > :first-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

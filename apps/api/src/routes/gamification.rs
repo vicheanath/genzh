@@ -144,6 +144,14 @@ pub struct EquipCosmeticsRequest {
     pub banner_item_id: Option<Option<StoreItemId>>,
     #[serde(default, deserialize_with = "double_option")]
     pub name_color_item_id: Option<Option<StoreItemId>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub name_font_item_id: Option<Option<StoreItemId>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub title_item_id: Option<Option<StoreItemId>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub avatar_effect_item_id: Option<Option<StoreItemId>>,
+    #[serde(default, deserialize_with = "double_option")]
+    pub chat_bubble_item_id: Option<Option<StoreItemId>>,
 }
 
 /// `GET /api/v1/cosmetics` query string: `?user_ids=a,b,c`.
@@ -459,7 +467,8 @@ pub async fn list_store_items(
            LEFT JOIN user_equipped_items eq
                   ON eq.user_id = $1
                  AND si.id IN (eq.frame_item_id, eq.badge_item_id, eq.banner_item_id,
-                               eq.name_color_item_id)
+                               eq.name_color_item_id, eq.name_font_item_id, eq.title_item_id,
+                               eq.avatar_effect_item_id, eq.chat_bubble_item_id)
           WHERE si.is_active = TRUE
             AND ($2::text IS NULL OR si.item_type = $2)
           ORDER BY si.sort_order ASC, si.price_points ASC, si.created_at DESC"
@@ -594,7 +603,8 @@ pub async fn get_my_inventory(
            LEFT JOIN user_equipped_items eq
                   ON eq.user_id = inv.user_id
                  AND si.id IN (eq.frame_item_id, eq.badge_item_id, eq.banner_item_id,
-                               eq.name_color_item_id)
+                               eq.name_color_item_id, eq.name_font_item_id, eq.title_item_id,
+                               eq.avatar_effect_item_id, eq.chat_bubble_item_id)
           WHERE inv.user_id = $1
           ORDER BY inv.acquired_at DESC"
     ))
@@ -649,6 +659,30 @@ pub async fn equip_cosmetics(
             "UPDATE user_equipped_items SET name_color_item_id = $1, updated_at = now() \
              WHERE user_id = $2",
             payload.name_color_item_id,
+        ),
+        (
+            ItemType::NameFont,
+            "UPDATE user_equipped_items SET name_font_item_id = $1, updated_at = now() \
+             WHERE user_id = $2",
+            payload.name_font_item_id,
+        ),
+        (
+            ItemType::Title,
+            "UPDATE user_equipped_items SET title_item_id = $1, updated_at = now() \
+             WHERE user_id = $2",
+            payload.title_item_id,
+        ),
+        (
+            ItemType::AvatarEffect,
+            "UPDATE user_equipped_items SET avatar_effect_item_id = $1, updated_at = now() \
+             WHERE user_id = $2",
+            payload.avatar_effect_item_id,
+        ),
+        (
+            ItemType::ChatBubble,
+            "UPDATE user_equipped_items SET chat_bubble_item_id = $1, updated_at = now() \
+             WHERE user_id = $2",
+            payload.chat_bubble_item_id,
         ),
     ];
 
@@ -723,6 +757,7 @@ pub async fn get_cosmetics_batch(
 
     let rows: Vec<EquippedRow> = sqlx::query_as(
         "SELECT user_id, frame_item_id, badge_item_id, banner_item_id, name_color_item_id,
+                name_font_item_id, title_item_id, avatar_effect_item_id, chat_bubble_item_id,
                 updated_at
            FROM user_equipped_items
           WHERE user_id = ANY($1)",
@@ -1279,6 +1314,7 @@ async fn balance_of<'e, E: PgExecutor<'e>>(executor: E, user_id: UserId) -> ApiR
 async fn load_equipped(state: &AppState, user_id: UserId) -> ApiResult<EquippedCosmetics> {
     let row: Option<EquippedRow> = sqlx::query_as(
         "SELECT user_id, frame_item_id, badge_item_id, banner_item_id, name_color_item_id,
+                name_font_item_id, title_item_id, avatar_effect_item_id, chat_bubble_item_id,
                 updated_at
            FROM user_equipped_items
           WHERE user_id = $1",
@@ -1348,7 +1384,10 @@ fn require_text(raw: Option<&str>, field: &str, max: usize) -> ApiResult<String>
 
 fn parse_item_type(raw: Option<&str>) -> ApiResult<ItemType> {
     ItemType::parse(raw.unwrap_or_default().trim()).ok_or_else(|| {
-        ApiError::bad_request("Pick a slot: frame, badge, banner or name_color.")
+        ApiError::bad_request(
+            "Pick a slot: frame, badge, banner, name_color, name_font, title, \
+             avatar_effect or chat_bubble.",
+        )
     })
 }
 
@@ -1474,6 +1513,10 @@ struct EquippedRow {
     badge_item_id: Option<Uuid>,
     banner_item_id: Option<Uuid>,
     name_color_item_id: Option<Uuid>,
+    name_font_item_id: Option<Uuid>,
+    title_item_id: Option<Uuid>,
+    avatar_effect_item_id: Option<Uuid>,
+    chat_bubble_item_id: Option<Uuid>,
     updated_at: Timestamp,
 }
 
@@ -1484,6 +1527,10 @@ impl EquippedRow {
             self.badge_item_id,
             self.banner_item_id,
             self.name_color_item_id,
+            self.name_font_item_id,
+            self.title_item_id,
+            self.avatar_effect_item_id,
+            self.chat_bubble_item_id,
         ]
         .into_iter()
         .flatten()
@@ -1497,6 +1544,10 @@ impl EquippedRow {
             badge: pick(self.badge_item_id),
             banner: pick(self.banner_item_id),
             name_color: pick(self.name_color_item_id),
+            name_font: pick(self.name_font_item_id),
+            title: pick(self.title_item_id),
+            avatar_effect: pick(self.avatar_effect_item_id),
+            chat_bubble: pick(self.chat_bubble_item_id),
             updated_at: Some(self.updated_at),
         }
     }

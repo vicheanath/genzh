@@ -2,8 +2,8 @@ import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
+import { CosmeticBadge, CosmeticBanner, CosmeticName, DecoratedAvatar } from '@/components/Cosmetics'
 import { Callout } from '@/components/Callout'
 import {
   CheckIcon,
@@ -26,6 +26,8 @@ import { Switch } from '@/components/Switch'
 import type { CurrentUser, Uuid } from '@/lib/api'
 import {
   useBlockUserMutation,
+  useCosmeticsFor,
+  useEquippedQuery,
   useOpenDMMutation,
   usePublicProfileQuery,
   useRemoveFriendMutation,
@@ -117,6 +119,9 @@ function PublicProfileCard({
   const call = useCall()
 
   const publicProfile = usePublicProfileQuery(userId)
+  // A profile card is the one surface where every slot shows at once — the
+  // banner, the frame, the badge and the name colour together.
+  const worn = useCosmeticsFor(userId ? [userId] : []).data?.get(userId ?? '')
 
   const openDM = useOpenDMMutation()
   const sendRequest = useSendFriendRequestMutation()
@@ -257,17 +262,27 @@ function PublicProfileCard({
           { '--preview-accent': profile?.accent_color ?? 'var(--color-accent)' } as React.CSSProperties
         }
       >
-        <div className={styles.previewBanner} />
-        <Avatar
+        {/* An equipped banner replaces the accent wash; without one the plain
+            banner stays exactly as it was. */}
+        <div className={styles.previewBanner}>
+          <CosmeticBanner item={worn?.banner} />
+        </div>
+        <DecoratedAvatar
           name={profile?.display_name ?? '?'}
           src={profile?.avatar_url}
           color={profile?.accent_color}
           size="xl"
           presence={isOnline(userId) ? 'online' : 'offline'}
           className={styles.previewAvatar}
+          cosmetics={worn}
         />
         <div className={styles.previewText}>
-          <div className={styles.previewName}>{profile?.display_name ?? 'User Profile'}</div>
+          <div className={styles.previewName}>
+            <CosmeticName item={worn?.name_color} fallbackColor={profile?.accent_color}>
+              {profile?.display_name ?? 'User Profile'}
+            </CosmeticName>
+            <CosmeticBadge item={worn?.badge} />
+          </div>
           <div className={styles.previewHandle}>@{profile?.handle}</div>
         </div>
       </div>
@@ -411,6 +426,9 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
   const toast = useToast()
   const updateProfile = useUpdateProfileMutation()
   const primeProfile = usePrimeProfile()
+  // The preview shows what everyone else sees, cosmetics included — otherwise
+  // this card is the one place in the app your own frame does not appear.
+  const mine = useEquippedQuery().data
 
   const [tab, setTab] = useState<'public' | 'anonymous'>('public')
 
@@ -507,8 +525,10 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
             className={styles.preview}
             style={{ '--preview-accent': accent ?? undefined } as React.CSSProperties}
           >
-            <div className={styles.previewBanner} />
-            <Avatar
+            <div className={styles.previewBanner}>
+              <CosmeticBanner item={mine?.banner} />
+            </div>
+            <DecoratedAvatar
               name={displayName || user.handle}
               src={avatarUrl || null}
               color={accent}
@@ -516,9 +536,15 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
               // Your own preview: online by construction, since you are here looking at it.
               presence="online"
               className={styles.previewAvatar}
+              cosmetics={mine}
             />
             <div className={styles.previewText}>
-              <div className={styles.previewName}>{displayName || user.handle}</div>
+              <div className={styles.previewName}>
+                <CosmeticName item={mine?.name_color} fallbackColor={accent}>
+                  {displayName || user.handle}
+                </CosmeticName>
+                <CosmeticBadge item={mine?.badge} />
+              </div>
               <div className={styles.previewHandle}>@{user.handle}</div>
               {bio && <p className={styles.previewBio}>{bio}</p>}
             </div>

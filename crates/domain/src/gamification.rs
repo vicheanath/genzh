@@ -92,6 +92,17 @@ pub enum ItemType {
     Banner,
     /// Gradient or colour applied to the display name.
     NameColor,
+    /// The typeface the display name is set in.
+    ///
+    /// Separate from [`ItemType::NameColor`] so the two compose: a colour and a
+    /// font are two purchases that are worn together.
+    NameFont,
+    /// A short tag beside the name — "Certified Yapper", "Night Owl".
+    Title,
+    /// Particles or an aura over the avatar, worn alongside a frame.
+    AvatarEffect,
+    /// A tint on the messages this person sends.
+    ChatBubble,
 }
 
 impl ItemType {
@@ -102,6 +113,10 @@ impl ItemType {
             ItemType::Badge => "badge",
             ItemType::Banner => "banner",
             ItemType::NameColor => "name_color",
+            ItemType::NameFont => "name_font",
+            ItemType::Title => "title",
+            ItemType::AvatarEffect => "avatar_effect",
+            ItemType::ChatBubble => "chat_bubble",
         }
     }
 
@@ -112,6 +127,10 @@ impl ItemType {
             "badge" => Some(ItemType::Badge),
             "banner" => Some(ItemType::Banner),
             "name_color" => Some(ItemType::NameColor),
+            "name_font" => Some(ItemType::NameFont),
+            "title" => Some(ItemType::Title),
+            "avatar_effect" => Some(ItemType::AvatarEffect),
+            "chat_bubble" => Some(ItemType::ChatBubble),
             _ => None,
         }
     }
@@ -122,6 +141,10 @@ impl ItemType {
         ItemType::Badge,
         ItemType::Banner,
         ItemType::NameColor,
+        ItemType::NameFont,
+        ItemType::Title,
+        ItemType::AvatarEffect,
+        ItemType::ChatBubble,
     ];
 }
 
@@ -239,6 +262,10 @@ pub struct EquippedCosmetics {
     pub badge: Option<StoreItem>,
     pub banner: Option<StoreItem>,
     pub name_color: Option<StoreItem>,
+    pub name_font: Option<StoreItem>,
+    pub title: Option<StoreItem>,
+    pub avatar_effect: Option<StoreItem>,
+    pub chat_bubble: Option<StoreItem>,
     pub updated_at: Option<Timestamp>,
 }
 
@@ -251,6 +278,10 @@ impl EquippedCosmetics {
             badge: None,
             banner: None,
             name_color: None,
+            name_font: None,
+            title: None,
+            avatar_effect: None,
+            chat_bubble: None,
             updated_at: None,
         }
     }
@@ -262,6 +293,10 @@ impl EquippedCosmetics {
             && self.badge.is_none()
             && self.banner.is_none()
             && self.name_color.is_none()
+            && self.name_font.is_none()
+            && self.title.is_none()
+            && self.avatar_effect.is_none()
+            && self.chat_bubble.is_none()
     }
 }
 

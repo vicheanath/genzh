@@ -1,0 +1,206 @@
+/*
+ * Worn cosmetics: the ring around an avatar, the badge beside a name, the
+ * gradient on the name itself, and the banner across a profile card.
+ *
+ * Every item's look comes from its `style_config`, which staff typed into the
+ * console. That JSON reaches CSS only through custom properties set inline —
+ * never as a class name and never as raw CSS — so an item with nonsense in it
+ * renders plainly instead of restyling the page around it.
+ */
+
+/* ── the decorated avatar ── */
+
+.decorated {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  isolation: isolate;
+}
+
+/*
+ * The ring sits outside the avatar rather than around it.
+ *
+ * Inset negative so the frame overlaps the avatar's edge the way an ornate
+ * border does, and `pointer-events: none` so a frame never eats the click on
+ * the face underneath it.
+ */
+.frame {
+  position: absolute;
+  inset: -12%;
+  z-index: 1;
+  display: block;
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+
+/* An uploaded frame: animated WebP or APNG, drawn as-is. */
+.frameImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/*
+ * A frame with no artwork, drawn from its colours alone.
+ *
+ * `padding` plus two backgrounds is a conic gradient ring: the outer layer is
+ * clipped to the border box and the inner to the content box, leaving only the
+ * band between them painted.
+ */
+.frameRing {
+  /* A span, so it has to be told it is a box: an inline element ignores both
+     the size and the padding the ring is made of. */
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 8%;
+  border-radius: var(--radius-full);
+  background: var(--frame-paint, var(--color-accent));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  box-shadow: 0 0 10px var(--frame-glow, transparent);
+}
+
+.animPulse { animation: cosmeticPulse 2.2s var(--ease-out) infinite; }
+.animSpin { animation: cosmeticSpin 6s linear infinite; }
+.animAurora { animation: cosmeticAurora 7s ease-in-out infinite; }
+.animShimmer { animation: cosmeticShimmer 2.6s ease-in-out infinite; }
+
+@keyframes cosmeticPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.72; transform: scale(1.045); }
+}
+
+@keyframes cosmeticSpin {
+  to { transform: rotate(1turn); }
+}
+
+@keyframes cosmeticAurora {
+  0%, 100% { filter: hue-rotate(0deg) saturate(1); }
+  50% { filter: hue-rotate(45deg) saturate(1.35); }
+}
+
+@keyframes cosmeticShimmer {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
+
+/*
+ * Somebody who has asked for less motion has asked for less motion, and a
+ * cosmetic is the least defensible thing on the page to keep animating.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animPulse,
+  .animSpin,
+  .animAurora,
+  .animShimmer {
+    animation: none;
+  }
+}
+
+/* ── the badge ── */
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 1.05em;
+  height: 1.05em;
+  flex-shrink: 0;
+  vertical-align: -0.14em;
+  line-height: 1;
+  font-size: 0.95em;
+  filter: drop-shadow(0 0 4px var(--badge-glow, transparent));
+}
+
+.badgeImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* The badge pinned to the avatar's corner, for a voice tile or a member row. */
+.badgeCorner {
+  position: absolute;
+  right: -8%;
+  bottom: -8%;
+  z-index: 2;
+  width: 42%;
+  height: 42%;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 1.5px var(--color-bg);
+  font-size: 0.62em;
+  pointer-events: none;
+}
+
+/* ── the name ── */
+
+.name {
+  /*
+   * A gradient name is painted text, so it needs a colour underneath it: a
+   * browser that drops `background-clip: text` would otherwise render it
+   * invisible rather than plain.
+   */
+  color: var(--name-flat, inherit);
+  font-weight: inherit;
+}
+
+.nameGradient {
+  background: var(--name-paint);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  text-shadow: var(--name-shadow, none);
+}
+
+/* ── the banner ── */
+
+.banner {
+  width: 100%;
+  height: 100%;
+  min-height: 5.5rem;
+  border-radius: inherit;
+  background: var(--banner-paint, var(--gradient-accent));
+  background-size: cover;
+  background-position: center;
+}
+
+.bannerImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+
+/* ── the preview tile, used by the store and the console ── */
+
+.preview {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 6.5rem;
+  padding: var(--space-4);
+  border-radius: var(--radius-md, 0.5rem);
+  background: var(--color-sunken);
+  overflow: hidden;
+}
+
+.previewBanner {
+  padding: 0;
+  min-height: 6.5rem;
+}
+
+.previewName {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}

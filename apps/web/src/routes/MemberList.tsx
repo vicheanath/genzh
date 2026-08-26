@@ -4,7 +4,7 @@ import { SearchIcon, XIcon } from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
 import { UserRow } from '@/components/UserRow'
 import { type Uuid } from '@/lib/api'
-import { useCommunityMembers, useRoomParticipantsQuery } from '@/features/api'
+import { useCommunityMembers, useCosmeticsFor, useRoomParticipantsQuery } from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { useAuth } from '@/lib/auth'
 import { usePresence } from '@/lib/usePresence'
@@ -32,6 +32,18 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
 
   const communityMembers = useCommunityMembers(communityId)
   const participants = useRoomParticipantsQuery(communityId ? null : roomId)
+
+  // One request for everybody in the list rather than one per row — the whole
+  // reason the cosmetics endpoint takes a set of ids.
+  const cosmetics = useCosmeticsFor(
+    useMemo(
+      () =>
+        (communityId ? (communityMembers.data ?? []) : (participants.data ?? [])).map(
+          (entry) => entry.user_id,
+        ),
+      [communityId, communityMembers.data, participants.data],
+    ),
+  )
 
   const source = communityId ? communityMembers : participants
   const members: MemberEntry[] = useMemo(() => {
@@ -116,6 +128,7 @@ export function MemberList({ communityId, roomId }: MemberListProps) {
             `@${profile.handle}`
           ) : undefined
         }
+        cosmetics={cosmetics.data?.get(member.user_id)}
         tintName={Boolean(highestRole?.color)}
         size="sm"
         onSelect={() => {

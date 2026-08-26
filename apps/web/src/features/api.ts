@@ -301,3 +301,43 @@ export type {
   Reason,
   RoomRecommendation,
 } from './recommendations'
+
+// Points, referrals & the cosmetics store
+export {
+  rewardKeys,
+  groupBySlot,
+  ownedForSlot,
+  useBalanceQuery,
+  useDailyCheckinMutation,
+  useReferralOverviewQuery,
+  useClaimReferralMutation,
+  useStoreItemsQuery,
+  useInventoryQuery,
+  useEquippedQuery,
+  usePurchaseMutation,
+  useEquipMutation,
+  useCosmeticsFor,
+  useAdminCatalogQuery,
+  useCreateStoreItemMutation,
+  useUpdateStoreItemMutation,
+  useDeleteStoreItemMutation,
+  useGrantItemMutation,
+  useGrantPointsMutation,
+} from './rewards/api'
+export type {
+  BalanceOverview,
+  BalanceTransaction,
+  CosmeticStyle,
+  DailyCheckinResult,
+  EquipInput,
+  EquippedCosmetics,
+  InventoryItem,
+  ItemRarity,
+  ItemType,
+  ReferralMilestone,
+  ReferralOverview,
+  ReferralRecord,
+  StoreItem,
+  StoreItemInput,
+  StoreListing,
+} from './rewards/api'

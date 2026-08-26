@@ -42,6 +42,19 @@ import type {
   JobReport,
   RoomSessionResponse,
   SocialOverviewResponse,
+  BalanceOverview,
+  ClaimReferralResult,
+  DailyCheckinResult,
+  EquipInput,
+  EquippedCosmetics,
+  GrantPointsInput,
+  GrantPointsResult,
+  InventoryItem,
+  ItemType,
+  ReferralOverview,
+  StoreItem,
+  StoreItemInput,
+  StoreListing,
   TokenPair,
   NotificationPage,
   OpenTicketInput,
@@ -1048,4 +1061,144 @@ export const admin = {
 export const broadcasts = {
   /** Active system broadcasts for clients/users. */
   active: () => request<SystemBroadcast[]>('/api/v1/broadcasts/active', { token: null }),
+}
+
+// ── points & referrals ────────────────────────────────────────────────────
+
+export const referrals = {
+  /** This account's invite code, its link, and who has used it. */
+  overview: (token: string | null) =>
+    request<ReferralOverview>('/api/v1/referrals/overview', { token }),
+
+  /**
+   * Apply somebody else's code.
+   *
+   * Only ever succeeds once per account, so a UI that offers it should read
+   * `has_claimed_code` first rather than discovering the rule by failing.
+   */
+  claim: (token: string | null, code: string) =>
+    request<ClaimReferralResult>('/api/v1/referrals/claim', {
+      method: 'POST',
+      body: { code },
+      token,
+    }),
+}
+
+export const economy = {
+  /** Balance, streak, and the ledger behind them. */
+  balance: (token: string | null) =>
+    request<BalanceOverview>('/api/v1/economy/balance', { token }),
+
+  /** Claim today's points. Refused inside the cooldown. */
+  dailyCheckin: (token: string | null) =>
+    request<DailyCheckinResult>('/api/v1/economy/daily-checkin', {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+}
+
+// ── the store, inventory & worn cosmetics ─────────────────────────────────
+
+export const store = {
+  /** The active catalog, annotated with what the viewer owns and wears. */
+  items: (token: string | null, itemType?: ItemType | 'all') =>
+    request<StoreListing[]>('/api/v1/store/items', {
+      token,
+      params: itemType && itemType !== 'all' ? { item_type: itemType } : undefined,
+    }),
+
+  /** Buy one item. The server takes the points and grants it in one transaction. */
+  purchase: (token: string | null, itemId: Uuid) =>
+    request<InventoryItem>(`/api/v1/store/items/${itemId}/purchase`, {
+      method: 'POST',
+      body: {},
+      token,
+    }),
+}
+
+export const inventory = {
+  /** Everything this account owns. */
+  mine: (token: string | null) =>
+    request<InventoryItem[]>('/api/v1/inventory/my-items', { token }),
+
+  /** What this account is wearing right now. */
+  equipped: (token: string | null) =>
+    request<EquippedCosmetics>('/api/v1/inventory/equipped', { token }),
+
+  /**
+   * Wear or remove cosmetics.
+   *
+   * Omit a slot to leave it alone; pass `null` to clear it. See [`EquipInput`].
+   */
+  equip: (token: string | null, input: EquipInput) =>
+    request<EquippedCosmetics>('/api/v1/inventory/equip', {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+}
+
+export const cosmetics = {
+  /**
+   * What a set of people are wearing.
+   *
+   * Batched on purpose: a voice grid or a page of chat needs this for everybody
+   * on screen at once, and one request per face is how thirty people in a room
+   * becomes thirty requests.
+   */
+  forUsers: (token: string | null, userIds: Uuid[]) =>
+    userIds.length === 0
+      ? Promise.resolve([] as EquippedCosmetics[])
+      : request<EquippedCosmetics[]>('/api/v1/cosmetics', {
+          token,
+          params: { user_ids: userIds.join(',') },
+        }),
+}
+
+// ── the console: curating the catalog ─────────────────────────────────────
+
+export const storeAdmin = {
+  /** The whole catalog, deactivated rows included. */
+  items: (token: string | null) =>
+    request<StoreListing[]>('/api/v1/admin/store/items', { token }),
+
+  create: (token: string | null, input: StoreItemInput) =>
+    request<StoreItem>('/api/v1/admin/store/items', { method: 'POST', body: input, token }),
+
+  /**
+   * Edit an item, price included.
+   *
+   * Repricing changes what it costs from now on; it does not rewrite what
+   * anybody already paid.
+   */
+  update: (token: string | null, itemId: Uuid, input: StoreItemInput) =>
+    request<StoreItem>(`/api/v1/admin/store/items/${itemId}`, {
+      method: 'PATCH',
+      body: input,
+      token,
+    }),
+
+  /** Refused once anybody owns the item — deactivate it instead. */
+  remove: (token: string | null, itemId: Uuid) =>
+    request<{ deleted: boolean }>(`/api/v1/admin/store/items/${itemId}`, {
+      method: 'DELETE',
+      token,
+    }),
+
+  /** Give an item away. Idempotent: `granted` is false if they already had it. */
+  grantItem: (token: string | null, itemId: Uuid, userId: Uuid) =>
+    request<{ granted: boolean }>(`/api/v1/admin/store/items/${itemId}/grant`, {
+      method: 'POST',
+      body: { user_id: userId },
+      token,
+    }),
+
+  /** Credit or correct a balance by hand. Audited. */
+  grantPoints: (token: string | null, input: GrantPointsInput) =>
+    request<GrantPointsResult>('/api/v1/admin/economy/grant', {
+      method: 'POST',
+      body: input,
+      token,
+    }),
 }

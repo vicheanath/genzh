@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
+import { CosmeticBadge, CosmeticName, DecoratedAvatar } from '@/components/Cosmetics'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
@@ -25,6 +26,8 @@ import {
 import { Spinner } from '@/components/Spinner'
 import { Tooltip } from '@/components/Tooltip'
 import type { RoomWithPermissions } from '@/lib/api'
+import { useCosmeticsFor } from '@/features/api'
+import type { EquippedCosmetics } from '@/features/rewards/api'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useVoiceRoom } from '@/lib/media'
@@ -68,6 +71,14 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
   const pending = isCurrentRoom && (voice.status === 'connecting' || voice.status === 'reconnecting')
   const inOtherRoom = Boolean(voice.activeRoomId && voice.activeRoomId !== room.id)
   const headcount = isCurrentRoom ? voice.participants.length + 1 : 0
+
+  // Everybody on screen in one request, refreshed as people come and go.
+  const cosmetics = useCosmeticsFor(
+    useMemo(
+      () => [user?.id, ...voice.participants.map((p) => p.userId)].filter(Boolean) as string[],
+      [user?.id, voice.participants],
+    ),
+  )
 
   const [theaterRequested, setTheaterRequested] = useState(false)
   const [stageRequests, setStageRequests] = useState<StageRequest[]>([])
@@ -291,6 +302,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                   name={user?.profile.display_name ?? 'You'}
                   avatar={user?.profile.avatar_url}
                   accent={user?.profile.accent_color}
+                  cosmetics={user ? cosmetics.data?.get(user.id) : null}
                   speaking={voice.speaking}
                   muted={voice.muted}
                   cameraStream={voice.cameraStream}
@@ -303,6 +315,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                 <VoiceTile
                   key={p.id}
                   name={p.displayName}
+                  cosmetics={cosmetics.data?.get(p.userId)}
                   speaking={p.speaking}
                   muted={p.muted}
                   cameraStream={p.cameraStream}
@@ -349,6 +362,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                     name={user?.profile.display_name ?? 'You'}
                     avatar={user?.profile.avatar_url}
                     accent={user?.profile.accent_color}
+                    cosmetics={user ? cosmetics.data?.get(user.id) : null}
                     speaking={voice.speaking}
                     muted={voice.muted}
                     role={stageRole}
@@ -370,6 +384,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                   <VoiceTile
                     key={p.id}
                     name={p.displayName}
+                    cosmetics={cosmetics.data?.get(p.userId)}
                     speaking={p.speaking}
                     muted={p.muted}
                     role={p.stageRole ?? 'speaker'}
@@ -538,6 +553,7 @@ function VoiceTile({
   name,
   avatar,
   accent,
+  cosmetics,
   speaking,
   muted,
   role,
@@ -550,6 +566,7 @@ function VoiceTile({
   name: string
   avatar?: string | null
   accent?: string | null
+  cosmetics?: EquippedCosmetics | null
   speaking: boolean
   muted: boolean
   role?: 'host' | 'speaker' | 'audience'
@@ -574,19 +591,25 @@ function VoiceTile({
         <TileVideo stream={cameraStream} mirrored={you} />
       ) : (
         <div className={styles.avatarWrap}>
-          <Avatar
+          <DecoratedAvatar
             name={name}
             src={avatar}
             color={accent}
             size={compact ? 'lg' : 'xl'}
             speaking={speaking}
+            cosmetics={cosmetics}
           />
           {speaking && <div className={styles.speakingWaveRing} />}
         </div>
       )}
 
       <div className={styles.tileNameTag}>
-        <span className={styles.tileNameText}>{you ? `${name} (you)` : name}</span>
+        <span className={styles.tileNameText}>
+          <CosmeticName item={cosmetics?.name_color} fallbackColor={accent}>
+            {you ? `${name} (you)` : name}
+          </CosmeticName>
+        </span>
+        <CosmeticBadge item={cosmetics?.badge} />
         {role === 'host' && (
           <span className={styles.crownTag} title="Host">
             <CrownIcon size={11} />
