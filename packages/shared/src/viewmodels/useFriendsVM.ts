@@ -1,26 +1,31 @@
 import { useCallback } from 'react'
 import {
-  useFriendsListQuery,
-  usePendingFriendsQuery,
   useRemoveFriendMutation,
   useRespondFriendRequestMutation,
   useSendFriendRequestMutation,
-  useSentFriendsQuery,
 } from '../queries/friends.queries'
+import { useSocialOverviewQuery } from '../queries/bff.queries'
 import type { Uuid } from '../api/types'
 
+/**
+ * The friends screen, on one read instead of three.
+ *
+ * Friends, the requests waiting on you and the ones you sent all arrive in the
+ * same payload — and because that payload also carries blocks, the screen's
+ * companion `useBlockedUsersVM` shares this exact cache entry rather than
+ * fetching a fourth time.
+ */
 export function useFriendsVM(token: string | null) {
-  const listQuery = useFriendsListQuery(token)
-  const pendingQuery = usePendingFriendsQuery(token)
-  const sentQuery = useSentFriendsQuery(token)
+  const overviewQuery = useSocialOverviewQuery(token)
+  const overview = overviewQuery.data ?? null
 
   const sendRequestMutation = useSendFriendRequestMutation(token)
   const respondMutation = useRespondFriendRequestMutation(token)
   const removeFriendMutation = useRemoveFriendMutation(token)
 
-  const friendIds = listQuery.data ?? []
-  const pendingRequests = pendingQuery.data ?? []
-  const sentRequests = sentQuery.data ?? []
+  const friendIds = overview?.friends ?? []
+  const pendingRequests = overview?.incoming_requests ?? []
+  const sentRequests = overview?.outgoing_requests ?? []
 
   const sendFriendRequest = useCallback(
     async (userId: Uuid) => {
@@ -57,13 +62,13 @@ export function useFriendsVM(token: string | null) {
     sentRequests,
 
     // Status
-    isLoading: listQuery.isLoading || pendingQuery.isLoading || sentQuery.isLoading,
+    isLoading: overviewQuery.isLoading,
     isSending: sendRequestMutation.isPending,
     isResponding: respondMutation.isPending,
     isRemoving: removeFriendMutation.isPending,
 
     // Errors
-    error: listQuery.error || pendingQuery.error || sentQuery.error,
+    error: overviewQuery.error,
     sendError: sendRequestMutation.error,
     respondError: respondMutation.error,
 
@@ -73,9 +78,7 @@ export function useFriendsVM(token: string | null) {
     declineFriendRequest,
     removeFriend,
     refresh: () => {
-      listQuery.refetch()
-      pendingQuery.refetch()
-      sentQuery.refetch()
+      overviewQuery.refetch()
     },
   }
 }

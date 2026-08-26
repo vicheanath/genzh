@@ -1,6 +1,7 @@
+import { useCallback } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { rooms } from '../api/endpoints'
-import type { RoomSessionResponse, Uuid } from '../api/types'
+import { communities, rooms, social } from '../api/endpoints'
+import type { MeOverviewResponse, RoomSessionResponse, Uuid } from '../api/types'
 import { queryKeys } from './keys'
 
 /**
@@ -90,5 +91,98 @@ export function useOpenRoomSessionMutation(token: string | null) {
       // "where am I" are now a join out of date.
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.mine() })
     },
+  })
+}
+
+/**
+ * A callback that spreads the boot payload across the caches it answers for.
+ *
+ * Returns a writer rather than running a query, because the one place that
+ * should fetch this payload is session hydration: it already makes exactly one
+ * call to validate the stored token, so asking that call for the whole shell
+ * instead of just the account costs nothing extra and leaves every list warm
+ * before the navigator mounts. A `useQuery` would fire *beside* hydration
+ * rather than inside it, which is the race `AuthProvider` exists to avoid.
+ *
+ * A hook rather than a plain `(client, overview)` function so the client is
+ * never passed across the package boundary. The app and this package resolve
+ * `@tanstack/react-query` to two different patch versions, and while Metro
+ * forces a single copy into the bundle, TypeScript still sees two nominally
+ * incompatible `QueryClient` types. Taking the client from context here side-
+ * steps that entirely — and matches how every other hook in this layer gets it.
+ *
+ * Only the four entries something actually reads are written. Counts
+ * (`pending_requests_count`, `unread_notifications`) are left alone because
+ * their owners cache lists, not totals; `friends` is left alone because the
+ * social overview is now the only reader of the friend graph.
+ */
+export function useSeedMeOverview(): (overview: MeOverviewResponse) => void {
+  const queryClient = useQueryClient()
+  return useCallback(
+    (overview: MeOverviewResponse) => {
+      queryClient.setQueryData(queryKeys.auth.me(), overview.me)
+      queryClient.setQueryData(queryKeys.auth.config(), overview.config)
+      queryClient.setQueryData(queryKeys.communities.lists(), overview.communities)
+      queryClient.setQueryData(queryKeys.rooms.mine(), overview.rooms)
+    },
+    [queryClient],
+  )
+}
+
+/**
+ * A whole community screen: metadata, channels, members and roles.
+ *
+ * Replaces the four parallel reads the screen used to make. Both paths need
+ * membership — `communities.get` and this handler each start from
+ * `member_context` — so a non-member gets the same refusal as before.
+ *
+ * Two per-resource entries are seeded, and only two: the member list screen
+ * and the mention autocomplete both mount `useCommunityMembersQuery` without
+ * ever touching this hook, and the channel list is read through `useRoomsVM`.
+ * The community record and its roles are deliberately not written — this hook
+ * is now their only reader, so a second copy would just be one more thing to
+ * keep in step.
+ */
+export function useCommunityOverviewQuery(
+  token: string | null,
+  communityId: Uuid | null | undefined,
+) {
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: communityId
+      ? queryKeys.bff.communityOverview(communityId)
+      : ['communities', 'detail', null, 'overview'],
+    queryFn: async () => {
+      if (!token || !communityId) throw new Error('Missing token or communityId')
+      const overview = await communities.overview(token, communityId)
+
+      queryClient.setQueryData(queryKeys.communities.members(communityId), overview.members)
+      queryClient.setQueryData(queryKeys.rooms.lists(communityId), overview.rooms)
+
+      return overview
+    },
+    enabled: Boolean(token && communityId),
+  })
+}
+
+/**
+ * The social graph in one payload: friends, requests both ways, and blocks.
+ *
+ * Four reads became one. Nothing is seeded onward: this hook is the only
+ * reader of the friend graph and the block list now, so there is no
+ * per-resource cache left to warm.
+ *
+ * `online_friends` is carried too but deliberately ignored by the mobile app,
+ * which reads presence from the socket-backed provider instead — a snapshot
+ * taken at fetch time would go stale the moment somebody closed their laptop.
+ */
+export function useSocialOverviewQuery(token: string | null) {
+  return useQuery({
+    queryKey: queryKeys.bff.socialOverview(),
+    queryFn: async () => {
+      if (!token) throw new Error('Unauthenticated')
+      return social.overview(token)
+    },
+    enabled: Boolean(token),
   })
 }

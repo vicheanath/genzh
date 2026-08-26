@@ -68,5 +68,31 @@ export const queryKeys = {
   bff: {
     all: ['bff'] as const,
     roomSession: (id: Uuid) => [...queryKeys.bff.all, 'room', id, 'session'] as const,
+
+    /**
+     * The app-shell boot payload.
+     *
+     * Fetched once per session and spread into the per-resource caches below,
+     * so it is deliberately the one composite that nothing invalidates: after
+     * boot, every screen is reading the caches it seeded, and those are kept
+     * fresh by their own mutations.
+     */
+    meOverview: () => [...queryKeys.bff.all, 'me', 'overview'] as const,
+
+    /**
+     * These two hang *under* the resource they compose rather than beside it,
+     * which is the opposite of `roomSession` above and deliberate.
+     *
+     * A room session is kept apart because re-fetching it costs a media
+     * credential, so a broad `rooms.detail` invalidation must not reach it.
+     * These two are ordinary idempotent reads with no such cost, and they are
+     * the *only* copy their screen reads — so they have to be invalidated by
+     * every mutation that already invalidates the resource. Nesting the key
+     * gets that from React Query's prefix matching instead of asking a dozen
+     * mutation sites to remember a second key.
+     */
+    communityOverview: (id: Uuid) =>
+      [...queryKeys.communities.detail(id), 'overview'] as const,
+    socialOverview: () => [...queryKeys.friends.all, 'overview'] as const,
   },
 } as const

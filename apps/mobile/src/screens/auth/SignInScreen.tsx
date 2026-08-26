@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys, useAuthConfigQuery } from '@genzh/shared';
 import { AtSign, Lock, Mail, Server, Sparkles, User } from 'lucide-react-native';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
@@ -24,7 +26,16 @@ export function SignInScreen({ navigation }: any) {
   const c = useColors();
   const { login, register, error, clearError } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<'login' | 'register'>('login');
+
+  // What this particular server allows. Deployments run with
+  // `ALLOW_PASSWORD_SIGNUP=false`, and offering a Create Account tab there
+  // produces a form that can only ever fail. Assume open until the server
+  // says otherwise, so a slow first response does not hide the tab on a
+  // deployment that does allow signup.
+  const { data: authConfig } = useAuthConfigQuery();
+  const allowPasswordSignup = authConfig?.allow_password_signup ?? true;
 
   const [identifier, setIdentifier] = useState('');
   const [handle, setHandle] = useState('');
@@ -36,6 +47,13 @@ export function SignInScreen({ navigation }: any) {
   const [showServerConfig, setShowServerConfig] = useState(false);
   const [serverUrlInput, setServerUrlInput] = useState(getApiUrl());
 
+  // The config can arrive after the user has already opened the register tab.
+  useEffect(() => {
+    if (!allowPasswordSignup && tab === 'register') {
+      setTab('login');
+    }
+  }, [allowPasswordSignup, tab]);
+
   const handleTabSwitch = (t: 'login' | 'register') => {
     setTab(t);
     clearError();
@@ -44,6 +62,9 @@ export function SignInScreen({ navigation }: any) {
   const handleSaveServer = async () => {
     if (!serverUrlInput.trim()) return;
     await saveApiUrl(serverUrlInput.trim());
+    // The old server's answers describe the old server — `useAuthConfigQuery`
+    // never goes stale on its own (staleTime: Infinity), so drop them by hand.
+    await queryClient.invalidateQueries({ queryKey: queryKeys.auth.all });
     toast.success('Server endpoint updated');
     setShowServerConfig(false);
   };
@@ -101,25 +122,34 @@ export function SignInScreen({ navigation }: any) {
           {/* Main Auth Card */}
           <View style={styles.card}>
             {/* Segmented Switcher */}
-            <View style={styles.segmentedControl}>
-              <Pressable
-                style={[styles.segmentBtn, tab === 'login' && styles.segmentBtnActive]}
-                onPress={() => handleTabSwitch('login')}
-              >
-                <Text style={[styles.segmentText, tab === 'login' && styles.segmentTextActive]}>
-                  Sign In
-                </Text>
-              </Pressable>
+            {allowPasswordSignup ? (
+              <View style={styles.segmentedControl}>
+                <Pressable
+                  style={[styles.segmentBtn, tab === 'login' && styles.segmentBtnActive]}
+                  onPress={() => handleTabSwitch('login')}
+                >
+                  <Text style={[styles.segmentText, tab === 'login' && styles.segmentTextActive]}>
+                    Sign In
+                  </Text>
+                </Pressable>
 
-              <Pressable
-                style={[styles.segmentBtn, tab === 'register' && styles.segmentBtnActive]}
-                onPress={() => handleTabSwitch('register')}
-              >
-                <Text style={[styles.segmentText, tab === 'register' && styles.segmentTextActive]}>
-                  Create Account
-                </Text>
-              </Pressable>
-            </View>
+                <Pressable
+                  style={[styles.segmentBtn, tab === 'register' && styles.segmentBtnActive]}
+                  onPress={() => handleTabSwitch('register')}
+                >
+                  <Text style={[styles.segmentText, tab === 'register' && styles.segmentTextActive]}>
+                    Create Account
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.errorWrapper}>
+                <Callout
+                  type="info"
+                  text="This server has closed password sign-up. Create your account on the web app first, then sign in here."
+                />
+              </View>
+            )}
 
             {error ? (
               <View style={styles.errorWrapper}>

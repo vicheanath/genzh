@@ -15,6 +15,7 @@ import {
   useUpdateProfileMutation,
   ApiError,
   auth,
+  useSeedMeOverview,
   setTokenProvider,
   type AuthResponse,
   type CurrentUser,
@@ -109,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * this platform's.
    */
   const queryClient = useQueryClient();
+  const seedMeOverview = useSeedMeOverview();
   const loginMutation = useLoginMutation();
   const registerMutation = useRegisterMutation();
   const logoutMutation = useLogoutMutation();
@@ -214,15 +216,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const fresh = await getToken();
-        const user = await auth.me(fresh);
-        adopt(session.current, user);
+        // One call does both jobs. This request has to happen anyway to prove
+        // the stored token is still good; asking for the whole shell instead of
+        // just the account costs the same round-trip and leaves the community
+        // list, the room list and the friend list already in cache by the time
+        // the navigator mounts. Boot used to be this call plus four more.
+        const overview = await auth.overview(fresh);
+        seedMeOverview(overview);
+        adopt(session.current, overview.me);
       } catch {
         signOutLocally();
       }
     } catch {
       signOutLocally();
     }
-  }, [adopt, getToken, signOutLocally]);
+  }, [adopt, getToken, seedMeOverview, signOutLocally]);
 
   useEffect(() => {
     void loadSession();

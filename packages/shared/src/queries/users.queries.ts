@@ -84,6 +84,9 @@ export function useBlockUserMutation(token: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.blocked() })
+      // Blocks also travel in the social overview, which hangs under
+      // `friends` — nothing above would reach it.
+      queryClient.invalidateQueries({ queryKey: queryKeys.bff.socialOverview() })
     },
   })
 }
@@ -97,6 +100,9 @@ export function useUnblockUserMutation(token: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.blocked() })
+      // Blocks also travel in the social overview, which hangs under
+      // `friends` — nothing above would reach it.
+      queryClient.invalidateQueries({ queryKey: queryKeys.bff.socialOverview() })
     },
   })
 }

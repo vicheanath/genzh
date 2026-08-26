@@ -1,9 +1,6 @@
 import { useCallback } from 'react'
 import {
   useAssignRoleMutation,
-  useCommunityMembersQuery,
-  useCommunityQuery,
-  useCommunityRolesQuery,
   useCreateRoleMutation,
   useDeleteCommunityMutation,
   useJoinCommunityMutation,
@@ -11,19 +8,29 @@ import {
   useRemoveRoleMutation,
   useUpdateCommunityMutation,
 } from '../queries/communities.queries'
+import { useCommunityOverviewQuery } from '../queries/bff.queries'
 import {
   useCreateCommunityRoomMutation,
   useDeleteRoomMutation,
-  useRoomsQuery,
   type CreateCommunityRoomInput,
 } from '../queries/rooms.queries'
 import type { Uuid } from '../api/types'
 
+/**
+ * One community screen, one request.
+ *
+ * This used to open with four parallel reads — the community, its members, its
+ * roles and its channels — which on a phone meant four TLS round-trips before
+ * anything rendered, and four separate loading states to reconcile. The server
+ * already composes all four, so the screen asks for them together.
+ *
+ * The overview seeds the per-resource caches it answers for, so screens that
+ * read those directly (the member list, mention autocomplete) still find their
+ * data without a second fetch.
+ */
 export function useCommunityDetailVM(token: string | null, communityId: Uuid | null | undefined) {
-  const communityQuery = useCommunityQuery(token, communityId)
-  const membersQuery = useCommunityMembersQuery(token, communityId)
-  const rolesQuery = useCommunityRolesQuery(token, communityId)
-  const roomsQuery = useRoomsQuery(token, communityId ?? undefined)
+  const overviewQuery = useCommunityOverviewQuery(token, communityId)
+  const overview = overviewQuery.data ?? null
 
   const joinMutation = useJoinCommunityMutation(token)
   const leaveMutation = useLeaveCommunityMutation(token)
@@ -102,16 +109,16 @@ export function useCommunityDetailVM(token: string | null, communityId: Uuid | n
 
   return {
     // Model state
-    community: communityQuery.data ?? null,
-    members: membersQuery.data ?? [],
-    roles: rolesQuery.data ?? [],
-    rooms: roomsQuery.data ?? [],
+    community: overview?.community ?? null,
+    members: overview?.members ?? [],
+    roles: overview?.roles ?? [],
+    rooms: overview?.rooms ?? [],
 
     // Permissions
-    yourPermissions: communityQuery.data?.your_permissions ?? [],
+    yourPermissions: overview?.community.your_permissions ?? [],
 
     // Status
-    isLoading: communityQuery.isLoading || membersQuery.isLoading || roomsQuery.isLoading,
+    isLoading: overviewQuery.isLoading,
     isJoining: joinMutation.isPending,
     isLeaving: leaveMutation.isPending,
     isUpdatingCommunity: updateCommunityMutation.isPending,
@@ -123,7 +130,7 @@ export function useCommunityDetailVM(token: string | null, communityId: Uuid | n
     isDeletingRoom: deleteRoomMutation.isPending,
 
     // Errors
-    error: communityQuery.error || membersQuery.error || roomsQuery.error,
+    error: overviewQuery.error,
 
     // Actions
     join,
@@ -135,10 +142,12 @@ export function useCommunityDetailVM(token: string | null, communityId: Uuid | n
     removeRole,
     createRoom,
     deleteRoom,
-    refetchCommunity: communityQuery.refetch,
-    refetchMembers: membersQuery.refetch,
-    refetchRoles: rolesQuery.refetch,
-    refetchRooms: roomsQuery.refetch,
+    // The four used to be separable; they are one request now, so all four
+    // names refetch the same thing rather than breaking every call site.
+    refetchCommunity: overviewQuery.refetch,
+    refetchMembers: overviewQuery.refetch,
+    refetchRoles: overviewQuery.refetch,
+    refetchRooms: overviewQuery.refetch,
   }
 }
 

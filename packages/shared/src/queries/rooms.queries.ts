@@ -130,6 +130,9 @@ export function useCreateCommunityRoomMutation(token: string | null) {
     },
     onSuccess: (_room, { communityId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.lists(communityId) })
+      // The community overview carries this community's channel list, and it
+      // hangs under `communities.detail`, not under `rooms`.
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.detail(communityId) })
     },
   })
 }
@@ -143,6 +146,10 @@ export function useDeleteRoomMutation(token: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all })
+      // A deleted room leaves its community's overview holding a channel that
+      // no longer exists. Only the room id is in hand — not the community it
+      // belonged to — so this widens to every community rather than guessing.
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.all })
     },
   })
 }
@@ -184,6 +191,10 @@ export function useUpdateRoomMutation(token: string | null) {
     onSuccess: (_room, { roomId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.detail(roomId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all })
+      // Renaming or re-categorising a channel changes how it reads in its
+      // community's overview, which is not under `rooms`. Same missing
+      // community id as the delete above.
+      queryClient.invalidateQueries({ queryKey: queryKeys.communities.all })
     },
   })
 }

@@ -41,6 +41,22 @@ function isLoopback(host: string): boolean {
 }
 
 /**
+ * The deployment this app talks to when nothing else says otherwise.
+ *
+ * A release build has no dev server to learn a host from, so without this it
+ * fell through to `10.0.2.2`/`localhost` — addresses that mean nothing once
+ * the app is installed on a real phone. Every standalone build pointed at
+ * nowhere and every request failed before it left the handset.
+ *
+ * Override per build profile with `EXPO_PUBLIC_API_URL` (see `eas.json`);
+ * override per device at runtime from the sign-in screen's server field.
+ */
+const PRODUCTION_API_URL = 'https://genzh.pdfpaperkit.com';
+
+/** An explicit build-time target. Metro inlines `EXPO_PUBLIC_*` into the bundle. */
+const CONFIGURED_API_URL = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '') || null;
+
+/**
  * Where the API lives, before the user overrides it.
  *
  * This used to be a flat `10.0.2.2:8080` for Android. That alias is the
@@ -49,17 +65,31 @@ function isLoopback(host: string): boolean {
  * which is why the app worked in an emulator and not on a handset.
  *
  * The order below is deliberate:
- *   1. the dev server's own host, whenever it is a real address — it is the
+ *   1. `EXPO_PUBLIC_API_URL`, when the build was told outright;
+ *   2. the dev server's own host, whenever it is a real address — it is the
  *      one host the device has already reached successfully;
- *   2. `10.0.2.2` on Android only when the dev server *is* loopback, which is
+ *   3. `10.0.2.2` on Android only when the dev server *is* loopback, which is
  *      the genuine emulator case;
- *   3. loopback elsewhere, for the simulator and for web.
+ *   4. loopback elsewhere, for the simulator and for web.
+ *
+ * Steps 2–4 all describe a machine on the developer's desk, so they are
+ * reachable only while a dev server exists. A build with none is a shipped
+ * app, and a shipped app belongs on the deployed server.
  */
 export const DEFAULT_API_URL = ((): string => {
+  if (CONFIGURED_API_URL) {
+    return CONFIGURED_API_URL;
+  }
+
   const host = devServerHost();
 
   if (host && !isLoopback(host)) {
     return `http://${host}:${API_PORT}`;
+  }
+
+  // No dev server host at all: this is a standalone build, not a laptop.
+  if (!host) {
+    return PRODUCTION_API_URL;
   }
 
   if (Platform.OS === 'android') {

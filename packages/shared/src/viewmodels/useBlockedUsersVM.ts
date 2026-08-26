@@ -1,13 +1,18 @@
 import { useCallback } from 'react'
-import {
-  useBlockedUsersQuery,
-  useBlockUserMutation,
-  useUnblockUserMutation,
-} from '../queries/users.queries'
+import { useBlockUserMutation, useUnblockUserMutation } from '../queries/users.queries'
+import { useSocialOverviewQuery } from '../queries/bff.queries'
 import type { Uuid } from '../api/types'
 
+/**
+ * Who you have blocked.
+ *
+ * Reads the same social payload the friends screen does. The two view models
+ * are mounted side by side on that screen, so sharing one cache entry turns
+ * what used to be two requests into zero extra ones — and the settings screen,
+ * which mounts this alone, still gets the whole graph in a single call.
+ */
 export function useBlockedUsersVM(token: string | null) {
-  const query = useBlockedUsersQuery(token)
+  const query = useSocialOverviewQuery(token)
   const blockMutation = useBlockUserMutation(token)
   const unblockMutation = useUnblockUserMutation(token)
 
@@ -27,7 +32,7 @@ export function useBlockedUsersVM(token: string | null) {
 
   return {
     // Model state
-    blockedUsers: query.data ?? [],
+    blockedUsers: query.data?.blocked ?? [],
 
     // Status
     isLoading: query.isLoading,
