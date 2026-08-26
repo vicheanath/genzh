@@ -29,6 +29,7 @@
 //! | Port | Today | When one process is not enough |
 //! |------|-------|--------------------------------|
 //! | [`PresenceStore`] | [`InMemoryPresenceStore`] | Redis hash of per-instance counters |
+//! | [`AttentionStore`] | [`InMemoryAttentionStore`] | Redis entry per connection, with a TTL |
 //! | [`RateLimiter`] | [`InMemoryRateLimiter`] | Redis counter, or a gateway |
 //! | [`FloodGuard`] | [`InMemoryFloodGuard`] | Redis counter keyed per account |
 //! | [`EventBus`] | [`InMemoryEventBus`] | Redis pub/sub, NATS, Postgres `LISTEN` |
@@ -44,6 +45,7 @@
 //! implementations are neither, because the replacements are both. See
 //! [`store`] for why that is not pessimism.
 
+pub mod attention;
 pub mod bus;
 pub mod db;
 pub mod error;
@@ -53,6 +55,9 @@ pub mod rate_limit;
 pub mod store;
 pub mod sweep;
 
+pub use attention::{
+    ATTENTION_TTL, AttentionStore, ConnectionId, InMemoryAttentionStore, InattentiveStore,
+};
 pub use bus::{EventBus, EventStream, InMemoryEventBus};
 pub use db::{DbPool, PgConfig, connect, run_migrations};
 pub use error::{RepositoryError, RepositoryResult, ServiceError, ServiceResult};

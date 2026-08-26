@@ -2114,3 +2114,277 @@ fn urlencode(value: &str) -> String {
     }
     out
 }
+
+// ── notifications ──────────────────────────────────────────────────────────
+
+/// A page of `user`'s notifications: the rows, and the badge.
+async fn notifications_of(
+    api: &harness::TestApi,
+    account: &harness::Account,
+) -> (Vec<serde_json::Value>, i64) {
+    let page = api
+        .send(
+            "GET",
+            "/api/v1/notifications",
+            Some(&account.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK);
+
+    let rows = page.json["notifications"]
+        .as_array()
+        .expect("a notification list")
+        .clone();
+    let unread = page.json["unread"].as_i64().expect("an unread count");
+    (rows, unread)
+}
+
+/// Ten messages from one person in one room are one notification, not ten.
+///
+/// The badge is the part that matters: it used to count *messages*, so a friend
+/// sending three lines in a row looked like three things needing attention.
+#[tokio::test]
+async fn messages_from_one_person_fold_into_one_notification() {
+    let Some(api) = boot().await else {
+        return skip("messages_from_one_person_fold_into_one_notification");
+    };
+
+    let alice = api.register("folder_a").await;
+    let bob = api.register("folder_b").await;
+    let community_id = api.create_community(&alice, "Folding").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    api.post_message(&alice, &room_id, &format!("@{} first", bob.handle))
+        .await;
+    api.post_message(&alice, &room_id, &format!("@{} second", bob.handle))
+        .await;
+    api.post_message(&alice, &room_id, &format!("@{} third", bob.handle))
+        .await;
+
+    let (rows, unread) = notifications_of(&api, &bob).await;
+    assert_eq!(rows.len(), 1, "three messages, one conversation, one row");
+    assert_eq!(unread, 1, "the badge counts conversations, not messages");
+    assert_eq!(rows[0]["count"], 3);
+    assert_eq!(
+        rows[0]["preview"].as_str().expect("a preview"),
+        format!("@{} third", bob.handle),
+        "the row shows the latest message, not the one that opened it"
+    );
+
+    // Reading it closes the row: the next message is news again.
+    let id = rows[0]["id"].as_str().expect("an id");
+    api.send(
+        "POST",
+        &format!("/api/v1/notifications/{id}/read"),
+        Some(&bob.access_token),
+        None,
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    api.post_message(&alice, &room_id, &format!("@{} later", bob.handle))
+        .await;
+
+    let (rows, unread) = notifications_of(&api, &bob).await;
+    assert_eq!(rows.len(), 2, "a read row is closed, not reopened");
+    assert_eq!(unread, 1);
+    assert_eq!(rows[0]["count"], 1, "the new row starts its own count");
+}
+
+/// Two people talking in one room are two notifications.
+///
+/// The fold is per conversation, and "who said it" is half of what a
+/// conversation is: folding Alice's message into Carol's row would tell Bob
+/// that one of them said something and lose which.
+#[tokio::test]
+async fn two_people_in_one_room_do_not_fold_into_each_other() {
+    let Some(api) = boot().await else {
+        return skip("two_people_in_one_room_do_not_fold_into_each_other");
+    };
+
+    let alice = api.register("split_a").await;
+    let carol = api.register("split_c").await;
+    let bob = api.register("split_b").await;
+
+    let community_id = api.create_community(&alice, "Two Voices").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&carol.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+
+    api.post_message(&alice, &room_id, &format!("@{} from alice", bob.handle))
+        .await;
+    api.post_message(&carol, &room_id, &format!("@{} from carol", bob.handle))
+        .await;
+
+    let (rows, unread) = notifications_of(&api, &bob).await;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(unread, 2);
+}
+
+/// Nobody is told about the room they are reading.
+///
+/// The attention store is swapped for one the test drives directly, because
+/// the real one is fed by WebSocket frames and this suite speaks HTTP. What is
+/// under test is the notification path's use of it, which is the same either
+/// way.
+#[tokio::test]
+async fn a_reader_is_not_notified_about_the_room_on_their_screen() {
+    use genzh_infrastructure::{AttentionStore, ConnectionId, InMemoryAttentionStore};
+
+    let attention = InMemoryAttentionStore::new();
+    let watching = attention.clone();
+    let Some(api) = boot_with(move |state| state.attention = watching).await else {
+        return skip("a_reader_is_not_notified_about_the_room_on_their_screen");
+    };
+
+    let alice = api.register("reader_a").await;
+    let bob = api.register("reader_b").await;
+    let community_id = api.create_community(&alice, "Watched").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    let connection = ConnectionId::new();
+    attention
+        .focus(
+            connection,
+            bob.user_id.parse().expect("a user id"),
+            room_id.parse().expect("a room id"),
+        )
+        .await
+        .expect("focus");
+
+    api.post_message(&alice, &room_id, &format!("@{} look", bob.handle))
+        .await;
+
+    let (rows, unread) = notifications_of(&api, &bob).await;
+    assert!(
+        rows.is_empty(),
+        "a message watched arriving does not need a notification too"
+    );
+    assert_eq!(unread, 0);
+
+    // Leaving the room brings them back.
+    attention.blur(connection).await.expect("blur");
+    api.post_message(&alice, &room_id, &format!("@{} and now", bob.handle))
+        .await;
+
+    let (rows, unread) = notifications_of(&api, &bob).await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(unread, 1);
+}
+
+/// Muting a room silences it, except for being named in it.
+#[tokio::test]
+async fn a_muted_room_is_quiet_unless_it_names_you() {
+    let Some(api) = boot().await else {
+        return skip("a_muted_room_is_quiet_unless_it_names_you");
+    };
+
+    let alice = api.register("muted_a").await;
+    let bob = api.register("muted_b").await;
+    let community_id = api.create_community(&alice, "Loud Place").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&bob.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{room_id}/join"),
+        Some(&bob.access_token),
+        None,
+    )
+    .await;
+
+    api.send(
+        "PUT",
+        &format!("/api/v1/rooms/{room_id}/mute"),
+        Some(&bob.access_token),
+        Some(serde_json::json!({ "muted": true })),
+    )
+    .await
+    .expect_status(StatusCode::NO_CONTENT);
+
+    api.post_message(&alice, &room_id, "@everyone standup in five")
+        .await;
+
+    let (rows, _) = notifications_of(&api, &bob).await;
+    assert!(rows.is_empty(), "a muted room does not interrupt");
+
+    api.post_message(&alice, &room_id, &format!("@{} you specifically", bob.handle))
+        .await;
+
+    let (rows, unread) = notifications_of(&api, &bob).await;
+    assert_eq!(
+        rows.len(),
+        1,
+        "somebody asking for you by name gets through a mute"
+    );
+    assert_eq!(unread, 1);
+    assert_eq!(rows[0]["kind"], "mention");
+}
+
+/// Being named in a message is one notification, not one per rule it matched.
+#[tokio::test]
+async fn one_message_earns_one_notification_per_person() {
+    let Some(api) = boot().await else {
+        return skip("one_message_earns_one_notification_per_person");
+    };
+
+    let alice = api.register("once_a").await;
+    let bob = api.register("once_b").await;
+    let community_id = api.create_community(&alice, "Once").await;
+    let room_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+    api.send(
+        "POST",
+        &format!("/api/v1/communities/{community_id}/members"),
+        Some(&bob.access_token),
+        Some(serde_json::json!({})),
+    )
+    .await
+    .expect_status(StatusCode::CREATED);
+    api.send(
+        "POST",
+        &format!("/api/v1/rooms/{room_id}/join"),
+        Some(&bob.access_token),
+        None,
+    )
+    .await;
+
+    // Both rules fire: the message names Bob *and* names everyone.
+    api.post_message(
+        &alice,
+        &room_id,
+        &format!("@everyone and @{} especially", bob.handle),
+    )
+    .await;
+
+    let (rows, unread) = notifications_of(&api, &bob).await;
+    assert_eq!(rows.len(), 1, "one message, one row");
+    assert_eq!(unread, 1);
+    assert_eq!(
+        rows[0]["kind"], "mention",
+        "the more specific reason is the one worth showing"
+    );
+}

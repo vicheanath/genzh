@@ -43,7 +43,39 @@ impl NewNotification {
     }
 }
 
-/// A page of notifications, newest first.
+/// What recording a notification did.
+///
+/// The caller cares about the difference for one reason: a folded row is
+/// already counted in the unread badge, so a client told about it must update
+/// the row it holds rather than add one and count it again.
+#[derive(Debug, Clone)]
+pub enum Recorded {
+    /// A new row: this person is being told about this conversation for the
+    /// first time since they last looked at it.
+    Created(Notification),
+    /// An open row grew by one. They were already going to be told; now the row
+    /// stands for one more message.
+    Folded(Notification),
+    /// Nothing was written, because this exact event was already recorded.
+    Known,
+}
+
+impl Recorded {
+    /// The stored row, when something was written.
+    pub fn notification(self) -> Option<Notification> {
+        match self {
+            Self::Created(notification) | Self::Folded(notification) => Some(notification),
+            Self::Known => None,
+        }
+    }
+
+    /// Is this the first the recipient hears of this conversation?
+    pub fn is_new(&self) -> bool {
+        matches!(self, Self::Created(_))
+    }
+}
+
+/// A page of notifications, most recently active first.
 #[derive(Debug, Clone)]
 pub struct NotificationPage {
     pub notifications: Vec<Notification>,
@@ -66,33 +98,90 @@ impl NotificationRepository {
         Self { pool }
     }
 
-    /// Record one notification.
+    /// Record one notification, folding it into an open row where there is one.
     ///
-    /// Returns `None` when it already existed — the unique index on
-    /// (user, message, kind) makes a repeat a no-op rather than a duplicate,
-    /// so an edit that re-saves the same message does not re-notify.
-    pub async fn create(
+    /// Two statements rather than one, and in this order for a reason. The
+    /// insert is tried first because the common case — the first message of a
+    /// conversation — is one round trip and no read. When it conflicts, the
+    /// database has just told us that a row already stands for this: either the
+    /// open row for this conversation (fold into it) or a row for this exact
+    /// message (a retry; do nothing). The update distinguishes them, and its
+    /// `NOT EXISTS` is what keeps a re-delivery of an already-recorded message
+    /// from inflating the count.
+    ///
+    /// Both branches lean on the unique indexes rather than on a read-then-write,
+    /// so two messages arriving at once cannot open two rows for one
+    /// conversation.
+    pub async fn record(
         &self,
         id: NotificationId,
         new: &NewNotification,
-    ) -> RepositoryResult<Option<Notification>> {
-        sqlx::query_as(
+    ) -> RepositoryResult<Recorded> {
+        let created: Option<Notification> = sqlx::query_as(
             "INSERT INTO notifications (id, user_id, kind, actor_id, room_id, message_id, preview)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT DO NOTHING
-             RETURNING id, user_id, kind, actor_id, room_id, message_id, preview, read_at,
-                       created_at",
+             RETURNING id, user_id, kind, actor_id, room_id, message_id, preview, count, read_at,
+                       created_at, updated_at",
         )
-            .bind(id)
-            .bind(new.user_id)
-            .bind(new.kind.key())
-            .bind(new.actor_id)
-            .bind(new.room_id)
-            .bind(new.message_id)
-            .bind(new.preview.as_deref())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(RepositoryError::from)
+        .bind(id)
+        .bind(new.user_id)
+        .bind(new.kind.key())
+        .bind(new.actor_id)
+        .bind(new.room_id)
+        .bind(new.message_id)
+        .bind(new.preview.as_deref())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        if let Some(notification) = created {
+            return Ok(Recorded::Created(notification));
+        }
+
+        // Nothing to fold into: a friend request is one event, and a second is
+        // a second fact rather than more of the first.
+        if new.room_id.is_none() || !new.kind.folds() {
+            return Ok(Recorded::Known);
+        }
+
+        let folded: Option<Notification> = sqlx::query_as(
+            "UPDATE notifications
+                SET count = count + 1,
+                    -- The newest message is what the row should open at, and
+                    -- the newest excerpt is what it should read.
+                    message_id = coalesce($4, message_id),
+                    preview = coalesce($5, preview),
+                    updated_at = now()
+              WHERE user_id = $1
+                AND kind = $2
+                AND room_id = $3
+                AND actor_id IS NOT DISTINCT FROM $6
+                AND read_at IS NULL
+                AND NOT EXISTS (
+                    SELECT 1
+                      FROM notifications already
+                     WHERE already.user_id = $1
+                       AND already.kind = $2
+                       AND already.message_id = $4
+                )
+             RETURNING id, user_id, kind, actor_id, room_id, message_id, preview, count, read_at,
+                       created_at, updated_at",
+        )
+        .bind(new.user_id)
+        .bind(new.kind.key())
+        .bind(new.room_id)
+        .bind(new.message_id)
+        .bind(new.preview.as_deref())
+        .bind(new.actor_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        Ok(match folded {
+            Some(notification) => Recorded::Folded(notification),
+            None => Recorded::Known,
+        })
     }
 
     /// This user's notifications, newest first.
@@ -106,11 +195,15 @@ impl NotificationRepository {
         // rather than a second COUNT query.
         let fetch = limit + 1;
 
+        // Ordered and paged by `updated_at`, not `created_at`: a conversation
+        // that has just had a message folded into it belongs at the top, and
+        // sorting by when it first appeared would bury it under newer rows.
         let mut rows: Vec<Notification> = sqlx::query_as(
-            "SELECT id, user_id, kind, actor_id, room_id, message_id, preview, read_at, created_at
+            "SELECT id, user_id, kind, actor_id, room_id, message_id, preview, count, read_at,
+                    created_at, updated_at
              FROM notifications
-             WHERE user_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2)
-             ORDER BY created_at DESC
+             WHERE user_id = $1 AND ($2::timestamptz IS NULL OR updated_at < $2)
+             ORDER BY updated_at DESC
              LIMIT $3",
         )
             .bind(user_id)
@@ -121,7 +214,7 @@ impl NotificationRepository {
 
         let next_before = if rows.len() as i64 > limit {
             rows.truncate(limit as usize);
-            rows.last().map(|row| row.created_at)
+            rows.last().map(|row| row.updated_at)
         } else {
             None
         };

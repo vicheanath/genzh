@@ -219,10 +219,22 @@ export interface AppNotification {
   /** Absent when the cause was anonymous, or the actor has been deleted. */
   actor_id: Uuid | null
   room_id: Uuid | null
+  /** The latest message this row stands for. */
   message_id: Uuid | null
+  /** The latest excerpt, not the first. */
   preview: string | null
+  /**
+   * How many events this row stands for.
+   *
+   * One row covers everything one person said in one room since you last
+   * looked, so this is 3 when they sent three messages — not three rows.
+   */
+  count: number
   read_at: Timestamp | null
+  /** When the first of these events happened. */
   created_at: Timestamp
+  /** When the last of them did. What the list is ordered by. */
+  updated_at: Timestamp
 }
 
 export interface NotificationPage {

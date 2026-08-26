@@ -58,9 +58,19 @@ pub enum ChatServerEvent {
     ///
     /// User-scoped: it carries the stored row so a connected client can render
     /// it without a round trip, and only its owner receives it.
+    ///
+    /// The row may be one the client already holds. A second message in a
+    /// conversation folds into the notification the first one opened rather
+    /// than making another, so this event doubles as "that row changed" —
+    /// which is what `is_new` is for. It is false for a fold, and a client that
+    /// added a row and bumped its badge on one would be counting the same
+    /// conversation twice.
     NotificationCreated {
         user_id: UserId,
         notification: genzh_domain::notification::Notification,
+        /// False when this event updates a row the recipient was already going
+        /// to be shown.
+        is_new: bool,
     },
     /// Somebody's online state changed.
     ///
@@ -262,6 +272,21 @@ pub enum ChatClientCommand {
         room_id: RoomId,
         message_id: MessageId,
         reaction: String,
+    },
+    /// What this connection is reading, if anything.
+    ///
+    /// Separate from [`Self::Subscribe`] because they answer different
+    /// questions. A client subscribes to every room it wants live traffic from
+    /// and may hold several; it is *reading* at most one, and only while its
+    /// window is in front of somebody. Notifications are suppressed on the
+    /// second, never on the first — otherwise having a room open in a
+    /// background tab would silence it.
+    ///
+    /// `room_id: None` means "reading nothing": the screen was closed, the tab
+    /// was hidden, or the app went to the background.
+    Focus {
+        #[serde(default)]
+        room_id: Option<RoomId>,
     },
     /// Ping heartbeat.
     Ping,

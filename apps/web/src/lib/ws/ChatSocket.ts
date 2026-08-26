@@ -64,6 +64,15 @@ export type ChatServerEvent =
       type: 'notification_created'
       user_id: Uuid
       notification: AppNotification
+      /**
+       * False when this updates a row the client already has.
+       *
+       * A second message in a conversation folds into the notification the
+       * first one opened, so this frame doubles as "that row changed". Treating
+       * a fold as a new arrival would count one conversation twice in the
+       * badge.
+       */
+      is_new: boolean
     }
   | {
       type: 'call_ringing'
@@ -123,6 +132,7 @@ export class ChatSocket {
   private token: string | null = null
   private listeners = new Map<string, Set<EventListener<any>>>()
   private subscribedRooms = new Set<Uuid>()
+  private focusedRoom: Uuid | null = null
   private messageQueue: object[] = []
   private reconnectTimer: number | null = null
   private pingTimer: number | null = null
@@ -186,6 +196,13 @@ export class ChatSocket {
     // Re-subscribe to all active rooms on reconnect
     for (const roomId of this.subscribedRooms) {
       this.send({ type: 'subscribe', room_id: roomId })
+    }
+
+    // And say again what is being read: the server forgot when the socket did,
+    // and a reconnect while a room is open would otherwise start notifying
+    // somebody about the conversation on their screen.
+    if (this.focusedRoom) {
+      this.send({ type: 'focus', room_id: this.focusedRoom })
     }
 
     // Flush any queued messages
@@ -266,7 +283,35 @@ export class ChatSocket {
 
   public unsubscribe(roomId: Uuid) {
     this.subscribedRooms.delete(roomId)
+    if (this.focusedRoom === roomId) this.focusedRoom = null
     this.send({ type: 'unsubscribe', room_id: roomId })
+  }
+
+  /**
+   * Say which room the reader is actually looking at, or `null` for none.
+   *
+   * Deliberately separate from `subscribe`: a tab subscribes to every room it
+   * wants live traffic from and reads at most one of them. The server suppresses
+   * notifications for the room being read, so this has to go quiet the moment
+   * the tab is hidden — otherwise a chat left open behind another window
+   * silences itself.
+   */
+  public focus(roomId: Uuid | null) {
+    if (this.focusedRoom === roomId) return
+    this.focusedRoom = roomId
+    this.send({ type: 'focus', room_id: roomId })
+  }
+
+  /**
+   * Stop claiming to read `roomId` — but only if that is still the claim.
+   *
+   * Leaving one room for another is two screens tearing down and setting up in
+   * an order neither of them controls, and a plain `focus(null)` from the one
+   * on its way out would wipe the claim the new one just made.
+   */
+  public blur(roomId: Uuid) {
+    if (this.focusedRoom !== roomId) return
+    this.focus(null)
   }
 
   public sendTyping(roomId: Uuid, isTyping: boolean) {

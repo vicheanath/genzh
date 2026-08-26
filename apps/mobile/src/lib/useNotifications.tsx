@@ -65,15 +65,23 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         [...queryKeys.notifications.list(), undefined, undefined],
         (page) => {
           if (!page) return page;
-          // The server deduplicates, but a reconnect can replay; matching on id
-          // keeps a double delivery from doubling the list.
-          if (page.notifications.some((item) => item.id === event.notification.id)) {
-            return page;
-          }
+
+          // The row may be one this list already holds. A second message in a
+          // conversation folds into the notification the first one opened, so
+          // it is rewritten in place and lifted back to the top rather than
+          // added again — and the badge stays where it is, because that
+          // conversation is already counted. The same filter covers a reconnect
+          // replaying a delivery.
+          const held = page.notifications.some((item) => item.id === event.notification.id);
+          const counts = event.is_new && !held && !event.notification.read_at;
+
           return {
             ...page,
-            notifications: [event.notification, ...page.notifications],
-            unread: page.unread + 1,
+            notifications: [
+              event.notification,
+              ...page.notifications.filter((item) => item.id !== event.notification.id),
+            ],
+            unread: counts ? page.unread + 1 : page.unread,
           };
         },
       );

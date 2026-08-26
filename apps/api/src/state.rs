@@ -15,8 +15,9 @@ use genzh_community::{CommunityService, InviteService, RoleService};
 use genzh_graph::SocialService;
 use genzh_cron::CronScheduler;
 use genzh_infrastructure::{
-    DbPool, EventBus, FloodGuard, FloodPolicy, InMemoryEventBus, InMemoryFloodGuard,
-    InMemoryPresenceStore, InMemoryRateLimiter, PgConfig, PresenceStore, RateLimiter, connect,
+    AttentionStore, DbPool, EventBus, FloodGuard, FloodPolicy, InMemoryAttentionStore,
+    InMemoryEventBus, InMemoryFloodGuard, InMemoryPresenceStore, InMemoryRateLimiter, PgConfig,
+    PresenceStore, RateLimiter, connect,
 };
 use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
@@ -108,6 +109,12 @@ pub struct AppState {
     pub events: Arc<dyn EventBus<ChatServerEvent>>,
     /// Who is currently connected, derived from live WebSockets.
     pub presence: Arc<dyn PresenceStore>,
+    /// Who is *reading* which room right now.
+    ///
+    /// The narrower question presence cannot answer, and the one a notification
+    /// depends on: telling somebody about a message they are watching arrive is
+    /// the most irritating thing this application can do.
+    pub attention: Arc<dyn AttentionStore>,
     /// Suggests moments, people and communities.
     ///
     /// Read-only over the tables the rest of the state already writes — it
@@ -262,6 +269,7 @@ impl AppState {
             flood,
             events: InMemoryEventBus::new(EVENT_BUFFER),
             presence: InMemoryPresenceStore::new(),
+            attention: InMemoryAttentionStore::new(),
             scheduler,
             recommend: genzh_recommend::RecommendationService::new(pool_for_recommend),
             config: Arc::new(config),

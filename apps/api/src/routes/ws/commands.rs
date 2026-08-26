@@ -24,13 +24,22 @@ pub(super) async fn handle(
     command: ChatClientCommand,
 ) {
     match command {
-        ChatClientCommand::Ping => out.tell(ChatServerEvent::Pong).await,
+        ChatClientCommand::Ping => {
+            // The heartbeat is also the proof that a client which said it was
+            // reading a room is still running. See `Session::touch`.
+            session.touch(state).await;
+            out.tell(ChatServerEvent::Pong).await
+        }
         ChatClientCommand::Auth { token } => authenticate(state, session, out, &token).await,
         ChatClientCommand::Subscribe { room_id } => subscribe(state, session, out, room_id).await,
         ChatClientCommand::Unsubscribe { room_id } => {
             session.unsubscribe(room_id);
+            // Leaving a room is not something a client has to say twice: a room
+            // it no longer hears about is one it cannot be reading.
+            session.attend(state, None).await;
             out.tell(ChatServerEvent::Unsubscribed { room_id }).await;
         }
+        ChatClientCommand::Focus { room_id } => session.attend(state, room_id).await,
         ChatClientCommand::Typing { room_id, is_typing } => {
             typing(state, session, room_id, is_typing).await
         }
@@ -83,7 +92,7 @@ async fn subscribe(state: &AppState, session: &mut Session, out: &mut Outbound, 
         .await
         .is_ok()
     {
-        session.subscribe(room_id);
+        session.subscribe(state, room_id).await;
         out.tell(ChatServerEvent::Subscribed { room_id }).await;
     }
 }
@@ -93,6 +102,13 @@ async fn typing(state: &AppState, session: &mut Session, room_id: RoomId, is_typ
     if !session.is_subscribed(room_id) {
         return;
     }
+
+    // Typing in a room is a stronger claim to be reading it than any `focus`
+    // frame, and it arrives from clients too old to send one. Recorded before
+    // the throttle below, which is about what the *room* is told and not about
+    // what this connection is doing.
+    session.attend(state, Some(room_id)).await;
+
     if !session.may_announce_typing(room_id, is_typing) {
         return;
     }
@@ -119,6 +135,9 @@ async fn send_message(
     if !session.is_subscribed(room_id) {
         return;
     }
+
+    // Posting into a room is being in it. See `typing`.
+    session.attend(state, Some(room_id)).await;
 
     // An explicit choice in the command wins; otherwise the persona this user
     // last set in this room does.

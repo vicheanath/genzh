@@ -1,10 +1,9 @@
 //! The notification application service.
 
-use genzh_domain::notification::Notification;
 use genzh_domain::{NotificationId, Timestamp, UserId};
 use genzh_infrastructure::{DbPool, ServiceResult};
 
-use crate::repository::{NewNotification, NotificationPage, NotificationRepository};
+use crate::repository::{NewNotification, NotificationPage, NotificationRepository, Recorded};
 
 /// Default and maximum page sizes for a notification list.
 const DEFAULT_LIMIT: i64 = 30;
@@ -26,38 +25,41 @@ impl NotificationService {
     /// Record one notification.
     ///
     /// Never notifies somebody about their own action — mentioning yourself in
-    /// your own message is not news — and returns `None` when the notification
-    /// already existed or was suppressed.
-    pub async fn notify(&self, new: NewNotification) -> ServiceResult<Option<Notification>> {
+    /// your own message is not news — and reports [`Recorded::Known`] when the
+    /// event was already recorded or was suppressed.
+    ///
+    /// A second message from the same person in the same room folds into the
+    /// row the first one opened, for as long as that row is unread. That is the
+    /// whole of the "one notification per conversation" rule, and it lives in
+    /// the store rather than here because it has to hold against two messages
+    /// arriving at once.
+    pub async fn notify(&self, new: NewNotification) -> ServiceResult<Recorded> {
         if new.actor_id == Some(new.user_id) {
-            return Ok(None);
+            return Ok(Recorded::Known);
         }
 
-        Ok(self
-            .repository
-            .create(NotificationId::new(), &new)
-            .await?)
+        Ok(self.repository.record(NotificationId::new(), &new).await?)
     }
 
-    /// Record several at once, returning the ones that were actually new.
+    /// Record several at once, returning the rows that were written or grew.
     ///
     /// Used by mentions, where one message can address a handful of people and
     /// each of them needs their own row.
     pub async fn notify_all(
         &self,
         batch: impl IntoIterator<Item = NewNotification>,
-    ) -> ServiceResult<Vec<Notification>> {
-        let mut created = Vec::new();
+    ) -> ServiceResult<Vec<Recorded>> {
+        let mut recorded = Vec::new();
         for new in batch {
             // One failure should not lose the rest of the batch: a message that
             // mentions five people still notifies four if one row conflicts.
             match self.notify(new).await {
-                Ok(Some(notification)) => created.push(notification),
-                Ok(None) => {}
+                Ok(Recorded::Known) => {}
+                Ok(other) => recorded.push(other),
                 Err(error) => tracing::warn!(%error, "could not record notification"),
             }
         }
-        Ok(created)
+        Ok(recorded)
     }
 
     /// A page of this user's notifications, newest first.

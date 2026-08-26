@@ -117,9 +117,13 @@ function editFeed(
       ...cached,
       pages: cached.pages.map((page, index) => {
         let items = edit.patch ? page.notifications.map(edit.patch) : page.notifications
-        if (edit.prepend && index === 0) {
-          // Re-delivery is possible on reconnect, so drop any existing copy.
-          items = [edit.prepend, ...items.filter((item) => item.id !== edit.prepend!.id)]
+        if (edit.prepend) {
+          // Dropped from every page, not just the one it is going onto: a row
+          // that grew was already somewhere in the feed, possibly pages down,
+          // and re-delivery is possible on reconnect either way.
+          const prepend = edit.prepend
+          items = items.filter((item) => item.id !== prepend.id)
+          if (index === 0) items = [prepend, ...items]
         }
         return { ...page, notifications: items, unread: edit.unread(page.unread) }
       }),
@@ -127,19 +131,33 @@ function editFeed(
   })
 }
 
-/** A notification arrived over the socket. Called by the realtime bridge. */
+/**
+ * A notification arrived over the socket. Called by the realtime bridge.
+ *
+ * `isNew` is false when the server folded this event into a row the reader
+ * already has — the second message of a conversation updates the notification
+ * the first one opened rather than making another. Such a row is rewritten in
+ * place and lifted back to the top, and the badge is left alone: the
+ * conversation is already counted, and counting it again would make one chat
+ * look like five.
+ */
 export function applyNotificationCreated(
   queryClient: QueryClient,
   notification: AppNotification,
+  isNew: boolean,
 ): void {
   const feed = queryClient.getQueryData<Feed>(notificationKeys.feed())
-  const alreadyHeld = feed?.pages.some((page) =>
-    page.notifications.some((item) => item.id === notification.id),
-  )
-  if (alreadyHeld) return
+  const alreadyHeld =
+    feed?.pages.some((page) => page.notifications.some((item) => item.id === notification.id)) ??
+    false
+
+  // A fold the reader has never seen — it happened while they were away, or its
+  // row has been scrolled past — still belongs at the top, but the count it
+  // arrived with was already in the server's total.
+  const counts = isNew && !alreadyHeld && !notification.read_at
 
   editFeed(queryClient, {
     prepend: notification,
-    unread: (count) => (notification.read_at ? count : count + 1),
+    unread: (count) => (counts ? count + 1 : count),
   })
 }

@@ -17,6 +17,42 @@ export function useRoomSubscription(roomId: Uuid | null | undefined): void {
     chatSocket.subscribe(roomId)
     return () => chatSocket.unsubscribe(roomId)
   }, [roomId])
+
+  useRoomAttention(roomId)
+}
+
+/**
+ * Tell the server this room is being *read*, and stop saying so when it is not.
+ *
+ * The server suppresses notifications for the room on your screen — being told
+ * about a message you are watching arrive is the most irritating thing a chat
+ * app does — and that is only right while the screen is actually in front of
+ * somebody. So the claim is withdrawn when the tab is hidden and made again
+ * when it comes back.
+ *
+ * Visibility rather than window focus: a tab that is on screen but behind
+ * another application is still being read, and treating a click on a different
+ * window as leaving would notify people about the conversation they are looking
+ * at. A hidden tab is unambiguous.
+ */
+function useRoomAttention(roomId: Uuid | null | undefined): void {
+  useEffect(() => {
+    if (!roomId) return
+
+    const report = () => {
+      chatSocket.focus(document.visibilityState === 'visible' ? roomId : null)
+    }
+
+    report()
+    document.addEventListener('visibilitychange', report)
+
+    return () => {
+      document.removeEventListener('visibilitychange', report)
+      // Leaving the screen is leaving the conversation, whether the tab is
+      // still open or not.
+      chatSocket.blur(roomId)
+    }
+  }, [roomId])
 }
 
 /** Imperative sends a composer needs: typing pings travel over the socket only. */

@@ -9,5 +9,5 @@
 mod repository;
 mod service;
 
-pub use repository::{NewNotification, NotificationPage, NotificationRepository};
+pub use repository::{NewNotification, NotificationPage, NotificationRepository, Recorded};
 pub use service::NotificationService;

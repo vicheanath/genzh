@@ -40,6 +40,22 @@ impl NotificationKind {
             NotificationKind::FriendAccepted => "friend_accepted",
         }
     }
+
+    /// May a second event of this kind fold into a row that already stands for
+    /// the first?
+    ///
+    /// True for the conversational kinds, where "they messaged you" is still an
+    /// accurate description of the row after the fifth message. False for the
+    /// friendship ones: they happen once, and a second of them is a second
+    /// fact rather than more of the same one.
+    pub fn folds(self) -> bool {
+        match self {
+            NotificationKind::Mention
+            | NotificationKind::Everyone
+            | NotificationKind::DirectMessage => true,
+            NotificationKind::FriendRequest | NotificationKind::FriendAccepted => false,
+        }
+    }
 }
 
 impl std::str::FromStr for NotificationKind {
@@ -70,10 +86,34 @@ pub struct Notification {
     pub room_id: Option<RoomId>,
     pub message_id: Option<MessageId>,
     /// A short excerpt, so a notification list needs no second query per row.
+    ///
+    /// The *latest* excerpt when several events have folded in: what somebody
+    /// said a moment ago is worth more than what they said first.
     pub preview: Option<String>,
+    /// How many events this row stands for.
+    ///
+    /// One, for something that has happened once. A second message from the
+    /// same person in the same room folds into the existing row instead of
+    /// opening another, and this is how many folded in — so a client can say
+    /// "5 new messages" where it used to show five rows saying the same thing.
+    pub count: i32,
     /// When it was marked read, if it has been.
+    ///
+    /// Also what ends the folding: a row that has been read is closed, and the
+    /// next event in the same conversation opens a new one.
     pub read_at: Option<Timestamp>,
+    /// When the first of these events happened.
     pub created_at: Timestamp,
+    /// When the last of them did. Equal to `created_at` until something folds
+    /// in, and what a notification list is ordered by.
+    pub updated_at: Timestamp,
+}
+
+impl Notification {
+    /// Does this row stand for more than one event?
+    pub fn is_folded(&self) -> bool {
+        self.count > 1
+    }
 }
 
 /// How much of a message body travels with a notification.
@@ -107,6 +147,17 @@ mod tests {
         ] {
             assert_eq!(kind.key().parse::<NotificationKind>(), Ok(kind));
         }
+    }
+
+    #[test]
+    fn only_the_conversational_kinds_fold() {
+        assert!(NotificationKind::Mention.folds());
+        assert!(NotificationKind::Everyone.folds());
+        assert!(NotificationKind::DirectMessage.folds());
+
+        // Two friend requests are two facts, and folding them would lose one.
+        assert!(!NotificationKind::FriendRequest.folds());
+        assert!(!NotificationKind::FriendAccepted.folds());
     }
 
     #[test]

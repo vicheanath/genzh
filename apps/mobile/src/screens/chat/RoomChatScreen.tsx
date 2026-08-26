@@ -44,6 +44,7 @@ import { useVoice } from '../../context/VoiceContext';
 import { Composer } from '../../features/chat/Composer';
 import { EmojiPicker } from '../../features/chat/EmojiPicker';
 import { mergeMessages, useMessageHistory } from '../../features/chat/useMessageHistory';
+import { useRoomAttention } from '../../features/chat/useRoomAttention';
 import { chatSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
 import { useProfiles } from '../../lib/useProfiles';
@@ -98,6 +99,11 @@ export function RoomChatScreen({ route, navigation }: any) {
     [history.items],
   );
   const lookup = useProfiles(authorIds);
+
+  // While this screen is the one in front of somebody, the server keeps quiet
+  // about this room: there is nothing to notify you of when you are watching it
+  // happen.
+  useRoomAttention(roomId);
 
   // ── realtime ────────────────────────────────────────────────────────────
   useEffect(() => {

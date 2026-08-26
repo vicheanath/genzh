@@ -13,6 +13,7 @@ use axum::extract::ws::{Message as WsMessage, WebSocket};
 use futures::SinkExt;
 use futures::stream::SplitSink;
 use genzh_domain::{RoomId, UserId};
+use genzh_infrastructure::ConnectionId;
 
 use crate::middleware::CurrentUser;
 use crate::state::AppState;
@@ -81,6 +82,9 @@ impl Outbound {
 
 /// Everything one connection remembers.
 pub(super) struct Session {
+    /// This socket's handle in the volatile stores that are keyed by connection
+    /// rather than by account.
+    connection: ConnectionId,
     /// Who this socket is currently authenticated as, if anyone.
     pub(super) current_user: Option<CurrentUser>,
     /// Whether that account was staff when it authenticated.
@@ -90,6 +94,22 @@ pub(super) struct Session {
     is_staff: bool,
     /// Rooms this connection asked to hear about.
     subscribed_rooms: HashSet<RoomId>,
+    /// The one room this connection is *reading*, if its window is in front of
+    /// somebody.
+    ///
+    /// Not the same thing as the set above, and the difference is the whole
+    /// point: a client subscribes to everything it wants live traffic from and
+    /// reads one of them. Held here as well as in the shared store so a change
+    /// of identity can hand the attention over, and so closing the socket knows
+    /// whether there was any to release.
+    focused_room: Option<RoomId>,
+    /// A room the client said it was reading before it was subscribed to it.
+    ///
+    /// A screen opening sends both frames at once, and which one the server
+    /// sees first is the client's business rather than something it should have
+    /// to get right. A focus that arrives early is held here and applied the
+    /// moment the subscription lands, so attention is never silently dropped.
+    pending_focus: Option<RoomId>,
     /// Whoever this connection is counted against for presence.
     ///
     /// Tracked separately from `current_user` so a disconnect can undo exactly
@@ -105,9 +125,12 @@ pub(super) struct Session {
 impl Session {
     pub(super) fn new() -> Self {
         Self {
+            connection: ConnectionId::new(),
             current_user: None,
             is_staff: false,
             subscribed_rooms: HashSet::new(),
+            focused_room: None,
+            pending_focus: None,
             counted_as: None,
             typing_sent: HashMap::new(),
         }
@@ -122,12 +145,61 @@ impl Session {
         self.subscribed_rooms.contains(&room_id)
     }
 
-    pub(super) fn subscribe(&mut self, room_id: RoomId) {
+    /// Take a subscription, honouring any attention that was waiting on it.
+    pub(super) async fn subscribe(&mut self, state: &AppState, room_id: RoomId) {
         self.subscribed_rooms.insert(room_id);
+
+        if self.pending_focus == Some(room_id) {
+            self.attend(state, Some(room_id)).await;
+        }
     }
 
     pub(super) fn unsubscribe(&mut self, room_id: RoomId) {
         self.subscribed_rooms.remove(&room_id);
+    }
+
+    /// Say what this connection is reading, or that it is reading nothing.
+    ///
+    /// Only a room this connection is subscribed to counts: attention is a
+    /// stronger claim than subscription, and a client that could assert it over
+    /// any room id would be able to silence its own notifications for a room it
+    /// was never admitted to.
+    ///
+    /// A store that cannot record it costs this user one suppressed
+    /// notification and nothing else, so the failure is logged and the socket
+    /// carries on.
+    pub(super) async fn attend(&mut self, state: &AppState, room_id: Option<RoomId>) {
+        let Some(user) = self.current_user else {
+            return;
+        };
+
+        // Attention is a claim over a room this connection was admitted to. One
+        // that arrives before the subscription is not refused, only deferred —
+        // see `pending_focus`.
+        self.pending_focus = room_id.filter(|id| !self.is_subscribed(*id));
+        let room_id = room_id.filter(|id| self.is_subscribed(*id));
+        self.focused_room = room_id;
+
+        let recorded = match room_id {
+            Some(room_id) => state.attention.focus(self.connection, user.user_id, room_id).await,
+            None => state.attention.blur(self.connection).await,
+        };
+
+        if let Err(error) = recorded {
+            tracing::warn!(%error, %user.user_id, "could not record what a connection is reading");
+        }
+    }
+
+    /// This connection is still there.
+    ///
+    /// Attention expires so that a client whose runtime was frozen mid-room
+    /// stops silencing its own notifications; anything the connection says
+    /// pushes that expiry back, including the heartbeat it already sends.
+    pub(super) async fn touch(&self, state: &AppState) {
+        if self.focused_room.is_none() {
+            return;
+        }
+        let _ = state.attention.touch(self.connection).await;
     }
 
     /// Accept a token, moving the presence count if the identity changed.
@@ -161,6 +233,10 @@ impl Session {
         if self.counted_as != Some(user.user_id) {
             if let Some(previous) = self.counted_as {
                 announce_presence(state, previous, Connection::Closed).await;
+                // Whatever the previous identity was reading is not this one's
+                // to inherit; the client says what it is reading again.
+                self.focused_room = None;
+                let _ = state.attention.blur(self.connection).await;
             }
             self.counted_as = Some(user.user_id);
             announce_presence(state, user.user_id, Connection::Opened).await;
@@ -170,7 +246,14 @@ impl Session {
     }
 
     /// Undo whatever this connection was counted as. Called once, on the way out.
+    ///
+    /// The attention is dropped whether or not this socket ever authenticated:
+    /// a closed socket is reading nothing, and an entry left behind would go on
+    /// suppressing its owner's notifications until it expired.
     pub(super) async fn release(&mut self, state: &AppState) {
+        self.focused_room = None;
+        let _ = state.attention.blur(self.connection).await;
+
         if let Some(user_id) = self.counted_as.take() {
             announce_presence(state, user_id, Connection::Closed).await;
         }

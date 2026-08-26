@@ -3,6 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { AtSign, Bell, MessageSquare, UserPlus } from 'lucide-react-native';
 import {
+  describeNotification,
   formatRelative,
   type AppNotification,
   type NotificationKind,
@@ -23,22 +24,6 @@ const ICONS: Record<NotificationKind, typeof Bell> = {
   friend_request: UserPlus,
   friend_accepted: UserPlus,
 };
-
-/** What the row says, given who caused it. */
-function describe(kind: NotificationKind, actor: string): string {
-  switch (kind) {
-    case 'mention':
-      return `${actor} mentioned you`;
-    case 'everyone':
-      return `${actor} notified everyone`;
-    case 'direct_message':
-      return `${actor} sent you a message`;
-    case 'friend_request':
-      return `${actor} wants to be friends`;
-    case 'friend_accepted':
-      return `${actor} accepted your friend request`;
-  }
-}
 
 export interface NotificationListProps {
   /** Where a row goes when it is tapped. */
@@ -126,13 +111,15 @@ export function NotificationList({ onOpenRoom, onOpenFriends }: NotificationList
             )}
 
             <View style={styles.body}>
-              <Text style={styles.line}>{describe(item.kind, actor)}</Text>
+              <Text style={styles.line}>
+                {describeNotification(item.kind, actor, item.count)}
+              </Text>
               {item.preview ? (
                 <Text style={styles.preview} numberOfLines={2}>
                   {item.preview}
                 </Text>
               ) : null}
-              <Text style={styles.when}>{formatRelative(item.created_at)}</Text>
+              <Text style={styles.when}>{formatRelative(item.updated_at)}</Text>
             </View>
 
             {!item.read_at ? <View style={styles.dot} /> : null}

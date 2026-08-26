@@ -74,7 +74,7 @@ export function useQueryCacheSync(enabled: boolean): void {
 
       chatSocket.on<ChatServerEvent>('notification_created', (event) => {
         if (event.type !== 'notification_created') return
-        applyNotificationCreated(queryClient, event.notification)
+        applyNotificationCreated(queryClient, event.notification, event.is_new)
 
         // The other side accepting is the one change that happens without this
         // tab doing anything, and it is exactly the one that would leave a

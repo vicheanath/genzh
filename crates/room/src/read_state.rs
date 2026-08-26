@@ -87,6 +87,41 @@ impl ReadStateService {
         Ok(())
     }
 
+    /// Which of `ids` have muted this room.
+    ///
+    /// A batch, because the caller is a notification fan-out holding a list of
+    /// recipients: one message can address fifty people, and asking about each
+    /// of them separately would be fifty queries per message.
+    ///
+    /// Only rooms somebody has explicitly muted have a row with `muted` set, so
+    /// this reads a handful of rows at most however large the audience is.
+    pub async fn muted_among(
+        &self,
+        room_id: RoomId,
+        ids: &[UserId],
+    ) -> ServiceResult<Vec<UserId>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // The array element type is what the driver has to name, and a typed id
+        // is transparent for a scalar only.
+        let ids: Vec<uuid::Uuid> = ids.iter().map(UserId::as_uuid).collect();
+
+        let rows: Vec<(UserId,)> = sqlx::query_as(
+            "SELECT user_id
+             FROM room_read_state
+             WHERE room_id = $1 AND muted AND user_id = ANY($2)",
+        )
+        .bind(room_id)
+        .bind(&ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        Ok(rows.into_iter().map(|row| row.0).collect())
+    }
+
     /// Mute or unmute a room.
     ///
     /// Muting does not mark anything read: a muted room still knows what you

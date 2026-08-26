@@ -4,7 +4,7 @@ import { Avatar } from '@/components/Avatar'
 import { AtSignIcon, BellIcon, MessageSquareIcon, UserPlusIcon } from '@/components/Icons'
 import { ScrollArea } from '@/components/ScrollArea'
 import { Spinner } from '@/components/Spinner'
-import type { AppNotification, NotificationKind } from '@/lib/api'
+import { describeNotification, type AppNotification, type NotificationKind } from '@/lib/api'
 import { cx } from '@/lib/cx'
 import { formatRelative } from '@/lib/time'
 import { useNotifications } from '@/lib/useNotifications'
@@ -18,22 +18,6 @@ const ICONS: Record<NotificationKind, typeof BellIcon> = {
   direct_message: MessageSquareIcon,
   friend_request: UserPlusIcon,
   friend_accepted: UserPlusIcon,
-}
-
-/** What the row says, given who caused it. */
-function describe(kind: NotificationKind, actor: string): string {
-  switch (kind) {
-    case 'mention':
-      return `${actor} mentioned you`
-    case 'everyone':
-      return `${actor} notified everyone`
-    case 'direct_message':
-      return `${actor} sent you a message`
-    case 'friend_request':
-      return `${actor} wants to be friends`
-    case 'friend_accepted':
-      return `${actor} accepted your friend request`
-  }
 }
 
 /**
@@ -135,9 +119,11 @@ export function NotificationPanel({ showHeader = true }: { showHeader?: boolean 
               </span>
 
               <span className={styles.body}>
-                <span className={styles.line}>{describe(item.kind, actor)}</span>
+                <span className={styles.line}>
+                  {describeNotification(item.kind, actor, item.count)}
+                </span>
                 {item.preview && <span className={styles.preview}>{item.preview}</span>}
-                <span className={styles.when}>{formatRelative(item.created_at)}</span>
+                <span className={styles.when}>{formatRelative(item.updated_at)}</span>
               </span>
 
               {!item.read_at && <span className={styles.dot} aria-hidden />}
