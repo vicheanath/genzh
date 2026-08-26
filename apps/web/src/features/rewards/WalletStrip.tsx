@@ -55,7 +55,14 @@ export function WalletStrip() {
 
         <div className={styles.walletCard}>
           <span className={styles.walletLabel}>
-            <FlameIcon size={13} /> Streak
+            <FlameIcon
+              size={14}
+              style={{
+                color: data.daily_streak > 0 ? '#f97316' : 'inherit',
+                filter: data.daily_streak > 0 ? 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.8))' : 'none',
+              }}
+            />{' '}
+            Streak
           </span>
           <span className={styles.walletValue}>{data.daily_streak}</span>
           <span className={styles.walletHint}>
@@ -64,26 +71,33 @@ export function WalletStrip() {
         </div>
       </section>
 
-      <section className={styles.claim} aria-label="Daily check-in">
+      <section
+        className={`${styles.claim} ${data.can_claim_daily ? styles.claimActive : ''}`}
+        aria-label="Daily check-in"
+      >
         <div className={styles.claimCopy}>
           <span className={styles.claimTitle}>
-            <GemIcon size={16} />
-            {data.can_claim_daily ? 'Your daily points are waiting' : 'Claimed for today'}
+            <GemIcon size={18} style={{ color: data.can_claim_daily ? 'var(--color-accent)' : 'inherit' }} />
+            {data.can_claim_daily ? 'Your daily points are ready to claim!' : 'Claimed for today'}
           </span>
           <span className={styles.claimHint}>
             {data.can_claim_daily
               ? `Claim ${data.next_claim_points} points${
-                  data.daily_streak > 0 ? ` and keep your ${data.daily_streak}-day streak` : ''
+                  data.daily_streak > 0 ? ` and extend your ${data.daily_streak}-day streak 🔥` : ''
                 }.`
               : nextClaimHint(data.next_claim_at)}
           </span>
         </div>
 
-        <Button onClick={() => void claim()} disabled={!data.can_claim_daily || checkin.isPending}>
+        <Button
+          variant={data.can_claim_daily ? 'primary' : 'secondary'}
+          onClick={() => void claim()}
+          disabled={!data.can_claim_daily || checkin.isPending}
+        >
           {checkin.isPending
             ? 'Claiming…'
             : data.can_claim_daily
-              ? `Claim ${data.next_claim_points}`
+              ? `Claim +${data.next_claim_points} pts`
               : 'Come back tomorrow'}
         </Button>
       </section>

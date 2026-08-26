@@ -1,4 +1,13 @@
 import { Callout } from '@/components/Callout'
+import {
+  FlameIcon,
+  GemIcon,
+  GiftIcon,
+  PackageIcon,
+  StoreIcon,
+  TrophyIcon,
+  UsersIcon,
+} from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
 import { cx } from '@/lib/cx'
 import { errorText } from '@/lib/errors'
@@ -10,10 +19,6 @@ import styles from './rewards.module.css'
 
 /**
  * How each reason reads to somebody who did not write the code.
- *
- * Unknown keys fall through to the raw reason rather than to "Other": a new
- * server that starts writing a reason this build has never heard of should
- * still say something specific.
  */
 const REASONS: Record<string, string> = {
   daily_checkin: 'Daily check-in',
@@ -23,6 +28,16 @@ const REASONS: Record<string, string> = {
   store_purchase: 'Store purchase',
   admin_grant: 'Granted by staff',
   admin_adjustment: 'Balance correction',
+}
+
+const REASON_ICONS: Record<string, typeof GemIcon> = {
+  daily_checkin: FlameIcon,
+  referral_welcome_bonus: GiftIcon,
+  referral_invite_bonus: UsersIcon,
+  referral_milestone: TrophyIcon,
+  store_purchase: StoreIcon,
+  admin_grant: GiftIcon,
+  admin_adjustment: PackageIcon,
 }
 
 /** Every movement of points, newest first. */
@@ -38,7 +53,9 @@ export function LedgerPanel() {
 
   return (
     <section className={styles.panel}>
-      <h3 className={styles.panelTitle}>Points history</h3>
+      <h3 className={styles.panelTitle}>
+        <GemIcon size={16} /> Points history
+      </h3>
 
       {entries.length === 0 ? (
         <p className={styles.empty}>Nothing yet. Your first check-in shows up here.</p>
@@ -56,9 +73,25 @@ export function LedgerPanel() {
 function LedgerRow({ entry }: { entry: BalanceTransaction }) {
   const credit = entry.amount >= 0
   const itemName = typeof entry.metadata?.name === 'string' ? entry.metadata.name : null
+  const IconComponent = REASON_ICONS[entry.reason] ?? GemIcon
 
   return (
     <div className={styles.row}>
+      <div
+        style={{
+          width: '2rem',
+          height: '2rem',
+          borderRadius: 'var(--radius-full)',
+          display: 'grid',
+          placeItems: 'center',
+          background: credit ? 'rgba(34, 197, 94, 0.12)' : 'var(--color-sunken)',
+          color: credit ? 'var(--color-success)' : 'var(--color-text-muted)',
+          flexShrink: 0,
+        }}
+      >
+        <IconComponent size={14} />
+      </div>
+
       <div className={styles.rowMain}>
         <span className={styles.rowTitle}>
           {REASONS[entry.reason] ?? entry.reason}
@@ -68,7 +101,7 @@ function LedgerRow({ entry }: { entry: BalanceTransaction }) {
       </div>
       <span className={cx(styles.amount, credit ? styles.amountCredit : styles.amountDebit)}>
         {credit ? '+' : '−'}
-        {Math.abs(entry.amount).toLocaleString()}
+        {Math.abs(entry.amount).toLocaleString()} pts
       </span>
     </div>
   )

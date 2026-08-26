@@ -6,7 +6,13 @@ import {
 } from 'react'
 
 import { Avatar } from '@/components/Avatar'
-import { CosmeticBadge, CosmeticName, DecoratedAvatar } from '@/components/Cosmetics'
+import {
+  CosmeticBadge,
+  CosmeticChatBubble,
+  CosmeticName,
+  CosmeticTitle,
+  DecoratedAvatar,
+} from '@/components/Cosmetics'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
@@ -774,12 +780,14 @@ function MessageRow({
               >
                 <CosmeticName
                   item={isAnonymous ? null : cosmetics?.name_color}
+                  fontItem={isAnonymous ? null : cosmetics?.name_font}
                   fallbackColor={avatarColor}
                 >
                   {name}
                 </CosmeticName>
               </span>
               {!isAnonymous && <CosmeticBadge item={cosmetics?.badge} />}
+              {!isAnonymous && cosmetics?.title && <CosmeticTitle item={cosmetics.title} />}
               {isOwn && <span className={styles.youTag}>you</span>}
               <time
                 className={styles.time}
@@ -833,15 +841,17 @@ function MessageRow({
               </div>
             </div>
           ) : (
-            <p className={styles.content}>
-              <Linkified text={message.content} />
-              {message.edited_at && (
-                <span className={styles.edited} title={formatFull(message.edited_at)}>
-                  {' '}
-                  (edited)
-                </span>
-              )}
-            </p>
+            <CosmeticChatBubble item={isAnonymous ? null : cosmetics?.chat_bubble}>
+              <p className={styles.content}>
+                <Linkified text={message.content} />
+                {message.edited_at && (
+                  <span className={styles.edited} title={formatFull(message.edited_at)}>
+                    {' '}
+                    (edited)
+                  </span>
+                )}
+              </p>
+            </CosmeticChatBubble>
           )}
 
           {message.reactions.length > 0 && (

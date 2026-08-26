@@ -29,8 +29,12 @@ import styles from './panels.module.css'
 
 const SLOT_OPTIONS: Array<{ value: ItemType; label: string }> = [
   { value: 'frame', label: 'Avatar frame' },
-  { value: 'badge', label: 'Badge' },
+  { value: 'avatar_effect', label: 'Avatar effect (Aura/Particles)' },
   { value: 'name_color', label: 'Name colour' },
+  { value: 'name_font', label: 'Name typeface / font' },
+  { value: 'title', label: 'Prestige title tag' },
+  { value: 'badge', label: 'Badge icon' },
+  { value: 'chat_bubble', label: 'Chat bubble style' },
   { value: 'banner', label: 'Profile banner' },
 ]
 
@@ -41,6 +45,17 @@ const RARITY_OPTIONS: Array<{ value: ItemRarity; label: string }> = [
   { value: 'legendary', label: 'Legendary' },
 ]
 
+const SLOT_TEMPLATES: Record<ItemType, string> = {
+  frame: '{\n  "gradient": "linear-gradient(135deg, #06b6d4, #d946ef)",\n  "glow": "rgba(6, 182, 212, 0.6)",\n  "animation": "pulse"\n}',
+  avatar_effect: '{\n  "effect": "sparkles",\n  "color": "#facc15",\n  "glow": "rgba(250, 204, 21, 0.7)",\n  "particles": 6\n}',
+  name_color: '{\n  "gradient": "linear-gradient(90deg, #ff007f, #ff7b00, #ffea00)",\n  "textShadow": "0 0 8px rgba(255, 0, 127, 0.4)"\n}',
+  name_font: '{\n  "fontFamily": "Orbitron, system-ui, sans-serif",\n  "letterSpacing": "0.08em",\n  "textTransform": "uppercase",\n  "fontWeight": 700\n}',
+  title: '{\n  "text": "👑 Legend",\n  "gradient": "linear-gradient(90deg, #a855f7, #ec4899)",\n  "background": "rgba(168, 85, 247, 0.2)",\n  "borderColor": "#a855f7",\n  "glow": "rgba(168, 85, 247, 0.4)"\n}',
+  badge: '{\n  "icon": "💎",\n  "glow": "rgba(56, 189, 248, 0.8)",\n  "animation": "shimmer"\n}',
+  chat_bubble: '{\n  "background": "linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(217, 70, 239, 0.08))",\n  "borderColor": "#06b6d4",\n  "glow": "rgba(6, 182, 212, 0.3)"\n}',
+  banner: '{\n  "background": "linear-gradient(135deg, #09090b 0%, #3b0764 50%, #0284c7 100%)",\n  "animation": "aurora"\n}',
+}
+
 /** What a fresh form starts from. */
 const BLANK: FormState = {
   sku: '',
@@ -50,7 +65,7 @@ const BLANK: FormState = {
   rarity: 'common',
   price_points: '0',
   asset_url: '',
-  style_json: '{\n  "gradient": "linear-gradient(135deg, #a855f7, #ec4899)",\n  "animation": "pulse"\n}',
+  style_json: SLOT_TEMPLATES.frame,
   is_active: true,
   is_limited: false,
   stock_limit: '',
@@ -369,7 +384,12 @@ function ItemForm({ existing, onDone }: { existing: StoreListing | null; onDone:
               <Select
                 aria-label="Slot"
                 value={form.item_type}
-                onValueChange={(value) => set('item_type', value)}
+                onValueChange={(value) => {
+                  set('item_type', value)
+                  if (!existing) {
+                    set('style_json', SLOT_TEMPLATES[value] || '{}')
+                  }
+                }}
                 options={SLOT_OPTIONS}
               />
             </Field>
@@ -397,10 +417,18 @@ function ItemForm({ existing, onDone }: { existing: StoreListing | null; onDone:
             onChange={(event) => set('asset_url', event.target.value)}
           />
 
-          <Field
-            label="Style config (JSON)"
-            hint="gradient · color · glow · animation (pulse, spin, aurora, shimmer) · icon"
-          >
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+              <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600 }}>Style config (JSON)</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => set('style_json', SLOT_TEMPLATES[form.item_type] || '{}')}
+              >
+                Reset to {form.item_type} template
+              </Button>
+            </div>
             <textarea
               aria-label="Style config"
               value={form.style_json}
@@ -419,7 +447,7 @@ function ItemForm({ existing, onDone }: { existing: StoreListing | null; onDone:
                 resize: 'vertical',
               }}
             />
-          </Field>
+          </div>
           {parsedStyle === null && <Callout tone="danger">That is not valid JSON.</Callout>}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)' }}>

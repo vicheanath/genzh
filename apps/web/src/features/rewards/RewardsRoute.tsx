@@ -1,21 +1,18 @@
 import { useState } from 'react'
 
-import { GemIcon, PackageIcon, StoreIcon, UsersIcon } from '@/components/Icons'
+import { GemIcon, PackageIcon, SparklesIcon, StoreIcon, UsersIcon } from '@/components/Icons'
 import { Tab, TabPanel, TabsList, TabsRoot } from '@/components/Tabs'
 
 import { InventoryPanel } from './InventoryPanel'
 import { LedgerPanel } from './LedgerPanel'
+import { OutfitStudioPanel } from './OutfitStudioPanel'
 import { ReferralHub } from './ReferralHub'
 import { StoreGrid } from './StoreGrid'
 import { WalletStrip } from './WalletStrip'
 import styles from './rewards.module.css'
 
 /**
- * Everything to do with points, in one screen.
- *
- * The wallet sits above the tabs rather than inside one of them: the balance is
- * what decides whether a purchase is possible, so it stays visible from the tab
- * where purchases happen.
+ * Everything to do with points, cosmetics, and styling in one screen.
  */
 export function RewardsRoute() {
   const [tab, setTab] = useState('store')
@@ -24,10 +21,9 @@ export function RewardsRoute() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div>
-          <h1 className={styles.title}>Rewards</h1>
+          <h1 className={styles.title}>Rewards & Cosmetics</h1>
           <p className={styles.subtitle}>
-            Earn points by showing up and bringing people with you. Spend them on how you look in
-            every room.
+            Earn points through daily check-ins and referrals. Customize your avatar, name typography, particle auras, and chat bubbles.
           </p>
         </div>
       </header>
@@ -38,6 +34,9 @@ export function RewardsRoute() {
         <TabsList>
           <Tab value="store">
             <StoreIcon size={15} /> Store
+          </Tab>
+          <Tab value="studio">
+            <SparklesIcon size={15} /> Outfit Studio
           </Tab>
           <Tab value="inventory">
             <PackageIcon size={15} /> Your items
@@ -52,6 +51,9 @@ export function RewardsRoute() {
 
         <TabPanel value="store">
           <StoreGrid />
+        </TabPanel>
+        <TabPanel value="studio">
+          <OutfitStudioPanel />
         </TabPanel>
         <TabPanel value="inventory">
           <InventoryPanel />

@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react'
 
-import { CosmeticBadge, CosmeticName, DecoratedAvatar } from '@/components/Cosmetics'
+import {
+  CosmeticBadge,
+  CosmeticName,
+  CosmeticTitle,
+  DecoratedAvatar,
+} from '@/components/Cosmetics'
 import type { EquippedCosmetics } from '@/features/rewards/api'
 import type { Presence } from '@/components/PresenceDot'
 import { cx } from '@/lib/cx'
@@ -81,11 +86,13 @@ export function UserRow({
               person spent points on, and the accent is what they get for free. */}
           <CosmeticName
             item={cosmetics?.name_color}
+            fontItem={cosmetics?.name_font}
             fallbackColor={tintName ? accentColor : null}
           >
             {name}
           </CosmeticName>
           <CosmeticBadge item={cosmetics?.badge} />
+          {cosmetics?.title && <CosmeticTitle item={cosmetics.title} />}
         </span>
         {secondary !== undefined && <span className={styles.secondary}>{secondary}</span>}
       </span>

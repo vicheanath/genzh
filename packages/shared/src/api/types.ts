@@ -806,8 +806,25 @@ export interface RecommendationExplain {
 
 // ── points, referrals & the cosmetics store ────────────────────────────────
 
-/** Where on a profile an item is worn. One item per slot. */
-export type ItemType = 'frame' | 'badge' | 'banner' | 'name_color'
+/**
+ * Where on a profile an item is worn. One item per slot.
+ *
+ * They compose rather than compete: a name colour and a name font are worn
+ * together, and so are a frame and an avatar effect.
+ */
+export type ItemType =
+  | 'frame'
+  | 'badge'
+  | 'banner'
+  | 'name_color'
+  /** The typeface the display name is set in. */
+  | 'name_font'
+  /** A short tag beside the name — "Certified Yapper", "Night Owl". */
+  | 'title'
+  /** Particles or an aura over the avatar, worn alongside a frame. */
+  | 'avatar_effect'
+  /** A tint on the messages this person sends. */
+  | 'chat_bubble'
 
 /** Presentation only — rarity gates nothing. */
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary'
@@ -848,18 +865,49 @@ export interface StoreItem {
  * renderer falls back rather than throwing on a key nobody filled in.
  */
 export interface CosmeticStyle {
-  /** CSS gradient or colour, for name colours and frames. */
+  /** CSS gradient or colour, for name colours, frames and bubbles. */
   gradient?: string
   /** Flat colour, when a gradient would be too much. */
   color?: string
-  /** Glow colour behind a badge or frame. */
+  /** Glow colour behind a badge, frame or name. */
   glow?: string
-  /** Named animation the client knows how to play: `pulse`, `spin`, `aurora`, `shimmer`. */
+  /**
+   * Named animation the client knows how to play.
+   *
+   * `pulse` · `spin` · `aurora` · `shimmer` · `float` · `flicker`. A key the
+   * client does not know is ignored, so an item never animates by accident.
+   */
   animation?: string
   /** Emoji or icon key drawn when there is no `asset_url`. */
   icon?: string
-  /** Background for a banner, when no image is set. */
+  /** Background for a banner or chat bubble, when no image is set. */
   background?: string
+  /** Shadow behind a painted name. */
+  textShadow?: string
+
+  // ── name_font ──
+  /** The font stack, e.g. `'Orbitron', sans-serif`. Must name a loaded family. */
+  fontFamily?: string
+  fontWeight?: string | number
+  letterSpacing?: string
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
+  fontStyle?: 'normal' | 'italic'
+
+  // ── title ──
+  /** The words on the tag. Kept short — it sits on one line beside a name. */
+  text?: string
+  /** Border colour for the tag. */
+  borderColor?: string
+
+  // ── avatar_effect ──
+  /**
+   * Which effect to draw: `sparkles` · `orbit` · `flames` · `bubbles` ·
+   * `snow` · `hearts` · `stars`. Unknown keys draw nothing.
+   */
+  effect?: string
+  /** How many particles, 1–12. Clamped by the renderer. */
+  particles?: number
+
   [key: string]: unknown
 }
 
@@ -890,6 +938,10 @@ export interface EquippedCosmetics {
   badge: StoreItem | null
   banner: StoreItem | null
   name_color: StoreItem | null
+  name_font: StoreItem | null
+  title: StoreItem | null
+  avatar_effect: StoreItem | null
+  chat_bubble: StoreItem | null
   updated_at: Timestamp | null
 }
 
@@ -904,6 +956,10 @@ export interface EquipInput {
   badge_item_id?: Uuid | null
   banner_item_id?: Uuid | null
   name_color_item_id?: Uuid | null
+  name_font_item_id?: Uuid | null
+  title_item_id?: Uuid | null
+  avatar_effect_item_id?: Uuid | null
+  chat_bubble_item_id?: Uuid | null
 }
 
 export interface BalanceTransaction {

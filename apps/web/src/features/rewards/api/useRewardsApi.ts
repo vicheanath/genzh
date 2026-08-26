@@ -238,6 +238,10 @@ export function groupBySlot(items: StoreListing[]): Record<ItemType, StoreListin
     badge: [],
     banner: [],
     name_color: [],
+    name_font: [],
+    title: [],
+    avatar_effect: [],
+    chat_bubble: [],
   }
   for (const item of items) groups[item.item_type]?.push(item)
   return groups

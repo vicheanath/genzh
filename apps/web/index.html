@@ -18,6 +18,23 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&display=swap"
     />
+    <!-- Faces sold as name cosmetics. Loaded lazily — nothing in the app's own
+         chrome is set in these, so a name that arrives a beat late in its bought
+         typeface costs nothing, while blocking first paint on eight display
+         faces would cost plenty. The `print`/`onload` swap is what makes the
+         browser fetch it without treating it as render-blocking. -->
+    <link
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Audiowide&family=Bungee&family=Bungee+Shade&family=Cinzel:wght@600;700&family=Creepster&family=Fredoka:wght@600;700&family=MedievalSharp&family=Monoton&family=Neonderthaw&family=Orbitron:wght@600;800&family=Pacifico&family=Permanent+Marker&family=Press+Start+2P&family=Righteous&family=Rubik+Glitch&family=Sedgwick+Ave&family=Silkscreen:wght@400;700&family=Syne:wght@700;800&family=UnifrakturMaguntia&family=VT323&display=swap"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Audiowide&family=Bungee&family=Bungee+Shade&family=Cinzel:wght@600;700&family=Creepster&family=Fredoka:wght@600;700&family=MedievalSharp&family=Monoton&family=Neonderthaw&family=Orbitron:wght@600;800&family=Pacifico&family=Permanent+Marker&family=Press+Start+2P&family=Righteous&family=Rubik+Glitch&family=Sedgwick+Ave&family=Silkscreen:wght@400;700&family=Syne:wght@700;800&family=UnifrakturMaguntia&family=VT323&display=swap"
+      />
+    </noscript>
     <script>
       // Apply the stored theme before first paint, so a dark-mode user never
       // sees a white flash while the bundle loads.

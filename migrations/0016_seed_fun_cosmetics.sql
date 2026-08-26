@@ -1,0 +1,647 @@
+-- Migration: 0016_seed_fun_cosmetics.sql
+-- Description: Seed an initial set of exciting, stylish cosmetics across all 8 slots
+--              (frames, badges, banners, name colors, typefaces, titles, avatar effects, chat bubbles).
+
+INSERT INTO store_items (
+    id, sku, name, description, item_type, rarity, price_points, asset_url, style_config, is_active, is_limited, stock_limit, sort_order
+) VALUES
+-- ── Frames ──
+(
+    '00000000-0000-0000-0001-000000000001',
+    'frame-cyber-neon',
+    'Cyber Neon HUD',
+    'High-voltage electric cyan & magenta tech frame with rotating cyber glint and corner brackets',
+    'frame',
+    'epic',
+    350,
+    NULL,
+    '{"gradient": "linear-gradient(135deg, #06b6d4, #d946ef, #3b82f6)", "glow": "rgba(6, 182, 212, 0.8)", "animation": "cyber", "variant": "cyber"}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0001-000000000002',
+    'frame-inferno-fire',
+    'Inferno Blaze Ring',
+    'Molten fire-ring radiating turbulent burning embers and convection heat pulses',
+    'frame',
+    'legendary',
+    800,
+    NULL,
+    '{"gradient": "conic-gradient(from 0deg, #f97316, #ef4444, #eab308, #f97316)", "glow": "rgba(239, 68, 68, 0.9)", "animation": "flame"}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0001-000000000003',
+    'frame-aurora-borealis',
+    'Aurora Cosmic Portal',
+    'Shifting cosmic emerald, violet and magenta northern lights vortex',
+    'frame',
+    'rare',
+    250,
+    NULL,
+    '{"gradient": "conic-gradient(from 180deg, #10b981, #6366f1, #ec4899, #10b981)", "glow": "rgba(99, 102, 241, 0.75)", "animation": "aurora"}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0001-000000000004',
+    'frame-golden-halo',
+    'Golden Sovereign Halo',
+    'Luminous 24K shimmering royal halo with orbiting celestial star glints',
+    'frame',
+    'legendary',
+    1200,
+    NULL,
+    '{"gradient": "linear-gradient(135deg, #fbbf24, #f59e0b, #d97706, #fef08a)", "glow": "rgba(245, 158, 11, 0.85)", "animation": "shimmer"}',
+    TRUE, FALSE, NULL, 40
+),
+(
+    '00000000-0000-0000-0001-000000000005',
+    'frame-glitch-synth',
+    'Glitch Synthwave Pulse',
+    'Chromatic glitch distortion with vibrant hot pink and cyan glow',
+    'frame',
+    'epic',
+    420,
+    NULL,
+    '{"gradient": "linear-gradient(45deg, #ff007f, #00f0ff, #7928ca)", "glow": "rgba(255, 0, 127, 0.75)", "animation": "flicker"}',
+    TRUE, FALSE, NULL, 45
+),
+(
+    '00000000-0000-0000-0001-000000000006',
+    'frame-minimal-starter',
+    'Minimalist Violet Ring',
+    'Sleek subtle violet outline ring for newcomers',
+    'frame',
+    'common',
+    0,
+    NULL,
+    '{"color": "#8b5cf6", "glow": "rgba(139, 92, 246, 0.5)", "animation": "pulse"}',
+    TRUE, FALSE, NULL, 50
+),
+
+-- ── Avatar Effects (Auras & Particles) ──
+(
+    '00000000-0000-0000-0002-000000000001',
+    'effect-stardust-sparkles',
+    'Stardust Diamond Sparkles',
+    'Glittering golden diamond flares bursting and shining around your avatar',
+    'avatar_effect',
+    'rare',
+    300,
+    NULL,
+    '{"effect": "sparkles", "color": "#facc15", "glow": "rgba(250, 204, 21, 0.8)", "particles": 8}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0002-000000000002',
+    'effect-blazing-flames',
+    'Blazing Molten Ember Aura',
+    'Fierce rising fire embers engulfing the avatar with intense orange-red heat',
+    'avatar_effect',
+    'epic',
+    550,
+    NULL,
+    '{"effect": "flames", "color": "#f97316", "glow": "rgba(249, 115, 22, 0.85)", "particles": 9}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0002-000000000003',
+    'effect-floating-hearts',
+    'Love Hearts Burst',
+    'Sweet floating romantic neon hearts bubbling and drifting up',
+    'avatar_effect',
+    'rare',
+    200,
+    NULL,
+    '{"effect": "hearts", "color": "#ec4899", "glow": "rgba(236, 72, 153, 0.8)", "particles": 6}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0002-000000000004',
+    'effect-electric-lightning',
+    'Lightning Storm Surge',
+    'High-voltage electric sparks and arc discharges crackling around your avatar',
+    'avatar_effect',
+    'legendary',
+    950,
+    NULL,
+    '{"effect": "electric", "color": "#38bdf8", "glow": "rgba(56, 189, 248, 0.9)", "particles": 8}',
+    TRUE, FALSE, NULL, 40
+),
+(
+    '00000000-0000-0000-0002-000000000005',
+    'effect-frost-snow',
+    'Winter Frost Blizzard',
+    'Gentle crystalline snowflakes drifting softly in a winter breeze',
+    'avatar_effect',
+    'rare',
+    220,
+    NULL,
+    '{"effect": "snow", "color": "#bae6fd", "glow": "rgba(186, 230, 253, 0.8)", "particles": 8}',
+    TRUE, FALSE, NULL, 50
+),
+(
+    '00000000-0000-0000-0002-000000000006',
+    'effect-orbital-satellites',
+    'Celestial Orbital Path',
+    'Orbiting planets and cosmic matter circling your avatar',
+    'avatar_effect',
+    'epic',
+    480,
+    NULL,
+    '{"effect": "orbit", "color": "#c084fc", "glow": "rgba(192, 132, 252, 0.8)", "particles": 6}',
+    TRUE, FALSE, NULL, 60
+),
+(
+    '00000000-0000-0000-0002-000000000007',
+    'effect-sakura-petals',
+    'Cherry Blossom Flutter',
+    'Drifting Japanese sakura petals swirling gently in the wind',
+    'avatar_effect',
+    'rare',
+    260,
+    NULL,
+    '{"effect": "sakura", "color": "#f472b6", "glow": "rgba(244, 114, 182, 0.8)", "particles": 7}',
+    TRUE, FALSE, NULL, 70
+),
+(
+    '00000000-0000-0000-0002-000000000008',
+    'effect-void-singularity',
+    'Void Singularity Vortex',
+    'Dark matter dimensional vortex spiraling into cosmic energy',
+    'avatar_effect',
+    'legendary',
+    1100,
+    NULL,
+    '{"effect": "void", "color": "#a855f7", "glow": "rgba(168, 85, 247, 0.9)", "particles": 8}',
+    TRUE, FALSE, NULL, 80
+),
+(
+    '00000000-0000-0000-0002-000000000009',
+    'effect-phantom-ghost',
+    'Phantom Blue Spirit Wisps',
+    'Ethereal glowing blue ghost flames floating around your avatar',
+    'avatar_effect',
+    'epic',
+    520,
+    NULL,
+    '{"effect": "ghost", "color": "#38bdf8", "glow": "rgba(56, 189, 248, 0.85)", "particles": 6}',
+    TRUE, FALSE, NULL, 90
+),
+(
+    '00000000-0000-0000-0002-000000000010',
+    'effect-dragon-ki',
+    'Dragon Ki Power Surge',
+    'Super Saiyan golden ki energy surging and flaring with power',
+    'avatar_effect',
+    'legendary',
+    1350,
+    NULL,
+    '{"effect": "ki", "color": "#eab308", "glow": "rgba(234, 179, 8, 0.95)", "particles": 8}',
+    TRUE, FALSE, NULL, 100
+),
+
+-- ── Name Colours ──
+(
+    '00000000-0000-0000-0003-000000000001',
+    'name-neon-sunset',
+    'Neon Sunset Gradient',
+    'Warm gradient flowing from hot coral pink to radiant gold',
+    'name_color',
+    'epic',
+    300,
+    NULL,
+    '{"gradient": "linear-gradient(90deg, #ff007f, #ff7b00, #ffea00, #ff007f)", "textShadow": "0 0 10px rgba(255, 0, 127, 0.6), 0 0 20px rgba(255, 123, 0, 0.4)"}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0003-000000000002',
+    'name-cyber-matrix',
+    'Matrix Emerald Glow',
+    'Bioluminescent hacker emerald glow with high-intensity bloom',
+    'name_color',
+    'rare',
+    200,
+    NULL,
+    '{"gradient": "linear-gradient(90deg, #10b981, #34d399, #a7f3d0, #10b981)", "textShadow": "0 0 8px rgba(16, 185, 129, 0.7), 0 0 16px rgba(16, 185, 129, 0.4)"}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0003-000000000003',
+    'name-cosmic-purple',
+    'Cosmic Hyperdrive',
+    'Deep ultraviolet to neon magenta interdimensional flowing gradient',
+    'name_color',
+    'legendary',
+    600,
+    NULL,
+    '{"gradient": "linear-gradient(90deg, #818cf8, #c084fc, #f472b6, #818cf8)", "textShadow": "0 0 12px rgba(192, 132, 252, 0.8), 0 0 24px rgba(129, 140, 248, 0.5)", "animation": "aurora"}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0003-000000000004',
+    'name-pure-gold',
+    'Imperial Gold Sovereign',
+    'Gleaming 24K sovereign gold with rich royal brilliance',
+    'name_color',
+    'epic',
+    450,
+    NULL,
+    '{"gradient": "linear-gradient(90deg, #f59e0b, #fbbf24, #fef08a, #d97706, #f59e0b)", "textShadow": "0 0 10px rgba(245, 158, 11, 0.7), 0 0 20px rgba(251, 191, 36, 0.4)"}',
+    TRUE, FALSE, NULL, 40
+),
+(
+    '00000000-0000-0000-0003-000000000005',
+    'name-prismatic-rainbow',
+    'Prismatic Chroma Rainbow',
+    'Vibrant rainbow spectrum with dynamic animated iridescent flow',
+    'name_color',
+    'legendary',
+    750,
+    NULL,
+    '{"gradient": "linear-gradient(90deg, #ef4444, #f97316, #eab308, #10b981, #06b6d4, #8b5cf6, #ec4899, #ef4444)", "textShadow": "0 0 10px rgba(236, 72, 153, 0.7)"}',
+    TRUE, FALSE, NULL, 50
+),
+
+-- ── Name Typefaces / Fonts ──
+(
+    '00000000-0000-0000-0004-000000000001',
+    'font-cyber-orbitron',
+    'Orbitron Sci-Fi',
+    'Futuristic wide sci-fi typography with tech spacing',
+    'name_font',
+    'epic',
+    350,
+    NULL,
+    '{"fontFamily": "Orbitron, system-ui, sans-serif", "letterSpacing": "0.08em", "textTransform": "uppercase", "fontWeight": 700}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0004-000000000002',
+    'font-terminal-mono',
+    'VT323 Terminal CRT',
+    'Classic green-screen hacker terminal font',
+    'name_font',
+    'rare',
+    180,
+    NULL,
+    '{"fontFamily": "VT323, monospace", "letterSpacing": "0.06em", "fontSize": "1.1em"}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0004-000000000003',
+    'font-royal-serif',
+    'Cinzel Royal Imperial',
+    'Distinguished high-fashion serif typeface of royalty',
+    'name_font',
+    'rare',
+    220,
+    NULL,
+    '{"fontFamily": "Cinzel, Georgia, serif", "letterSpacing": "0.05em", "fontWeight": 700}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0004-000000000004',
+    'font-retro-pixel',
+    'Retro 8-Bit Pixel',
+    'Nostalgic arcade 8-bit pixel font',
+    'name_font',
+    'legendary',
+    500,
+    NULL,
+    '{"fontFamily": "\"Press Start 2P\", monospace", "letterSpacing": "0.04em", "fontSize": "0.85em"}',
+    TRUE, FALSE, NULL, 40
+),
+(
+    '00000000-0000-0000-0004-000000000005',
+    'font-cursive-neon',
+    'Pacifico Sunset Script',
+    'Smooth playful cursive signature script',
+    'name_font',
+    'rare',
+    240,
+    NULL,
+    '{"fontFamily": "Pacifico, cursive", "letterSpacing": "0.02em"}',
+    TRUE, FALSE, NULL, 50
+),
+(
+    '00000000-0000-0000-0004-000000000006',
+    'font-glitch-cyber',
+    'Cyber Glitch Distortion',
+    'Digital matrix glitch distortion typeface',
+    'name_font',
+    'epic',
+    420,
+    NULL,
+    '{"fontFamily": "\"Rubik Glitch\", cursive", "letterSpacing": "0.06em"}',
+    TRUE, FALSE, NULL, 60
+),
+(
+    '00000000-0000-0000-0004-000000000007',
+    'font-audiowide-mecha',
+    'Audiowide Mecha Tech',
+    'Sleek robotic cyberpunk mecha font style',
+    'name_font',
+    'epic',
+    380,
+    NULL,
+    '{"fontFamily": "Audiowide, sans-serif", "letterSpacing": "0.05em"}',
+    TRUE, FALSE, NULL, 70
+),
+(
+    '00000000-0000-0000-0004-000000000008',
+    'font-graffiti-marker',
+    'Permanent Marker Graffiti',
+    'Street-art bold graffiti marker tag',
+    'name_font',
+    'rare',
+    260,
+    NULL,
+    '{"fontFamily": "\"Permanent Marker\", cursive", "letterSpacing": "0.03em"}',
+    TRUE, FALSE, NULL, 80
+),
+(
+    '00000000-0000-0000-0004-000000000009',
+    'font-gothic-medieval',
+    'Dark Gothic Medieval',
+    'Old-world dark gothic blackletter script',
+    'name_font',
+    'epic',
+    400,
+    NULL,
+    '{"fontFamily": "UnifrakturMaguntia, cursive", "letterSpacing": "0.06em", "fontSize": "1.15em"}',
+    TRUE, FALSE, NULL, 90
+),
+(
+    '00000000-0000-0000-0004-000000000010',
+    'font-syne-luxury',
+    'Syne Haute Couture',
+    'Modern ultra-luxury avant-garde heavy display font',
+    'name_font',
+    'legendary',
+    600,
+    NULL,
+    '{"fontFamily": "Syne, sans-serif", "fontWeight": 800, "letterSpacing": "0.04em", "textTransform": "uppercase"}',
+    TRUE, FALSE, NULL, 100
+),
+(
+    '00000000-0000-0000-0004-000000000011',
+    'font-fredoka-bubbly',
+    'Fredoka Kawaii Bubble',
+    'Cute rounded bubbly anime font style',
+    'name_font',
+    'common',
+    100,
+    NULL,
+    '{"fontFamily": "Fredoka, sans-serif", "fontWeight": 600, "letterSpacing": "0.02em"}',
+    TRUE, FALSE, NULL, 110
+),
+
+-- ── Prestige Titles / Tags ──
+(
+    '00000000-0000-0000-0005-000000000001',
+    'title-certified-yapper',
+    'Certified Yapper',
+    'Official title for chat champions who never stop talking',
+    'title',
+    'common',
+    50,
+    NULL,
+    '{"text": "💬 Certified Yapper", "color": "#ec4899", "background": "rgba(236, 72, 153, 0.18)", "borderColor": "rgba(236, 72, 153, 0.5)", "glow": "rgba(236, 72, 153, 0.35)"}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0005-000000000002',
+    'title-night-owl',
+    'Night Owl',
+    'For the late-night regulars haunting the voice and chat lounges',
+    'title',
+    'common',
+    50,
+    NULL,
+    '{"text": "🦉 Night Owl", "color": "#818cf8", "background": "rgba(129, 140, 248, 0.18)", "borderColor": "rgba(129, 140, 248, 0.5)", "glow": "rgba(129, 140, 248, 0.35)"}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0005-000000000003',
+    'title-cosmic-legend',
+    'Cosmic Legend',
+    'Prestige flair reserved for platform champions',
+    'title',
+    'legendary',
+    1000,
+    NULL,
+    '{"text": "🌌 Cosmic Legend", "gradient": "linear-gradient(90deg, #a855f7, #ec4899, #f59e0b)", "color": "#f8fafc", "background": "rgba(168, 85, 247, 0.25)", "borderColor": "#a855f7", "glow": "rgba(168, 85, 247, 0.6)"}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0005-000000000004',
+    'title-speed-demon',
+    'Speed Demon',
+    'Lightning fast response times and quick wit',
+    'title',
+    'epic',
+    400,
+    NULL,
+    '{"text": "⚡ Speed Demon", "color": "#06b6d4", "background": "rgba(6, 182, 212, 0.18)", "borderColor": "#06b6d4", "glow": "rgba(6, 182, 212, 0.5)"}',
+    TRUE, FALSE, NULL, 40
+),
+(
+    '00000000-0000-0000-0005-000000000005',
+    'title-founder-vip',
+    'Early Pioneer',
+    'For original community builders on GenZH',
+    'title',
+    'legendary',
+    1500,
+    NULL,
+    '{"text": "👑 Early Pioneer", "color": "#fbbf24", "background": "rgba(251, 191, 36, 0.22)", "borderColor": "#f59e0b", "glow": "rgba(245, 158, 11, 0.75)"}',
+    TRUE, TRUE, 50, 50
+),
+(
+    '00000000-0000-0000-0005-000000000006',
+    'title-code-wizard',
+    'Code Wizard',
+    'Master architect of software and cyberspace',
+    'title',
+    'epic',
+    450,
+    NULL,
+    '{"text": "🧙‍♂️ Code Wizard", "color": "#10b981", "background": "rgba(16, 185, 129, 0.18)", "borderColor": "#10b981", "glow": "rgba(16, 185, 129, 0.5)"}',
+    TRUE, FALSE, NULL, 60
+),
+
+-- ── Badges ──
+(
+    '00000000-0000-0000-0006-000000000001',
+    'badge-crown-gold',
+    'Royal Crown',
+    'Golden royal crown badge beside your name',
+    'badge',
+    'legendary',
+    750,
+    NULL,
+    '{"icon": "👑", "glow": "rgba(251, 191, 36, 0.9)", "animation": "pulse"}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0006-000000000002',
+    'badge-diamond-gem',
+    'Diamond Gem',
+    'Shining diamond jewel badge',
+    'badge',
+    'epic',
+    400,
+    NULL,
+    '{"icon": "💎", "glow": "rgba(56, 189, 248, 0.85)", "animation": "shimmer"}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0006-000000000003',
+    'badge-fire-spark',
+    'Fire Spirit',
+    'Blazing flame icon badge',
+    'badge',
+    'rare',
+    150,
+    NULL,
+    '{"icon": "🔥", "glow": "rgba(249, 115, 22, 0.75)"}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0006-000000000004',
+    'badge-rocket-ship',
+    'Moon Rocket',
+    'Cosmic exploration rocket badge',
+    'badge',
+    'rare',
+    180,
+    NULL,
+    '{"icon": "🚀", "glow": "rgba(147, 51, 234, 0.75)"}',
+    TRUE, FALSE, NULL, 40
+),
+(
+    '00000000-0000-0000-0006-000000000005',
+    'badge-coffee-cup',
+    'Coffee Fuel',
+    'Fueled by espresso and late-night coding',
+    'badge',
+    'common',
+    0,
+    NULL,
+    '{"icon": "☕"}',
+    TRUE, FALSE, NULL, 50
+),
+(
+    '00000000-0000-0000-0006-000000000006',
+    'badge-ghost-spirit',
+    'Phantom Specter',
+    'Mystical ghostly spirit badge',
+    'badge',
+    'rare',
+    190,
+    NULL,
+    '{"icon": "👻", "glow": "rgba(56, 189, 248, 0.8)"}',
+    TRUE, FALSE, NULL, 60
+),
+
+-- ── Chat Bubbles ──
+(
+    '00000000-0000-0000-0007-000000000001',
+    'bubble-cyber-neon',
+    'Cyberpunk Neon Bubble',
+    'Sleek message bubble with cyan neon border and cyber glow',
+    'chat_bubble',
+    'epic',
+    450,
+    NULL,
+    '{"background": "linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(217, 70, 239, 0.08))", "borderColor": "#06b6d4", "glow": "rgba(6, 182, 212, 0.35)"}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0007-000000000002',
+    'bubble-midnight-glass',
+    'Midnight Velvet Bubble',
+    'Frosted dark purple glass chat bubble with subtle violet border',
+    'chat_bubble',
+    'rare',
+    250,
+    NULL,
+    '{"background": "linear-gradient(135deg, rgba(139, 92, 246, 0.14), rgba(99, 102, 241, 0.08))", "borderColor": "rgba(139, 92, 246, 0.45)", "glow": "rgba(139, 92, 246, 0.3)"}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0007-000000000003',
+    'bubble-royal-gold',
+    'Royal Sovereign Bubble',
+    'Gilded gold accents and warm glowing tint for VIP messages',
+    'chat_bubble',
+    'legendary',
+    850,
+    NULL,
+    '{"background": "linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(234, 179, 8, 0.08))", "borderColor": "rgba(245, 158, 11, 0.6)", "glow": "rgba(245, 158, 11, 0.45)"}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0007-000000000004',
+    'bubble-kawaii-pastel',
+    'Pastel Blossom Bubble',
+    'Soft candy pink and peach gradient message bubble',
+    'chat_bubble',
+    'common',
+    100,
+    NULL,
+    '{"background": "linear-gradient(135deg, rgba(244, 114, 182, 0.12), rgba(251, 146, 60, 0.08))", "borderColor": "rgba(244, 114, 182, 0.4)", "glow": "rgba(244, 114, 182, 0.25)"}',
+    TRUE, FALSE, NULL, 40
+),
+
+-- ── Profile Banners ──
+(
+    '00000000-0000-0000-0008-000000000001',
+    'banner-cyber-synthwave',
+    'Synthwave Grid Horizon',
+    'Retro synthwave neon grid sunset banner',
+    'banner',
+    'epic',
+    500,
+    NULL,
+    '{"background": "linear-gradient(180deg, #180033 0%, #4a0072 40%, #ff007f 75%, #ffb700 100%)", "animation": "aurora"}',
+    TRUE, FALSE, NULL, 10
+),
+(
+    '00000000-0000-0000-0008-000000000002',
+    'banner-deep-nebula',
+    'Cosmic Deep Space Nebula',
+    'Mystical ultraviolet starry nebula background',
+    'banner',
+    'legendary',
+    750,
+    NULL,
+    '{"background": "linear-gradient(135deg, #09090b 0%, #3b0764 45%, #1e1b4b 75%, #0284c7 100%)", "animation": "aurora"}',
+    TRUE, FALSE, NULL, 20
+),
+(
+    '00000000-0000-0000-0008-000000000003',
+    'banner-emerald-matrix',
+    'Digital Emerald Matrix',
+    'Cascading dark green cyber cybernetic glow',
+    'banner',
+    'rare',
+    300,
+    NULL,
+    '{"background": "linear-gradient(135deg, #022c22 0%, #064e3b 50%, #059669 100%)"}',
+    TRUE, FALSE, NULL, 30
+),
+(
+    '00000000-0000-0000-0008-000000000004',
+    'banner-pastel-dream',
+    'Pastel Cloudscape',
+    'Calm cotton-candy pink and lavender sunrise sky',
+    'banner',
+    'common',
+    120,
+    NULL,
+    '{"background": "linear-gradient(135deg, #fbcfe8 0%, #c4b5fd 50%, #bae6fd 100%)"}',
+    TRUE, FALSE, NULL, 40
+)
+ON CONFLICT (sku) DO NOTHING;

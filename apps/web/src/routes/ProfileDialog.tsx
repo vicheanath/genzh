@@ -3,7 +3,13 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/Button'
-import { CosmeticBadge, CosmeticBanner, CosmeticName, DecoratedAvatar } from '@/components/Cosmetics'
+import {
+  CosmeticBadge,
+  CosmeticBanner,
+  CosmeticName,
+  CosmeticTitle,
+  DecoratedAvatar,
+} from '@/components/Cosmetics'
 import { Callout } from '@/components/Callout'
 import {
   CheckIcon,
@@ -278,10 +284,15 @@ function PublicProfileCard({
         />
         <div className={styles.previewText}>
           <div className={styles.previewName}>
-            <CosmeticName item={worn?.name_color} fallbackColor={profile?.accent_color}>
+            <CosmeticName
+              item={worn?.name_color}
+              fontItem={worn?.name_font}
+              fallbackColor={profile?.accent_color}
+            >
               {profile?.display_name ?? 'User Profile'}
             </CosmeticName>
             <CosmeticBadge item={worn?.badge} />
+            {worn?.title && <CosmeticTitle item={worn.title} />}
           </div>
           <div className={styles.previewHandle}>@{profile?.handle}</div>
         </div>
@@ -540,10 +551,15 @@ function ProfileForm({ user, onDone }: { user: CurrentUser; onDone: () => void }
             />
             <div className={styles.previewText}>
               <div className={styles.previewName}>
-                <CosmeticName item={mine?.name_color} fallbackColor={accent}>
+                <CosmeticName
+                  item={mine?.name_color}
+                  fontItem={mine?.name_font}
+                  fallbackColor={accent}
+                >
                   {displayName || user.handle}
                 </CosmeticName>
                 <CosmeticBadge item={mine?.badge} />
+                {mine?.title && <CosmeticTitle item={mine.title} />}
               </div>
               <div className={styles.previewHandle}>@{user.handle}</div>
               {bio && <p className={styles.previewBio}>{bio}</p>}
