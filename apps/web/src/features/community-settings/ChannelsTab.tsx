@@ -32,21 +32,48 @@ import { useConfirm } from '@/components/AlertDialog'
 /** What settings can create. The playful room types are made from the room
  *  screen, where the thing being made is explained rather than listed. */
 const ROOM_TYPES = [
-  { value: 'text', label: 'Text' },
-  { value: 'voice', label: 'Voice' },
-  { value: 'video', label: 'Video' },
-  { value: 'activity', label: 'Activity' },
+  // 💬 Conversation
+  { value: 'text', label: '💬 Text Chat' },
+  { value: 'voice', label: '🔊 Voice Lounge' },
+  { value: 'video', label: '📹 Video Grid' },
+  { value: 'stage', label: '🎙️ Stage Broadcast' },
+  // 🎮 Social Games
+  { value: 'truth_or_dare', label: '✨ Truth / Dare' },
+  { value: 'would_you_rather', label: '🔀 Would You Rather' },
+  { value: 'hot_takes', label: '🔥 Hot Takes' },
+  { value: 'poll', label: '🗳️ Live Poll' },
+  { value: 'trivia', label: '❓ Trivia Quiz' },
+  { value: 'debate', label: '⚔️ Debate Arena' },
+  { value: 'guess_who', label: '👥 Guess Who' },
+  { value: 'game', label: '🎮 Party Games' },
+  { value: 'activity', label: '🎨 Activity Lounge' },
+  // 🧭 Social Discovery
+  { value: 'random_chat', label: '⚡ Random Chat' },
+  { value: 'anonymous_chat', label: '🔒 Anonymous Chat' },
+  { value: 'match_interest', label: '🏷️ Match by Interest' },
+  { value: 'friend_finder', label: '💖 Friend Finder' },
+  { value: 'topic_room', label: '🧭 Topic Room' },
 ] as const satisfies ReadonlyArray<{ value: RoomType; label: string }>
 
 const ROOM_ICONS: Record<string, typeof HashIcon> = {
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
-  activity: SparkleIcon,
   stage: VideoIcon,
+  truth_or_dare: SparkleIcon,
+  would_you_rather: SparkleIcon,
+  hot_takes: SparkleIcon,
   poll: SparkleIcon,
+  trivia: SparkleIcon,
   debate: SparkleIcon,
+  guess_who: SparkleIcon,
   game: SparkleIcon,
+  activity: SparkleIcon,
+  random_chat: SparkleIcon,
+  anonymous_chat: LockIcon,
+  match_interest: SparkleIcon,
+  friend_finder: SparkleIcon,
+  topic_room: SparkleIcon,
   confession: LockIcon,
   quick_chat: HashIcon,
 }

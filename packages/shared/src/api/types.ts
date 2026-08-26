@@ -6,17 +6,72 @@ export type Uuid = string
 /** RFC 3339, always UTC. */
 export type Timestamp = string
 
+export type RoomFamily = 'conversation' | 'social_games' | 'social_discovery'
+
 export type RoomType =
+  // 💬 Conversation Pillar
   | 'text'
   | 'voice'
   | 'video'
-  | 'activity'
   | 'stage'
+  // 🎮 Social Games Pillar
+  | 'truth_or_dare'
+  | 'would_you_rather'
+  | 'hot_takes'
   | 'poll'
+  | 'trivia'
   | 'debate'
+  | 'guess_who'
   | 'game'
+  | 'activity'
+  // 🧭 Social Discovery Pillar
+  | 'random_chat'
+  | 'anonymous_chat'
+  | 'match_interest'
+  | 'friend_finder'
+  | 'topic_room'
   | 'confession'
   | 'quick_chat'
+
+export const CONVERSATION_ROOM_TYPES: ReadonlyArray<RoomType> = ['text', 'voice', 'video', 'stage']
+export const SOCIAL_GAME_ROOM_TYPES: ReadonlyArray<RoomType> = [
+  'truth_or_dare',
+  'would_you_rather',
+  'hot_takes',
+  'poll',
+  'trivia',
+  'debate',
+  'guess_who',
+  'game',
+  'activity',
+]
+export const SOCIAL_DISCOVERY_ROOM_TYPES: ReadonlyArray<RoomType> = [
+  'random_chat',
+  'anonymous_chat',
+  'match_interest',
+  'friend_finder',
+  'topic_room',
+  'confession',
+  'quick_chat',
+]
+
+export function getRoomFamily(type: RoomType): RoomFamily {
+  if (CONVERSATION_ROOM_TYPES.includes(type)) return 'conversation'
+  if (SOCIAL_GAME_ROOM_TYPES.includes(type)) return 'social_games'
+  return 'social_discovery'
+}
+
+export function isMediaRoomType(type: RoomType): boolean {
+  return type === 'voice' || type === 'video' || type === 'stage' || type === 'activity'
+}
+
+export function isGameRoomType(type: RoomType): boolean {
+  return SOCIAL_GAME_ROOM_TYPES.includes(type)
+}
+
+export function isDiscoveryRoomType(type: RoomType): boolean {
+  return SOCIAL_DISCOVERY_ROOM_TYPES.includes(type)
+}
 
 export type RoomStatus = 'created' | 'waiting' | 'active' | 'ending' | 'ended'
 export type RoomVisibility = 'public' | 'unlisted' | 'friends_only' | 'private'

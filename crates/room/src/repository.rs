@@ -833,7 +833,7 @@ impl RoomRepository {
     pub async fn count_media_rooms(&self, community_id: CommunityId) -> RepositoryResult<i64> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM rooms
-             WHERE community_id = $1 AND room_type NOT IN ('text'::room_type, 'poll'::room_type, 'confession'::room_type, 'quick_chat'::room_type)",
+             WHERE community_id = $1 AND room_type IN ('voice'::room_type, 'video'::room_type, 'stage'::room_type, 'activity'::room_type)",
         )
         .bind(community_id)
         .fetch_one(&self.pool)

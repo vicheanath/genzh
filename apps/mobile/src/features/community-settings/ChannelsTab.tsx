@@ -31,10 +31,27 @@ import { usePanel } from './styles';
  * thing being made is explained rather than listed in a dropdown.
  */
 const CHANNEL_TYPES = [
-  { value: 'text', label: 'Text' },
-  { value: 'voice', label: 'Voice' },
-  { value: 'video', label: 'Video' },
-  { value: 'activity', label: 'Activity' },
+  // 💬 Conversation
+  { value: 'text', label: '💬 Text Chat' },
+  { value: 'voice', label: '🔊 Voice Lounge' },
+  { value: 'video', label: '📹 Video Grid' },
+  { value: 'stage', label: '🎙️ Stage Broadcast' },
+  // 🎮 Social Games
+  { value: 'truth_or_dare', label: '✨ Truth / Dare' },
+  { value: 'would_you_rather', label: '🔀 Would You Rather' },
+  { value: 'hot_takes', label: '🔥 Hot Takes' },
+  { value: 'poll', label: '🗳️ Live Poll' },
+  { value: 'trivia', label: '❓ Trivia Quiz' },
+  { value: 'debate', label: '⚔️ Debate Arena' },
+  { value: 'guess_who', label: '👥 Guess Who' },
+  { value: 'game', label: '🎮 Party Games' },
+  { value: 'activity', label: '🎨 Activity Lounge' },
+  // 🧭 Social Discovery
+  { value: 'random_chat', label: '⚡ Random Chat' },
+  { value: 'anonymous_chat', label: '🔒 Anonymous Chat' },
+  { value: 'match_interest', label: '🏷️ Match by Interest' },
+  { value: 'friend_finder', label: '💖 Friend Finder' },
+  { value: 'topic_room', label: '🧭 Topic Room' },
 ] as const satisfies ReadonlyArray<{ value: RoomType; label: string }>;
 
 export function ChannelsTab({

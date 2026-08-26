@@ -6,14 +6,20 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
+  CompassIcon,
   FlameIcon,
   GamepadIcon,
   HashIcon,
+  HeartIcon,
+  HelpCircleIcon,
   LockIcon,
   MicIcon,
   PaletteIcon,
   RadioIcon,
+  ShuffleIcon,
   SparkleIcon,
+  TagIcon,
+  UsersIcon,
   VideoIcon,
   VoteIcon,
   XIcon,
@@ -24,7 +30,7 @@ import { Select } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
 import { Switch } from '@/components/Switch'
 import { useToast } from '@/components/Toast'
-import type { RoomType } from '@/lib/api'
+import type { RoomFamily, RoomType } from '@/lib/api'
 import { useCreateStandaloneRoomMutation } from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { cx } from '@/lib/cx'
@@ -44,17 +50,61 @@ interface CreatePlaygroundRoomDialogProps {
   onCreated?: () => void
 }
 
-const ROOM_TYPES: Array<{ type: RoomType; label: string; icon: typeof HashIcon }> = [
-  { type: 'text', label: 'Chat', icon: HashIcon },
-  { type: 'voice', label: 'Voice & Screen', icon: MicIcon },
-  { type: 'stage', label: 'Stage (Discord-like)', icon: RadioIcon },
-  { type: 'video', label: 'Video', icon: VideoIcon },
-  { type: 'debate', label: 'Debate Arena', icon: FlameIcon },
-  { type: 'poll', label: 'Live Poll', icon: VoteIcon },
-  { type: 'game', label: 'Party Games', icon: GamepadIcon },
-  { type: 'confession', label: 'Confessions', icon: LockIcon },
-  { type: 'quick_chat', label: 'Speed Chat', icon: ZapIcon },
-  { type: 'activity', label: 'Activity Lounge', icon: PaletteIcon },
+interface RoomTypeConfig {
+  type: RoomType
+  label: string
+  icon: typeof HashIcon
+}
+
+interface PillarGroup {
+  family: RoomFamily
+  label: string
+  icon: string
+  types: RoomTypeConfig[]
+}
+
+const PILLAR_GROUPS: PillarGroup[] = [
+  {
+    family: 'conversation',
+    label: 'Conversation',
+    icon: '💬',
+    types: [
+      { type: 'text', label: 'Chat', icon: HashIcon },
+      { type: 'voice', label: 'Voice & Screen', icon: MicIcon },
+      { type: 'video', label: 'Video Grid', icon: VideoIcon },
+      { type: 'stage', label: 'Stage', icon: RadioIcon },
+    ],
+  },
+  {
+    family: 'social_games',
+    label: 'Social Games',
+    icon: '🎮',
+    types: [
+      { type: 'truth_or_dare', label: 'Truth / Dare', icon: SparkleIcon },
+      { type: 'would_you_rather', label: 'Would You Rather', icon: ShuffleIcon },
+      { type: 'hot_takes', label: 'Hot Takes', icon: FlameIcon },
+      { type: 'poll', label: 'Live Poll', icon: VoteIcon },
+      { type: 'trivia', label: 'Trivia Quiz', icon: HelpCircleIcon },
+      { type: 'debate', label: 'Debates', icon: FlameIcon },
+      { type: 'guess_who', label: 'Guess Who', icon: UsersIcon },
+      { type: 'game', label: 'Party Games', icon: GamepadIcon },
+      { type: 'activity', label: 'Activity Lounge', icon: PaletteIcon },
+    ],
+  },
+  {
+    family: 'social_discovery',
+    label: 'Social Discovery',
+    icon: '🧭',
+    types: [
+      { type: 'random_chat', label: 'Random Chat', icon: ZapIcon },
+      { type: 'anonymous_chat', label: 'Anonymous Chat', icon: LockIcon },
+      { type: 'match_interest', label: 'Match by Interest', icon: TagIcon },
+      { type: 'friend_finder', label: 'Friend Finder', icon: HeartIcon },
+      { type: 'topic_room', label: 'Topic Room', icon: CompassIcon },
+      { type: 'confession', label: 'Confessions', icon: LockIcon },
+      { type: 'quick_chat', label: 'Speed Chat', icon: ZapIcon },
+    ],
+  },
 ]
 
 export function CreatePlaygroundRoomDialog({
@@ -66,6 +116,7 @@ export function CreatePlaygroundRoomDialog({
   const navigate = useNavigate()
   const toast = useToast()
 
+  const [activeFamily, setActiveFamily] = useState<RoomFamily>('conversation')
   const [selectedType, setSelectedType] = useState<RoomType>('text')
   const [category, setCategory] = useState('random')
   const [durationMinutes, setDurationMinutes] = useState('60')
@@ -102,16 +153,21 @@ export function CreatePlaygroundRoomDialog({
         duration_minutes: durationMinutes ? parseInt(durationMinutes, 10) : undefined,
       })
 
-      toast.success('Room created!', isAnonymous ? 'Your anonymous identity is active.' : undefined)
+      toast.success(
+        'Room created',
+        isAnonymous ? 'Your anonymous identity is active.' : undefined,
+      )
       onCreated?.()
       handleClose()
-      void navigate(`/rooms/${room.id}`)
+      navigate(`/rooms/${room.id}`)
     } catch (cause) {
       setError(errorText(cause, 'Could not create room'))
     } finally {
       setBusy(false)
     }
   }
+
+  const currentPillar = PILLAR_GROUPS.find((g) => g.family === activeFamily) ?? PILLAR_GROUPS[0]
 
   return (
     <BaseDialog.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -161,10 +217,36 @@ export function CreatePlaygroundRoomDialog({
                   marginBottom: 'var(--space-2)',
                 }}
               >
-                Experience Type
+                Pillar & Room Type
               </label>
+
+              {/* 3 Pillars Tabs */}
+              <div className={styles.pillarTabs}>
+                {PILLAR_GROUPS.map((pillar) => (
+                  <button
+                    key={pillar.family}
+                    type="button"
+                    className={cx(
+                      styles.pillarTab,
+                      activeFamily === pillar.family && styles.pillarTabActive,
+                    )}
+                    onClick={() => {
+                      setActiveFamily(pillar.family)
+                      const firstType = pillar.types[0]?.type
+                      if (firstType) {
+                        setSelectedType(firstType)
+                      }
+                    }}
+                  >
+                    <span>{pillar.icon}</span>
+                    <span>{pillar.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Room Types Grid for Selected Pillar */}
               <div className={styles.typesGrid}>
-                {ROOM_TYPES.map(({ type, label, icon: Icon }) => (
+                {currentPillar?.types.map(({ type, label, icon: Icon }) => (
                   <button
                     key={type}
                     type="button"

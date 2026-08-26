@@ -21,40 +21,120 @@ pub const MEDIA_ROOM_MAX_PARTICIPANTS: i32 = 50;
 /// sidebar grouping and media joins all key off it.
 pub const DIRECT_CATEGORY: &str = "dm";
 
+/// Top-level pillar/family a room belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomFamily {
+    /// 💬 Core conversation & RTC channels (Text, Voice, Video, Stage).
+    Conversation,
+    /// 🎮 Synchronized multiplayer games & social micro-experiences.
+    SocialGames,
+    /// 🧭 Matchmaking, spontaneous roulette, anonymous moments, and topical lounges.
+    SocialDiscovery,
+}
+
+impl RoomFamily {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Conversation => "conversation",
+            Self::SocialGames => "social_games",
+            Self::SocialDiscovery => "social_discovery",
+        }
+    }
+}
+
 /// What a room is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "room_type", rename_all = "snake_case")]
 pub enum RoomType {
+    // 💬 Conversation Pillar
     /// Persistent chat only.
     Text,
     /// Audio-first hangout. Video may still be enabled per participant.
     Voice,
     /// Video-first room.
     Video,
-    /// Mini-game or interactive activity.
-    Activity,
     /// Moderated audience broadcast stage.
     Stage,
+
+    // 🎮 Social Games Pillar
+    /// Truth or Dare party game.
+    TruthOrDare,
+    /// Would You Rather binary dilemma voting.
+    WouldYouRather,
+    /// Hot Takes controversial opinion rating.
+    HotTakes,
     /// Interactive live voting & opinion polling.
     Poll,
+    /// Timed trivia quiz game with streaks & leaderboards.
+    Trivia,
     /// Structured 2-sided debate with live vote tracking.
     Debate,
-    /// Spontaneous party mini-games.
+    /// 20 questions / secret persona guessing game.
+    GuessWho,
+    /// General party mini-games suite.
     Game,
-    /// Anonymous confessions & truth drops.
+    /// Mini-game or interactive activity lounge.
+    Activity,
+
+    // 🧭 Social Discovery Pillar
+    /// Instant speed roulette / random matchmaking chat.
+    RandomChat,
+    /// Anonymous confessions and blind chat drops.
+    AnonymousChat,
+    /// Tag-based matchmaking by shared interests.
+    MatchInterest,
+    /// Community friend finder and icebreaker connections.
+    FriendFinder,
+    /// Dynamic thematic drop-in lounges.
+    TopicRoom,
+    /// Anonymous confessions & truth drops (legacy alias).
     Confession,
-    /// Ephemeral speed-dating or fast spontaneous chat.
+    /// Ephemeral speed-dating or fast spontaneous chat (legacy alias).
     QuickChat,
 }
 
 impl RoomType {
+    /// Which top-level pillar this room type belongs to.
+    pub const fn family(self) -> RoomFamily {
+        match self {
+            Self::Text | Self::Voice | Self::Video | Self::Stage => RoomFamily::Conversation,
+            Self::TruthOrDare
+            | Self::WouldYouRather
+            | Self::HotTakes
+            | Self::Poll
+            | Self::Trivia
+            | Self::Debate
+            | Self::GuessWho
+            | Self::Game
+            | Self::Activity => RoomFamily::SocialGames,
+            Self::RandomChat
+            | Self::AnonymousChat
+            | Self::MatchInterest
+            | Self::FriendFinder
+            | Self::TopicRoom
+            | Self::Confession
+            | Self::QuickChat => RoomFamily::SocialDiscovery,
+        }
+    }
+
     /// Does joining this room involve the media plane (audio/video/streams)?
     pub const fn is_media(self) -> bool {
         matches!(
             self,
             RoomType::Voice | RoomType::Video | RoomType::Activity | RoomType::Stage
         )
+    }
+
+    /// Is this room an interactive social game?
+    pub const fn is_game(self) -> bool {
+        matches!(self.family(), RoomFamily::SocialGames)
+    }
+
+    /// Is this room a social discovery / matchmaking room?
+    pub const fn is_discovery(self) -> bool {
+        matches!(self.family(), RoomFamily::SocialDiscovery)
     }
 
     /// Can messages/reactions be posted here?
@@ -68,11 +148,21 @@ impl RoomType {
             RoomType::Text => "text",
             RoomType::Voice => "voice",
             RoomType::Video => "video",
-            RoomType::Activity => "activity",
             RoomType::Stage => "stage",
+            RoomType::TruthOrDare => "truth_or_dare",
+            RoomType::WouldYouRather => "would_you_rather",
+            RoomType::HotTakes => "hot_takes",
             RoomType::Poll => "poll",
+            RoomType::Trivia => "trivia",
             RoomType::Debate => "debate",
+            RoomType::GuessWho => "guess_who",
             RoomType::Game => "game",
+            RoomType::Activity => "activity",
+            RoomType::RandomChat => "random_chat",
+            RoomType::AnonymousChat => "anonymous_chat",
+            RoomType::MatchInterest => "match_interest",
+            RoomType::FriendFinder => "friend_finder",
+            RoomType::TopicRoom => "topic_room",
             RoomType::Confession => "confession",
             RoomType::QuickChat => "quick_chat",
         }

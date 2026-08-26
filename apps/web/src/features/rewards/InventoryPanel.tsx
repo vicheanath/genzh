@@ -52,11 +52,6 @@ export function InventoryPanel() {
   const equipped = useEquippedQuery()
   const [filter, setFilter] = useState<ItemType | 'all'>('all')
 
-  // Every hook above this line runs unconditionally, on every render — the
-  // two returns below it are not. `items` falls back to `[]` while loading
-  // so this can sit ahead of them too; skip that and the hook count itself
-  // changes once data arrives, which is what "Rendered more hooks than
-  // during the previous render" was actually reporting here.
   const items = inventory.data ?? []
   const categoryCounts = useMemo(() => {
     const map: Record<string, number> = { all: items.length }
@@ -66,14 +61,16 @@ export function InventoryPanel() {
     return map
   }, [items])
 
+  const filteredItems = useMemo(() => {
+    return filter === 'all' ? items : items.filter((i) => i.item.item_type === filter)
+  }, [items, filter])
+
   if (inventory.isLoading) return <Skeleton height="18rem" />
   if (inventory.error) {
     return (
       <Callout tone="danger">{errorText(inventory.error, 'Could not load your items')}</Callout>
     )
   }
-
-  const filteredItems = filter === 'all' ? items : items.filter((i) => i.item.item_type === filter)
 
   return (
     <div className={styles.stack}>

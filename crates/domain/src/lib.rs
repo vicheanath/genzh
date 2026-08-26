@@ -44,8 +44,8 @@ pub use ids::{
 pub use permission::{Permission, PermissionSet};
 pub use platform::PlatformRole;
 pub use room::{
-    Room, RoomAnonymousIdentity, RoomParticipant, RoomParticipantRole, RoomStatus, RoomType,
-    RoomVisibility,
+    Room, RoomAnonymousIdentity, RoomFamily, RoomParticipant, RoomParticipantRole, RoomStatus,
+    RoomType, RoomVisibility,
 };
 
 /// The timestamp type used across the whole domain: always UTC.

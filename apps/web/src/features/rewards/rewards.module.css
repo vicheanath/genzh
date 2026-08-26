@@ -43,11 +43,15 @@
   line-height: 1.45;
 }
 
-/* Tabs.module.css sets no gap between the tab list and its panel — every
-   other Tabs usage in the app relies on that flush spacing, so this is
-   scoped to Rewards's own TabsList rather than changed there. */
-.tabsList {
-  margin-bottom: var(--space-4);
+.tabsRoot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.tabPanel {
+  min-height: 0;
+  outline: none;
 }
 
 /* ── Wallet Strip ── */

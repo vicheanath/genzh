@@ -110,9 +110,20 @@ export function ExperienceRoomScreen({ route, navigation }: any) {
       <View style={styles.body}>
         {current.room_type === 'poll' && <PollExperience room={current} />}
         {current.room_type === 'debate' && <DebateExperience room={current} />}
-        {current.room_type === 'game' && <GameExperience room={current} />}
-        {current.room_type === 'confession' && <ConfessionExperience room={current} />}
-        {current.room_type === 'quick_chat' && <QuickChatExperience room={current} />}
+        {(current.room_type === 'game' ||
+          current.room_type === 'truth_or_dare' ||
+          current.room_type === 'would_you_rather' ||
+          current.room_type === 'hot_takes' ||
+          current.room_type === 'trivia' ||
+          current.room_type === 'guess_who') && <GameExperience room={current} />}
+        {(current.room_type === 'confession' || current.room_type === 'anonymous_chat') && (
+          <ConfessionExperience room={current} />
+        )}
+        {(current.room_type === 'quick_chat' ||
+          current.room_type === 'random_chat' ||
+          current.room_type === 'match_interest' ||
+          current.room_type === 'friend_finder' ||
+          current.room_type === 'topic_room') && <QuickChatExperience room={current} />}
         {current.room_type === 'activity' && <ActivityExperience room={current} />}
       </View>
     </SafeAreaView>

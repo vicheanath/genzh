@@ -62,6 +62,7 @@ import {
   Smile,
   Sparkles,
   Sun,
+  Tag,
   Timer,
   Trash2,
   Trophy,
@@ -127,6 +128,7 @@ export const CheckCircleIcon: IconComponent = (props: IconProps) => <CheckCircle
 export const PlayIcon: IconComponent = (props: IconProps) => <Play size={18} {...props} />
 export const RotateCcwIcon: IconComponent = (props: IconProps) => <RotateCcw size={18} {...props} />
 export const ZapIcon: IconComponent = (props: IconProps) => <Zap size={18} {...props} />
+export const TagIcon: IconComponent = (props: IconProps) => <Tag size={18} {...props} />
 
 /* ── Actions & Entities ─────────────────────────────────────────────────── */
 export const PlusIcon: IconComponent = (props: IconProps) => <Plus size={18} {...props} />

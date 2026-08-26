@@ -125,7 +125,14 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
 
   const isHost = room.owner_id === user?.id || can(room.your_permissions, 'manage_room');
 
-  const [mode, setMode] = useState<GameMode>('trivia');
+  const initialMode: GameMode =
+    room.room_type === 'would_you_rather'
+      ? 'would_you_rather'
+      : room.room_type === 'truth_or_dare' || room.room_type === 'hot_takes'
+      ? 'truth_or_dare'
+      : 'trivia';
+
+  const [mode, setMode] = useState<GameMode>(initialMode);
 
   const [triviaDeck, setTriviaDeck] = useState<TriviaQuestion[]>(DEFAULT_TRIVIA_DECK);
   const [wyrDeck, setWyrDeck] = useState<WouldYouRatherItem[]>(DEFAULT_WYR_DECK);

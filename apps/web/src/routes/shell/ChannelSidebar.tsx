@@ -7,12 +7,16 @@ import {
   GamepadIcon,
   GemIcon,
   HashIcon,
+  HeartIcon,
+  HelpCircleIcon,
   LockIcon,
   MicIcon,
   PaletteIcon,
   RadioIcon,
   SettingsIcon,
+  ShuffleIcon,
   SparkleIcon,
+  TagIcon,
   UsersIcon,
   VideoIcon,
   VoteIcon,
@@ -30,30 +34,70 @@ import { VoiceConnectionBar } from './VoiceConnectionBar'
 import styles from './shell.module.css'
 
 const ROOM_ICONS: Record<string, typeof HashIcon> = {
+  // 💬 Conversation
   text: HashIcon,
   voice: MicIcon,
-  stage: RadioIcon,
   video: VideoIcon,
-  debate: FlameIcon,
+  stage: RadioIcon,
+
+  // 🎮 Social Games
+  truth_or_dare: SparkleIcon,
+  would_you_rather: ShuffleIcon,
+  hot_takes: FlameIcon,
   poll: VoteIcon,
+  trivia: HelpCircleIcon,
+  debate: FlameIcon,
+  guess_who: UsersIcon,
   game: GamepadIcon,
+  activity: PaletteIcon,
+
+  // 🧭 Social Discovery
+  random_chat: ZapIcon,
+  anonymous_chat: LockIcon,
+  match_interest: TagIcon,
+  friend_finder: HeartIcon,
+  topic_room: CompassIcon,
   confession: LockIcon,
   quick_chat: ZapIcon,
-  activity: PaletteIcon,
 }
 
 /**
- * How a room type is filed in the sidebar.
- *
- * The grouping lived as three inline `filter` chains that each restated the
- * membership of a group; a room type added in one and forgotten in another
- * simply vanished from the sidebar. One table means a new type is filed in one
- * place, and anything unlisted is visibly missing rather than silently gone.
+ * How a room type is filed in the sidebar across the 3 pillars:
+ * 1. Conversation (Base RTC)
+ * 2. Social Games (Interactive mini-games)
+ * 3. Social Discovery (Matchmaking & Exploration)
  */
 const CHANNEL_GROUPS: ReadonlyArray<{ heading: string; types: readonly string[] }> = [
-  { heading: 'Text Channels', types: ['text', 'quick_chat', 'confession'] },
-  { heading: 'Voice & Stage', types: ['voice', 'stage', 'video'] },
-  { heading: 'Experience Lounges', types: ['poll', 'debate', 'game', 'activity'] },
+  {
+    heading: 'Conversation',
+    types: ['text', 'voice', 'video', 'stage'],
+  },
+  {
+    heading: 'Social Games',
+    types: [
+      'truth_or_dare',
+      'would_you_rather',
+      'hot_takes',
+      'poll',
+      'trivia',
+      'debate',
+      'guess_who',
+      'game',
+      'activity',
+    ],
+  },
+  {
+    heading: 'Social Discovery',
+    types: [
+      'random_chat',
+      'anonymous_chat',
+      'match_interest',
+      'friend_finder',
+      'topic_room',
+      'confession',
+      'quick_chat',
+    ],
+  },
 ]
 
 /**

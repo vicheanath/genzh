@@ -19,6 +19,7 @@ import {
   PinIcon,
   RadioIcon,
   SearchIcon,
+  SparkleIcon,
   UsersIcon,
   VideoIcon,
   VoteIcon,
@@ -61,14 +62,29 @@ import { VoicePanel } from './VoicePanel'
 import styles from './RoomRoute.module.css'
 
 const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
+  // 💬 Conversation
   text: HashIcon,
   voice: MicIcon,
   video: VideoIcon,
   stage: RadioIcon,
-  activity: PaletteIcon,
+
+  // 🎮 Social Games
+  truth_or_dare: SparkleIcon,
+  would_you_rather: SparkleIcon,
+  hot_takes: FlameIcon,
   poll: VoteIcon,
+  trivia: SparkleIcon,
   debate: FlameIcon,
+  guess_who: UsersIcon,
   game: GamepadIcon,
+  activity: PaletteIcon,
+
+  // 🧭 Social Discovery
+  random_chat: ZapIcon,
+  anonymous_chat: LockIcon,
+  match_interest: SparkleIcon,
+  friend_finder: UsersIcon,
+  topic_room: HashIcon,
   confession: LockIcon,
   quick_chat: ZapIcon,
 }
@@ -384,9 +400,20 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
             {/* Experience Type Interactive feature engines */}
             {room.room_type === 'debate' && <DebateExperience room={room} />}
             {room.room_type === 'poll' && <PollExperience room={room} />}
-            {room.room_type === 'game' && <GameExperience room={room} />}
-            {room.room_type === 'confession' && <ConfessionExperience room={room} />}
-            {room.room_type === 'quick_chat' && <QuickChatExperience room={room} />}
+            {(room.room_type === 'game' ||
+              room.room_type === 'truth_or_dare' ||
+              room.room_type === 'would_you_rather' ||
+              room.room_type === 'hot_takes' ||
+              room.room_type === 'trivia' ||
+              room.room_type === 'guess_who') && <GameExperience room={room} />}
+            {(room.room_type === 'confession' || room.room_type === 'anonymous_chat') && (
+              <ConfessionExperience room={room} />
+            )}
+            {(room.room_type === 'quick_chat' ||
+              room.room_type === 'random_chat' ||
+              room.room_type === 'match_interest' ||
+              room.room_type === 'friend_finder' ||
+              room.room_type === 'topic_room') && <QuickChatExperience room={room} />}
             {room.room_type === 'activity' && <ActivityExperience room={room} />}
 
             <Chat

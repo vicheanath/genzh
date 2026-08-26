@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Lock, Sparkles } from 'lucide-react-native';
-import { ApiError, useCreateStandaloneRoomMutation, type RoomType } from '@genzh/shared';
+import { ApiError, useCreateStandaloneRoomMutation, type RoomFamily, type RoomType } from '@genzh/shared';
 
 import { Button } from '../../components/Button';
 import { Callout } from '../../components/Callout';
@@ -11,7 +11,7 @@ import { Sheet } from '../../components/Sheet';
 import { Switch } from '../../components/Switch';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { ROOM_CATEGORIES, ROOM_TYPES } from '../../lib/roomTypes';
+import { CHANNEL_GROUPS, ROOM_CATEGORIES, ROOM_TYPES } from '../../lib/roomTypes';
 import { Radius, Spacing, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
@@ -24,7 +24,7 @@ export interface CreateRoomSheetProps {
 }
 
 /**
- * Start a standalone room — the playground's "moment", not a community channel.
+ * Start a standalone room — the playground's "moment", organized across the 3 pillars.
  */
 export function CreateRoomSheet({
   open,
@@ -38,6 +38,7 @@ export function CreateRoomSheet({
   const toast = useToast();
   const createMutation = useCreateStandaloneRoomMutation(token);
 
+  const [activeFamily, setActiveFamily] = useState<RoomFamily>('conversation');
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [selectedType, setSelectedType] = useState<RoomType>('text');
@@ -79,6 +80,7 @@ export function CreateRoomSheet({
     }
   }
 
+  const filteredTypes = ROOM_TYPES.filter((r) => r.family === activeFamily);
 
   return (
     <Sheet open={open} onOpenChange={(next) => !next && handleClose()}>
@@ -90,7 +92,7 @@ export function CreateRoomSheet({
 
         <Text style={styles.title}>Start a moment</Text>
         <Text style={styles.description}>
-          Create an instant room to talk, debate, poll, or hang out with anyone anonymously.
+          Create an instant room to talk, play games, or discover new connections anonymously.
         </Text>
 
         {error ? <Callout tone="danger" text={error} /> : null}
@@ -111,9 +113,30 @@ export function CreateRoomSheet({
           maxLength={140}
         />
 
-        <Text style={styles.label}>Experience type</Text>
+        <Text style={styles.label}>Pillar</Text>
+        <View style={styles.pillarRow}>
+          {CHANNEL_GROUPS.map((group) => {
+            const active = activeFamily === group.family;
+            return (
+              <Pressable
+                key={group.family}
+                onPress={() => {
+                  setActiveFamily(group.family);
+                  setSelectedType(group.types[0]);
+                }}
+                style={[styles.pillarPill, active && styles.pillarPillActive]}
+              >
+                <Text style={[styles.pillarText, active && styles.pillarTextActive]}>
+                  {group.heading}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>Room Type</Text>
         <View style={styles.typeGrid}>
-          {ROOM_TYPES.map(({ type, label, icon: Icon }) => {
+          {filteredTypes.map(({ type, label, icon: Icon }) => {
             const active = selectedType === type;
             return (
               <Pressable
@@ -218,6 +241,32 @@ const makeStyles = (c: Palette) =>
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginTop: Spacing.sm,
+  },
+  pillarRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginVertical: Spacing.xs,
+  },
+  pillarPill: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
+  },
+  pillarPillActive: {
+    borderColor: c.accent,
+    backgroundColor: c.accentSubtle,
+  },
+  pillarText: {
+    color: c.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pillarTextActive: {
+    color: c.accentText,
+    fontWeight: '800',
   },
   typeGrid: {
     flexDirection: 'row',

@@ -126,9 +126,16 @@ export function GameExperience({ room }: { room: RoomWithPermissions }) {
   const isOwner = room.owner_id === user?.id || can(room.your_permissions, 'manage_room')
 
   // Creator Customized Decks
-  const [activeMode, setActiveMode] = useState<GameMode>('trivia')
+  const initialMode: GameMode =
+    room.room_type === 'would_you_rather'
+      ? 'would_you_rather'
+      : room.room_type === 'truth_or_dare' || room.room_type === 'hot_takes'
+      ? 'truth_or_dare'
+      : 'trivia'
+
+  const [activeMode, setActiveMode] = useState<GameMode>(initialMode)
   const [showBuilder, setShowBuilder] = useState(false)
-  const [builderTab, setBuilderTab] = useState<GameMode>('trivia')
+  const [builderTab, setBuilderTab] = useState<GameMode>(initialMode)
 
   // Decks state (customizable by room creator)
   const [triviaDeck, setTriviaDeck] = useState<TriviaQuestion[]>(() => {

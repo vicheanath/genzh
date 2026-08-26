@@ -30,8 +30,8 @@ export function RewardsRoute() {
 
       <WalletStrip />
 
-      <TabsRoot value={tab} onValueChange={(value) => setTab(value as string)}>
-        <TabsList className={styles.tabsList}>
+      <TabsRoot value={tab} onValueChange={(value) => setTab(value as string)} className={styles.tabsRoot}>
+        <TabsList>
           <Tab value="store">
             <StoreIcon size={15} /> Store
           </Tab>
@@ -49,19 +49,19 @@ export function RewardsRoute() {
           </Tab>
         </TabsList>
 
-        <TabPanel value="store">
+        <TabPanel value="store" className={styles.tabPanel}>
           <StoreGrid />
         </TabPanel>
-        <TabPanel value="studio">
+        <TabPanel value="studio" className={styles.tabPanel}>
           <OutfitStudioPanel />
         </TabPanel>
-        <TabPanel value="inventory">
+        <TabPanel value="inventory" className={styles.tabPanel}>
           <InventoryPanel />
         </TabPanel>
-        <TabPanel value="referrals">
+        <TabPanel value="referrals" className={styles.tabPanel}>
           <ReferralHub />
         </TabPanel>
-        <TabPanel value="history">
+        <TabPanel value="history" className={styles.tabPanel}>
           <LedgerPanel />
         </TabPanel>
       </TabsRoot>
