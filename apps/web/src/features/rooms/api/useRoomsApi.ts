@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 
 import { media, rooms } from '@/lib/api'
 import { useIsSignedIn } from '@/lib/auth'
@@ -15,6 +20,7 @@ import type {
 export const roomKeys = {
   all: ['rooms'] as const,
   discovery: (category?: string) => [...roomKeys.all, 'discovery', category ?? 'all'] as const,
+  feed: (category?: string) => [...roomKeys.all, 'feed', category ?? 'all'] as const,
   trending: () => [...roomKeys.all, 'trending'] as const,
   live: () => [...roomKeys.all, 'live'] as const,
   mine: () => [...roomKeys.all, 'mine'] as const,
@@ -41,6 +47,32 @@ export function useDiscoveryRooms(category?: string, limit?: number) {
     // Discovery is a wall of what is happening *now*; a cached one from ten
     // minutes ago is a wall of what was.
     staleTime: 30_000,
+  })
+}
+
+/**
+ * The playground feed, page by page.
+ *
+ * Infinite rather than a list: the feed is a column somebody scrolls through
+ * one room at a time, and the page after the one they are on has to already be
+ * arriving by the time they reach it.
+ *
+ * Fresher even than discovery — a card shows who is in a room *right now*, and
+ * scrolling onto a room that emptied out ten minutes ago is the one failure
+ * this screen cannot afford.
+ */
+export function usePlaygroundFeed(category?: string, pageSize = 20) {
+  const signedIn = useIsSignedIn()
+  return useInfiniteQuery({
+    queryKey: roomKeys.feed(category),
+    queryFn: ({ pageParam }) =>
+      rooms.feed(null, { category, limit: pageSize, offset: pageParam }),
+    initialPageParam: 0,
+    // `null` and `undefined` both mean the end of the feed; react-query stops
+    // on `undefined` only, so the server's `null` has to be normalised.
+    getNextPageParam: (last) => last.next_offset ?? undefined,
+    enabled: signedIn,
+    staleTime: 15_000,
   })
 }
 

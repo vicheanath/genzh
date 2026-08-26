@@ -34,7 +34,9 @@ export function CommunityRail({
 
   return (
     <nav className={styles.rail} aria-label="Communities">
-      <RailItem to="/" end label="Direct Messages">
+      {/* `/` is the playground feed now, which is not what this rail is for.
+          The community side's own front door is `/servers`. */}
+      <RailItem to="/servers" end label="Your Servers">
         <MessageSquareIcon size={20} />
       </RailItem>
 

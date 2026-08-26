@@ -4,6 +4,7 @@ import { Outlet, useLocation, useParams } from 'react-router-dom'
 import { Sheet } from '@/components/Sheet'
 import { UserSettingsModal } from '@/features/settings'
 import { useCommunitiesList, useCommunityRoomsQuery, useMyRoomsQuery } from '@/features/api'
+import { useAppMode } from '@/lib/appMode'
 import { useAppStore } from '@/lib/store'
 import { useIsMobile } from '@/lib/useMediaQuery'
 
@@ -19,9 +20,11 @@ import styles from './shell/shell.module.css'
  * The signed-in frame: a community rail, a room sidebar, and the routed screen.
  */
 export function AppShell() {
-  const { communityId } = useParams<{ communityId?: string }>()
+  const { communityId, roomId } = useParams<{ communityId?: string; roomId?: string }>()
   const isMobile = useIsMobile()
   const location = useLocation()
+
+  const { mode } = useAppMode()
 
   const addCommunityOpen = useAppStore((s) => s.addCommunityOpen)
   const openAddCommunity = useAppStore((s) => s.openAddCommunity)
@@ -46,6 +49,22 @@ export function AppShell() {
   // Direct messages and private playground rooms, for the left sidebar.
   const myRooms = useMyRoomsQuery()
 
+  /*
+   * The playground is full-bleed: no community rail, no channel sidebar, no
+   * title bar. That chrome is the community side's — a rail of servers over a
+   * screen about rooms nobody belongs to would be describing the wrong app.
+   *
+   * `/rooms/:id` is the one address the path alone cannot classify: it covers
+   * both a throwaway room and a direct conversation, and a DM belongs to the
+   * side of the app with the sidebar. So which it is comes from the room. Until
+   * that list has loaded the fuller shell wins — a screen that gains navigation
+   * a moment late is better than one that has none and might have needed it.
+   */
+  const roomIsDirect =
+    myRooms.data?.some((room) => room.id === roomId && room.category === 'dm') ?? false
+  const playground =
+    mode === 'playground' && (!roomId || (myRooms.isSuccess && !roomIsDirect))
+
   const navigation = (
     <>
       <CommunityRail
@@ -66,9 +85,9 @@ export function AppShell() {
 
   return (
     <div className={styles.shell}>
-      {!isMobile && <div className={styles.navigation}>{navigation}</div>}
+      {!isMobile && !playground && <div className={styles.navigation}>{navigation}</div>}
 
-      {isMobile && (
+      {isMobile && !playground && (
         <Sheet open={drawerOpen} onOpenChange={setDrawerOpen} title="Navigation">
           <div className={styles.drawerBody}>{navigation}</div>
         </Sheet>
@@ -76,7 +95,7 @@ export function AppShell() {
 
       <main className={styles.content}>
         <GlobalBroadcastBanner />
-        {isMobile && (
+        {isMobile && !playground && (
           <MobileTopBar
             title={
               communities.data?.find((item) => item.id === communityId)?.name ?? 'genzh'

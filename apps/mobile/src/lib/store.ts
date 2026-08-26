@@ -4,7 +4,7 @@ import { DEFAULT_ACCENT, type Uuid } from '@genzh/shared';
 
 import type { SettingsTab } from '../features/settings/tabs';
 
-export type FriendTab = 'online' | 'all' | 'pending' | 'blocked' | 'add';
+export type FriendTab = 'chats' | 'online' | 'all' | 'pending' | 'blocked' | 'add';
 
 /**
  * The app's shared UI state.
@@ -122,7 +122,7 @@ export const useAppStore = createStore<AppState>((set) => ({
   openProfile: (userId: Uuid) => set({ profileUserId: userId, profileOpen: true }),
   closeProfile: () => set({ profileOpen: false, profileUserId: null }),
 
-  friendsTab: 'all',
+  friendsTab: 'chats',
   setFriendsTab: (tab: FriendTab) => set({ friendsTab: tab }),
 
   isMuted: false,

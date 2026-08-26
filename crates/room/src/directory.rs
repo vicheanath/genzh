@@ -6,7 +6,7 @@
 //! is what makes that obvious rather than something you have to check.
 
 use genzh_domain::room::{Room, RoomType};
-use genzh_domain::{UserId};
+use genzh_domain::{RoomId, UserId};
 use genzh_infrastructure::{ServiceError, ServiceResult};
 
 use crate::repository::RoomRepository;
@@ -36,6 +36,23 @@ impl RoomDirectory {
         limit: i64,
     ) -> ServiceResult<Vec<Room>> {
         Ok(self.rooms.list_discovery(category, limit).await?)
+    }
+
+    /// One page of the playground feed, with a few faces from each room.
+    ///
+    /// Two queries, not one per room: the feed is a column of cards that each
+    /// want participants on them, and resolving those room by room is the
+    /// waterfall this endpoint exists to avoid.
+    pub async fn feed(
+        &self,
+        category: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> ServiceResult<(Vec<Room>, Vec<(RoomId, UserId)>)> {
+        let rooms = self.rooms.list_feed(category, limit, offset).await?;
+        let ids: Vec<RoomId> = rooms.iter().map(|room| room.id).collect();
+        let faces = self.rooms.preview_participants(&ids, 5).await?;
+        Ok((rooms, faces))
     }
 
     /// List trending rooms.

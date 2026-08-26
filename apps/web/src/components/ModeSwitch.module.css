@@ -1,0 +1,54 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.pill:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+}
+
+/*
+ * Its own ground, for the feed. The card behind the control is a different
+ * colour on every room, so a themed surface would disappear into half of them.
+ */
+.overlay {
+  background: rgb(12 12 10 / 55%);
+  border-color: rgb(255 255 255 / 22%);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.overlay:hover {
+  background: rgb(12 12 10 / 72%);
+  border-color: rgb(255 255 255 / 34%);
+}
+
+.tagline {
+  color: var(--color-text-subtle);
+  font-weight: 600;
+}
+
+.overlay .tagline {
+  color: rgb(255 255 255 / 68%);
+}
+
+@media (max-width: 720px) {
+  .tagline {
+    display: none;
+  }
+}

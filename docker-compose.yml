@@ -53,18 +53,53 @@ services:
       API_BIND: 0.0.0.0:8080
 
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
 
-      # LiveKit: this process signs access tokens with the same key/secret
-      # LiveKit verifies with. LIVEKIT_URL is the address a *browser* dials —
-      # a compose-internal hostname would not resolve outside the network, so
-      # this must be reachable from wherever the web client runs.
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
-      LIVEKIT_URL: ${LIVEKIT_URL:-ws://127.0.0.1:7880}
+      # How clients reach the media server. This is the address a *browser*
+      # dials, not a compose-internal hostname.
+      MEDIA_SERVER_URL: ${MEDIA_SERVER_URL:-ws://127.0.0.1:8081/ws/media}
+
+      STUN_URL: ${STUN_URL:-stun:127.0.0.1:3478}
+      TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
+      TURN_USERNAME: ${TURN_USERNAME:-genzh}
+      TURN_PASSWORD: ${TURN_PASSWORD:-secretpass}
 
       RUST_LOG: ${RUST_LOG:-info,api=debug}
     ports:
       - "8080:8080"
+
+  media:
+    build:
+      context: .
+      dockerfile: Dockerfile.media
+    environment:
+      # The *only* secret this process gets. No database, no user JWT key.
+      MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
+      MEDIA_BIND: 0.0.0.0:8081
+
+      STUN_URL: ${STUN_URL:-stun:127.0.0.1:3478}
+      TURN_URL: ${TURN_URL:-turn:127.0.0.1:3478?transport=udp}
+      TURN_USERNAME: ${TURN_USERNAME:-genzh}
+      TURN_PASSWORD: ${TURN_PASSWORD:-secretpass}
+
+      RUST_LOG: ${RUST_LOG:-info,media=debug}
+    ports:
+      - "8081:8081"
+      # Pinning the UDP range makes bridge networking workable. On Linux,
+      # `network_mode: host` is simpler and faster; on Docker Desktop it is not
+      # available, so this is the portable option.
+      - "40000-40100:40000-40100/udp"
+
+  turn:
+    image: coturn/coturn:alpine
+    restart: unless-stopped
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "49152-49200:49152-49200/udp"
 
   web:
     build:

@@ -30,6 +30,8 @@ import { CommunitySettingsRoute } from './routes/CommunitySettingsRoute'
 import { ExploreRoute } from './routes/ExploreRoute'
 import { FriendsRoute } from './routes/FriendsRoute'
 import { HomeRoute } from './routes/HomeRoute'
+import { PlaygroundFeedRoute } from './features/playground'
+import { ServersRoute } from './routes/ServersRoute'
 import { RewardsRoute } from './features/rewards'
 import { NotificationsRoute } from './routes/NotificationsRoute'
 import { RoomRoute } from './routes/RoomRoute'
@@ -133,15 +135,20 @@ function Router() {
       <Route path="/join" element={<Navigate to="/rewards" replace />} />
 
       <Route element={<AppShell />}>
-        <Route path="/" element={<HomeRoute />} />
+        {/* The two halves of the product, each at its own front door. The
+            playground is the app's landing: a column of rooms to drop into.
+            The community side is one switch away and keeps the full shell. */}
+        <Route path="/" element={<PlaygroundFeedRoute />} />
+        <Route path="/browse" element={<HomeRoute />} />
+        <Route path="/servers" element={<ServersRoute />} />
         <Route path="/friends" element={<FriendsRoute />} />
         <Route path="/explore" element={<ExploreRoute />} />
         <Route path="/rewards" element={<RewardsRoute />} />
         {/* Phone destinations. Desktop shows both as chrome — a popover off the
             user bar, and the user bar itself — so visiting the URL there is
             redirected rather than rendering a second, worse version of it. */}
-        <Route path="/notifications" element={<MobileOnly to="/"><NotificationsRoute /></MobileOnly>} />
-        <Route path="/me" element={<MobileOnly to="/"><AccountRoute /></MobileOnly>} />
+        <Route path="/notifications" element={<MobileOnly to="/servers"><NotificationsRoute /></MobileOnly>} />
+        <Route path="/me" element={<MobileOnly to="/servers"><AccountRoute /></MobileOnly>} />
         {/* The console redirects a non-staff visitor rather than 404ing, and
             the server refuses every endpoint behind it regardless — this route
             decides what to render, not who is allowed. */}

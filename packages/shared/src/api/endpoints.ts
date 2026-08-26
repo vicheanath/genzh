@@ -26,6 +26,7 @@ import type {
   MediaJoinResponse,
   Message,
   MessagePage,
+  PlaygroundFeedResponse,
   Profile,
   PublicProfile,
   ReactionSummary,
@@ -291,6 +292,26 @@ export const rooms = {
     if (limit) params.set('limit', String(limit))
     const query = params.toString() ? `?${params.toString()}` : ''
     return request<DiscoveryResponse>(`/api/v1/rooms/discovery${query}`, { token })
+  },
+
+  /**
+   * One page of the throwaway-room feed.
+   *
+   * `offset` rather than a cursor because the ordering is a live one — rooms
+   * fill up and empty out between pages — so there is no stable key to page
+   * from. The duplicates that costs are cheap to drop client-side; a cursor
+   * into a shifting list would silently skip rooms instead.
+   */
+  feed: (
+    token: string | null,
+    options: { category?: string; limit?: number; offset?: number } = {},
+  ) => {
+    const params = new URLSearchParams()
+    if (options.category) params.set('category', options.category)
+    if (options.limit) params.set('limit', String(options.limit))
+    if (options.offset) params.set('offset', String(options.offset))
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return request<PlaygroundFeedResponse>(`/api/v1/rooms/feed${query}`, { token })
   },
 
   trending: (token: string | null) =>

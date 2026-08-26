@@ -12,6 +12,7 @@
 pub mod ephemeral;
 pub mod invites;
 pub mod notifications;
+pub mod playground;
 pub mod security;
 pub mod sessions;
 pub mod support;
@@ -25,6 +26,7 @@ use genzh_infrastructure::Sweep;
 pub use ephemeral::ExpireEphemeralRooms;
 pub use invites::PruneExpiredInvites;
 pub use notifications::PruneOldNotifications;
+pub use playground::ReapEmptyPlaygroundRooms;
 pub use security::PruneExpiredBans;
 pub use sessions::PruneExpiredSessions;
 pub use support::AutoCloseStaleTickets;
@@ -47,6 +49,7 @@ pub const EXPECTED_JOBS: &[&str] = &[
     "invites.prune_expired",
     "notifications.prune_old",
     "rooms.expire_ephemeral",
+    "rooms.reap_empty_playground",
     "security.prune_expired_bans",
     "stores.sweep_volatile",
     "support.auto_close_stale",
@@ -81,6 +84,11 @@ pub async fn register(state: &AppState) -> CronSchedulerResult<()> {
         Arc::new(ExpireEphemeralRooms::new(
             state.rooms.clone(),
             timings.ephemeral_room_expire_interval,
+        )),
+        Arc::new(ReapEmptyPlaygroundRooms::new(
+            state.rooms.clone(),
+            timings.playground_reap_interval,
+            timings.playground_empty_grace,
         )),
         Arc::new(PruneExpiredInvites::new(
             state.invites.clone(),

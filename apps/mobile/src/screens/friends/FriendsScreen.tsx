@@ -18,7 +18,9 @@ import {
   formatRelative,
   useBlockedUsersVM,
   useFriendsVM,
+  useMyRoomsQuery,
   useOpenDMMutation,
+  type UserRoom,
   type Uuid,
 } from '@genzh/shared';
 
@@ -27,6 +29,7 @@ import { Callout } from '../../components/Callout';
 import { EmptyState } from '../../components/EmptyState';
 import { Input } from '../../components/Input';
 import { Menu } from '../../components/Menu';
+import { ModeSwitch } from '../../components/ModeSwitch';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { SkeletonRows } from '../../components/Skeleton';
 import { Tabs } from '../../components/Tabs';
@@ -72,9 +75,18 @@ export function FriendsScreen({ navigation }: any) {
   const blockedVM = useBlockedUsersVM(token);
   const openDMMutation = useOpenDMMutation(token);
 
+  // Conversations you already have, which is a different question from who
+  // your friends are: a DM outlives the friendship it started as, and one with
+  // somebody you never added is still a conversation you are in.
+  const myRoomsQuery = useMyRoomsQuery(token);
+  const directRooms: UserRoom[] = (myRoomsQuery.data ?? []).filter(
+    (room) => room.category === 'dm',
+  );
+
   const blockedUsers = blockedVM.blockedUsers;
 
   const allIds = [
+    ...directRooms.flatMap((room) => (room.dm_peer_id ? [room.dm_peer_id] : [])),
     ...friendsVM.friendIds,
     ...friendsVM.pendingRequests.map((r) => r.requester_id),
     ...friendsVM.sentRequests.map((r) => r.addressee_id),
@@ -190,6 +202,7 @@ export function FriendsScreen({ navigation }: any) {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScreenHeader
         title="Friends"
+        actions={<ModeSwitch />}
         below={
           <View style={styles.strip}>
             <Tabs
@@ -197,6 +210,11 @@ export function FriendsScreen({ navigation }: any) {
               onValueChange={(next) => setTab(next as FriendTab)}
               scrollable
               items={[
+                {
+                  value: 'chats',
+                  label: 'Chats',
+                  badge: directRooms.length || undefined,
+                },
                 { value: 'online', label: 'Online' },
                 { value: 'all', label: 'All', badge: friendsVM.friendIds.length || undefined },
                 { value: 'pending', label: 'Pending', badge: pendingCount || undefined },
@@ -209,7 +227,7 @@ export function FriendsScreen({ navigation }: any) {
       />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {tab !== 'add' && (
+        {tab !== 'add' && tab !== 'chats' && (
           <View style={styles.searchWrap}>
             <Search size={16} color={c.textDim} />
             <TextInput
@@ -219,6 +237,50 @@ export function FriendsScreen({ navigation }: any) {
               placeholder="Search friends…"
               placeholderTextColor={c.textDim}
             />
+          </View>
+        )}
+
+        {tab === 'chats' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Direct messages — {directRooms.length}
+            </Text>
+
+            {myRoomsQuery.isLoading ? <SkeletonRows rows={3} /> : null}
+
+            {!myRoomsQuery.isLoading && directRooms.length === 0 ? (
+              <EmptyState
+                icon={<MessageSquare size={26} color={c.textDim} />}
+                title="No conversations yet"
+                description="Open a friend's menu and start a direct chat."
+                actionLabel="See your friends"
+                onAction={() => setTab('all')}
+              />
+            ) : null}
+
+            {directRooms.map((room) => {
+              // A DM's stored name is fixed to whoever opened it, so it names
+              // the wrong person for one of the two people in it. The server
+              // resolves the peer per caller as `dm_peer_id`.
+              const peer = room.dm_peer_id ? lookup(room.dm_peer_id) : null;
+              const label = peer?.display_name ?? room.name.replace(/^DM:\s*/, '');
+
+              return (
+                <UserRow
+                  key={room.id}
+                  name={label}
+                  avatarUrl={peer?.avatar_url}
+                  accentColor={peer?.accent_color}
+                  presence={
+                    room.dm_peer_id && isOnline(room.dm_peer_id) ? 'online' : 'offline'
+                  }
+                  secondary={peer ? `@${peer.handle}` : 'Direct message'}
+                  onSelect={() =>
+                    navigation.navigate('RoomChat', { roomId: room.id, roomName: label })
+                  }
+                />
+              );
+            })}
           </View>
         )}
 

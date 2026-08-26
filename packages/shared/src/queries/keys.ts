@@ -40,6 +40,8 @@ export const queryKeys = {
     participants: (id: Uuid) => [...queryKeys.rooms.detail(id), 'participants'] as const,
     /** Public rooms to browse, optionally narrowed to one category. */
     discovery: (category?: string) => [...queryKeys.rooms.all, 'discovery', { category }] as const,
+    /** The swipeable column of throwaway rooms, optionally narrowed to one category. */
+    feed: (category?: string) => [...queryKeys.rooms.all, 'feed', { category }] as const,
     /** The rooms you are already in, direct messages included. */
     mine: () => [...queryKeys.rooms.all, 'mine'] as const,
   },

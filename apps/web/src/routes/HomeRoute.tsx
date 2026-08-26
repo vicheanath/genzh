@@ -1,32 +1,17 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
-import {
-  CompassIcon,
-  FlameIcon,
-  GamepadIcon,
-  HashIcon,
-  LockIcon,
-  MicIcon,
-  PaletteIcon,
-  PlusIcon,
-  RadioIcon,
-  SparkleIcon,
-  UsersIcon,
-  VideoIcon,
-  VoteIcon,
-  ZapIcon,
-} from '@/components/Icons'
+import { LockIcon, PlusIcon, SparkleIcon, UsersIcon } from '@/components/Icons'
+import { ModeSwitch } from '@/components/ModeSwitch'
 import { Skeleton } from '@/components/Skeleton'
 import { Spinner } from '@/components/Spinner'
 import { useToast } from '@/components/Toast'
 import { Toggle, ToggleGroup } from '@/components/ToggleGroup'
 import type { Room } from '@/lib/api'
+import { roomTypeIcon, roomTypeLabel } from '@/lib/roomTypes'
 import {
-  useCommunitiesList,
   useDiscoveryRooms,
   useRandomRoomMutation,
   useRecommendedRooms,
@@ -35,19 +20,6 @@ import {
 import { CreatePlaygroundRoomDialog } from './CreatePlaygroundRoomDialog'
 import { RecommendationReason } from './RecommendationReason'
 import styles from './HomeRoute.module.css'
-
-const ROOM_TYPE_ICONS: Record<string, typeof HashIcon> = {
-  text: HashIcon,
-  voice: MicIcon,
-  video: VideoIcon,
-  stage: RadioIcon,
-  activity: PaletteIcon,
-  poll: VoteIcon,
-  debate: FlameIcon,
-  game: GamepadIcon,
-  confession: LockIcon,
-  quick_chat: ZapIcon,
-}
 
 /** Stands in for "no filter" — a toggle group needs a value for every option. */
 const ALL_CATEGORIES = 'all'
@@ -59,7 +31,6 @@ export function HomeRoute() {
   const [createRoomOpen, setCreateRoomOpen] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
-  const communities = useCommunitiesList()
   const discovery = useDiscoveryRooms(selectedCategory || undefined)
   const suggested = useRecommendedRooms(selectedCategory || undefined, 6)
   const findRandomRoom = useRandomRoomMutation()
@@ -102,9 +73,11 @@ export function HomeRoute() {
             <div className={styles.greeting}>
               Anonymous Social Playground
             </div>
-            <h1 className={styles.title}>Don't join communities. Join moments.</h1>
+            <h1 className={styles.title}>Every moment happening right now.</h1>
             <p className={styles.lede}>
-              Discover vibrant live conversations, poll strangers, drop confessions, or debate unpopular opinions anonymously.
+              The same rooms the feed shows you one at a time, laid out to pick
+              from. Live conversations, polls, confessions and debates — all of
+              them temporary.
             </p>
           </div>
 
@@ -126,6 +99,10 @@ export function HomeRoute() {
               <PlusIcon size={16} />
               Start a Moment
             </Button>
+
+            {/* The door out of this half of the app, in the one place on the
+                page that is about where you are rather than what is on. */}
+            <ModeSwitch />
           </div>
         </section>
 
@@ -203,7 +180,7 @@ export function HomeRoute() {
           {discovery.data?.rooms && discovery.data.rooms.length > 0 && (
             <div className={styles.roomsGrid}>
               {(discovery.data.rooms as Room[]).map((room: Room) => {
-                const Icon = ROOM_TYPE_ICONS[room.room_type] ?? HashIcon
+                const Icon = roomTypeIcon(room.room_type)
                 return (
                   <Link
                     key={room.id}
@@ -213,7 +190,7 @@ export function HomeRoute() {
                     <div className={styles.roomCardHead}>
                       <span className={styles.roomTypeTag}>
                         <Icon size={14} />
-                        {room.room_type.replace('_', ' ')}
+                        {roomTypeLabel(room.room_type)}
                       </span>
                       <span className={styles.participantCount}>
                         <UsersIcon size={12} />
@@ -248,73 +225,6 @@ export function HomeRoute() {
           )}
         </section>
 
-        {/* 👥 Your Persistent Communities */}
-        <section>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Your Communities</h2>
-            <Link to="/explore">
-              <Button size="sm" variant="ghost">
-                <CompassIcon size={15} />
-                Explore Servers
-              </Button>
-            </Link>
-          </div>
-
-          {communities.isLoading && (
-            <div className={styles.grid}>
-              {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className={styles.card}>
-                  <Skeleton circle width="2.375rem" height="2.375rem" />
-                  <div className={styles.cardBody} style={{ flex: 1 }}>
-                    <Skeleton width="70%" height="1rem" />
-                    <div style={{ marginTop: '0.35rem' }}>
-                      <Skeleton width="90%" height="0.75rem" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!communities.isLoading && (!communities.data || communities.data.length === 0) && (
-            <div className={styles.empty}>
-              <span className={styles.emptyMark} aria-hidden>
-                <CompassIcon size={22} />
-              </span>
-              <div>
-                <p>You haven't joined any persistent communities yet.</p>
-                <div style={{ marginTop: 'var(--space-2)' }}>
-                  <Link to="/explore">
-                    <Button size="sm">
-                      <CompassIcon size={15} />
-                      Browse Communities
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {communities.data && communities.data.length > 0 && (
-            <div className={styles.grid}>
-              {communities.data.map((community) => (
-                <Link
-                  key={community.id}
-                  to={`/c/${community.id}`}
-                  className={styles.card}
-                >
-                  <Avatar name={community.name} src={community.icon_url} size="md" />
-                  <div className={styles.cardBody}>
-                    <div className={styles.cardName}>{community.name}</div>
-                    <div className={styles.cardDescription}>
-                      {community.description ?? 'Server'}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
 
       <CreatePlaygroundRoomDialog
@@ -367,7 +277,7 @@ function ForYouSection({
 
       <div className={styles.roomsGrid}>
         {items.map((room) => {
-          const Icon = ROOM_TYPE_ICONS[room.room_type] ?? HashIcon
+          const Icon = roomTypeIcon(room.room_type)
           return (
             <Link
               key={room.id}
@@ -377,7 +287,7 @@ function ForYouSection({
               <div className={styles.roomCardHead}>
                 <span className={styles.roomTypeTag}>
                   <Icon size={14} />
-                  {room.room_type.replace('_', ' ')}
+                  {roomTypeLabel(room.room_type)}
                 </span>
                 <span className={styles.participantCount}>
                   <UsersIcon size={12} />

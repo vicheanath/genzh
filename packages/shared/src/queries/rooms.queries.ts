@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { rooms } from '../api/endpoints'
 import type { RoomStatus, RoomType, RoomVisibility, Uuid } from '../api/types'
 import { queryKeys } from './keys'
@@ -64,6 +69,33 @@ export function useDiscoveryQuery(token: string | null, category?: string, limit
     },
     enabled: Boolean(token),
     staleTime: 30_000,
+  })
+}
+
+/**
+ * The playground feed, page by page.
+ *
+ * Infinite rather than a list: the feed is a column somebody swipes down
+ * through, and the page after the one they are on has to already be arriving
+ * by the time they reach it.
+ *
+ * Fresher even than discovery — a card shows who is in a room *right now*, and
+ * swiping onto a room that emptied out ten minutes ago is the one failure this
+ * screen cannot afford.
+ */
+export function useFeedQuery(token: string | null, category?: string, pageSize = 20) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.rooms.feed(category),
+    queryFn: ({ pageParam }) => {
+      if (!token) throw new Error('Missing token')
+      return rooms.feed(token, { category, limit: pageSize, offset: pageParam })
+    },
+    initialPageParam: 0,
+    // `null` and `undefined` both mean the end of the feed; react-query stops
+    // on `undefined` only, so the server's `null` has to be normalised.
+    getNextPageParam: (last) => last.next_offset ?? undefined,
+    enabled: Boolean(token),
+    staleTime: 15_000,
   })
 }
 

@@ -159,9 +159,9 @@ export function CreateRoomSheet({
           options={ROOM_CATEGORIES}
         />
 
-        <Text style={styles.label}>Duration</Text>
+        <Text style={styles.label}>Ends after</Text>
         <Select
-          label="Duration"
+          label="Ends after"
           value={durationMinutes}
           onValueChange={setDurationMinutes}
           options={[
@@ -171,6 +171,13 @@ export function CreateRoomSheet({
             { value: '1440', label: '24 hours' },
           ]}
         />
+        {/* Said out loud rather than left to be discovered. Every room on this
+            side of the app ends — the only choice is when, and a room everyone
+            walks out of ends sooner than that. */}
+        <Text style={styles.hint}>
+          Playground rooms are temporary. This one closes when the time is up, or
+          shortly after the last person leaves.
+        </Text>
 
         <View style={styles.toggleRow}>
           <View style={styles.toggleInfo}>
@@ -241,6 +248,12 @@ const makeStyles = (c: Palette) =>
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginTop: Spacing.sm,
+  },
+  hint: {
+    color: c.textSubtle,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: -Spacing.xs,
   },
   pillarRow: {
     flexDirection: 'row',

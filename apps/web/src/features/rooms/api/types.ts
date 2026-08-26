@@ -1,6 +1,8 @@
 import type {
   CallEndReason,
   DiscoveryResponse,
+  FeedRoom,
+  PlaygroundFeedResponse,
   MediaJoinResponse,
   Permission,
   Room,
@@ -53,6 +55,8 @@ export interface UpdateRoomInput {
 export type {
   CallEndReason,
   DiscoveryResponse,
+  FeedRoom,
+  PlaygroundFeedResponse,
   MediaJoinResponse,
   Permission,
   Room,

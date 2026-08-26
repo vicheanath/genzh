@@ -298,6 +298,32 @@ export interface NotificationPage {
   unread: number
 }
 
+/**
+ * One card in the playground feed.
+ *
+ * The room plus the people already inside it — which is the whole decision the
+ * feed asks a reader to make before swiping past or dropping in. Nothing about
+ * permissions: you have not joined yet.
+ */
+export interface FeedRoom extends Room {
+  /** Whoever started it, when they still have an account. */
+  host?: PublicProfile | null
+  /**
+   * A few of the people in the room right now, oldest joiner first.
+   *
+   * Anonymous participants are never among them — a room that hides who is
+   * inside must not show them on the card outside.
+   */
+  faces: PublicProfile[]
+}
+
+/** One page of the playground feed. */
+export interface PlaygroundFeedResponse {
+  rooms: FeedRoom[]
+  /** Offset to ask for next; absent at the end of the feed. */
+  next_offset?: number | null
+}
+
 export interface DiscoveryResponse {
   trending: Room[]
   live_now: Room[]

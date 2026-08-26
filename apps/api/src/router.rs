@@ -262,6 +262,7 @@ pub fn build(state: AppState) -> Router {
         )
         .route("/rooms/dm/{user_id}", post(routes::rooms::get_or_create_dm))
         .route("/rooms/discovery", get(routes::rooms::discovery))
+        .route("/rooms/feed", get(routes::bff::playground_feed))
         .route("/rooms/mine", get(routes::rooms::list_mine))
         .route("/rooms/trending", get(routes::rooms::trending))
         .route("/rooms/live", get(routes::rooms::live))

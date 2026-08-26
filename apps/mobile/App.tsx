@@ -7,6 +7,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './src/lib/queryClient';
 import { ToastProvider } from './src/components/Toast';
 import { ConfirmProvider } from './src/components/useConfirm';
+import { AppModeProvider } from './src/context/AppModeContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { ChatProvider } from './src/context/ChatContext';
 import { VoiceProvider } from './src/context/VoiceContext';
@@ -48,6 +49,7 @@ export default function App() {
         <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
+            <AppModeProvider>
             <PresenceProvider>
               <NotificationsProvider>
                 <ChatProvider>
@@ -62,6 +64,7 @@ export default function App() {
                 </ChatProvider>
               </NotificationsProvider>
             </PresenceProvider>
+            </AppModeProvider>
           </AuthProvider>
         </QueryClientProvider>
         </ThemeProvider>

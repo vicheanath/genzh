@@ -108,6 +108,11 @@ pub struct CronConfig {
     /// How often expired ephemeral rooms are ended.
     pub ephemeral_room_expire_interval: Duration,
 
+    /// How often empty playground rooms are reaped, and how long one may sit
+    /// empty before it counts as over.
+    pub playground_reap_interval: Duration,
+    pub playground_empty_grace: Duration,
+
     /// How often expired community invites are deleted.
     pub invite_prune_interval: Duration,
 
@@ -131,6 +136,12 @@ impl CronConfig {
             store_sweep_interval: seconds("CRON_STORE_SWEEP_SECONDS", 300)?,
 
             ephemeral_room_expire_interval: seconds("CRON_EPHEMERAL_ROOM_EXPIRE_SECONDS", 30)?,
+
+            playground_reap_interval: seconds("CRON_PLAYGROUND_REAP_SECONDS", 60)?,
+            playground_empty_grace: seconds(
+                "CRON_PLAYGROUND_EMPTY_GRACE_SECONDS",
+                genzh_domain::room::PLAYGROUND_EMPTY_GRACE_SECONDS as u64,
+            )?,
 
             invite_prune_interval: seconds("CRON_INVITE_PRUNE_SECONDS", 3600)?,
 

@@ -21,6 +21,23 @@ pub const MEDIA_ROOM_MAX_PARTICIPANTS: i32 = 50;
 /// sidebar grouping and media joins all key off it.
 pub const DIRECT_CATEGORY: &str = "dm";
 
+/// How long a playground room lives when its creator picks no duration.
+///
+/// The throwaway side of the product has no concept of a room that is still
+/// there tomorrow: a moment nobody set an end for still ends. Community
+/// channels never get this — they are the persistent half.
+pub const DEFAULT_PLAYGROUND_TTL_MINUTES: i64 = 360;
+
+/// The longest duration a playground room may be created with.
+pub const MAX_PLAYGROUND_TTL_MINUTES: i64 = 24 * 60;
+
+/// How long a playground room may sit empty before it is ended.
+///
+/// Separate from the TTL, and deliberately short: an empty throwaway room is a
+/// dead one, but not the instant its count reaches zero — that would close a
+/// room out from under the person reconnecting after a dropped call.
+pub const PLAYGROUND_EMPTY_GRACE_SECONDS: i64 = 180;
+
 /// Top-level pillar/family a room belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -271,6 +288,19 @@ impl Room {
         self.category == DIRECT_CATEGORY
     }
 
+    /// Is this one of the throwaway rooms on the playground side of the app?
+    ///
+    /// The whole product splits here. A room belonging to a community is a
+    /// channel: it persists, it keeps its history, and nothing reaps it. A
+    /// standalone room that is not a direct conversation is a *moment* — it is
+    /// discoverable by strangers, it expires, and it is ended once everyone
+    /// has left. Asked as a question about the room rather than stored as a
+    /// flag, because the two facts that decide it are already columns and a
+    /// third one could disagree with them.
+    pub fn is_playground(&self) -> bool {
+        self.community_id.is_none() && !self.is_direct()
+    }
+
     /// Reject media joins on non-media rooms early, with a typed error.
     ///
     /// A direct conversation passes despite being a text room. Calling someone
@@ -424,6 +454,32 @@ mod tests {
 
         assert!(dm.is_direct());
         assert!(dm.require_media().is_ok());
+    }
+
+    #[test]
+    fn a_community_channel_is_never_a_playground_room() {
+        let channel = room(RoomType::Text);
+        assert!(channel.community_id.is_some());
+        assert!(!channel.is_playground());
+    }
+
+    #[test]
+    fn a_standalone_public_room_is_a_playground_room() {
+        let mut moment = room(RoomType::TruthOrDare);
+        moment.community_id = None;
+
+        assert!(moment.is_playground());
+    }
+
+    #[test]
+    fn a_direct_conversation_is_not_a_playground_room() {
+        // Standalone like a moment, but it must never be reaped for being
+        // empty or shown to strangers in the feed.
+        let mut dm = room(RoomType::Text);
+        dm.community_id = None;
+        dm.category = DIRECT_CATEGORY.to_string();
+
+        assert!(!dm.is_playground());
     }
 
     #[test]

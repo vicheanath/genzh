@@ -15,7 +15,7 @@ use crate::middleware::CurrentUser;
 use crate::state::AppState;
 
 /// What one user looks like to another.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PublicProfile {
     /// Account id.
     pub id: UserId,
@@ -31,6 +31,20 @@ pub struct PublicProfile {
     pub avatar_effect: Option<String>,
     /// Accent colour.
     pub accent_color: Option<String>,
+}
+
+impl From<genzh_auth::PublicIdentity> for PublicProfile {
+    fn from(identity: genzh_auth::PublicIdentity) -> Self {
+        Self {
+            id: identity.id,
+            handle: identity.handle,
+            display_name: identity.display_name,
+            bio: identity.bio,
+            avatar_url: identity.avatar_url,
+            avatar_effect: identity.avatar_effect,
+            accent_color: identity.accent_color,
+        }
+    }
 }
 
 /// `GET /api/v1/users/{id}`

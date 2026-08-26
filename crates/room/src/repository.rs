@@ -197,6 +197,9 @@ impl RoomRepository {
                  FROM rooms
                  WHERE visibility = 'public'::room_visibility
                    AND status = 'active'::room_status
+                   AND community_id IS NULL
+                   AND category <> 'dm'
+                   AND (expires_at IS NULL OR expires_at > now())
                    AND category = $1
                  ORDER BY current_participants DESC, created_at DESC
                  LIMIT $2",
@@ -215,6 +218,9 @@ impl RoomRepository {
                  FROM rooms
                  WHERE visibility = 'public'::room_visibility
                    AND status = 'active'::room_status
+                   AND community_id IS NULL
+                   AND category <> 'dm'
+                   AND (expires_at IS NULL OR expires_at > now())
                  ORDER BY current_participants DESC, created_at DESC
                  LIMIT $1",
             )
@@ -223,6 +229,48 @@ impl RoomRepository {
             .await
             .map_err(RepositoryError::from)
         }
+    }
+
+    /// One page of the playground feed.
+    ///
+    /// Ordered for swiping rather than for browsing: a room with somebody in it
+    /// beats an empty one outright, and after that the busiest and the freshest
+    /// come first. `offset` is what makes it a feed at all — the client asks for
+    /// the next page when it nears the end of the one it has, so the column of
+    /// rooms keeps going instead of stopping at the first screenful.
+    ///
+    /// Scoped the same way discovery is: standalone public rooms that have not
+    /// expired. A community channel is not a moment and never appears here.
+    pub async fn list_feed(
+        &self,
+        category: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> RepositoryResult<Vec<Room>> {
+        sqlx::query_as(
+            "SELECT id, community_id, owner_id, name, topic, category, room_type,
+                    visibility, status, is_anonymous, position, max_participants,
+                    current_participants, started_at, expires_at, ended_at,
+                    created_at, updated_at
+             FROM rooms
+             WHERE visibility = 'public'::room_visibility
+               AND status = 'active'::room_status
+               AND community_id IS NULL
+               AND category <> 'dm'
+               AND (expires_at IS NULL OR expires_at > now())
+               AND ($1::text IS NULL OR category = $1)
+             ORDER BY (current_participants > 0) DESC,
+                      current_participants DESC,
+                      created_at DESC,
+                      id
+             LIMIT $2 OFFSET $3",
+        )
+        .bind(category)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
     }
 
     /// List trending rooms by engagement score.
@@ -235,6 +283,9 @@ impl RoomRepository {
              FROM rooms
              WHERE visibility = 'public'::room_visibility
                AND status = 'active'::room_status
+               AND community_id IS NULL
+               AND category <> 'dm'
+               AND (expires_at IS NULL OR expires_at > now())
              ORDER BY current_participants DESC, created_at DESC
              LIMIT $1",
         )
@@ -254,6 +305,9 @@ impl RoomRepository {
              FROM rooms
              WHERE visibility = 'public'::room_visibility
                AND status = 'active'::room_status
+               AND community_id IS NULL
+               AND category <> 'dm'
+               AND (expires_at IS NULL OR expires_at > now())
                AND room_type IN ('voice'::room_type, 'video'::room_type, 'stage'::room_type, 'game'::room_type)
              ORDER BY current_participants DESC, created_at DESC
              LIMIT $1",
@@ -280,6 +334,9 @@ impl RoomRepository {
                      FROM rooms
                      WHERE visibility = 'public'::room_visibility
                        AND status = 'active'::room_status
+                       AND community_id IS NULL
+                       AND category <> 'dm'
+                       AND (expires_at IS NULL OR expires_at > now())
                        AND category = $1
                        AND room_type = $2
                      ORDER BY RANDOM()
@@ -300,6 +357,9 @@ impl RoomRepository {
                      FROM rooms
                      WHERE visibility = 'public'::room_visibility
                        AND status = 'active'::room_status
+                       AND community_id IS NULL
+                       AND category <> 'dm'
+                       AND (expires_at IS NULL OR expires_at > now())
                        AND category = $1
                      ORDER BY RANDOM()
                      LIMIT 1",
@@ -318,6 +378,9 @@ impl RoomRepository {
                      FROM rooms
                      WHERE visibility = 'public'::room_visibility
                        AND status = 'active'::room_status
+                       AND community_id IS NULL
+                       AND category <> 'dm'
+                       AND (expires_at IS NULL OR expires_at > now())
                        AND room_type = $1
                      ORDER BY RANDOM()
                      LIMIT 1",
@@ -336,6 +399,9 @@ impl RoomRepository {
                      FROM rooms
                      WHERE visibility = 'public'::room_visibility
                        AND status = 'active'::room_status
+                       AND community_id IS NULL
+                       AND category <> 'dm'
+                       AND (expires_at IS NULL OR expires_at > now())
                      ORDER BY RANDOM()
                      LIMIT 1",
                 )
@@ -364,6 +430,51 @@ impl RoomRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::from)
+    }
+
+    /// A few faces from each of the given rooms, in one query.
+    ///
+    /// The playground feed shows who is in a room before you decide to join it,
+    /// and "a few" is all it shows — so this caps per room rather than
+    /// returning every participant and letting the client throw most away.
+    ///
+    /// Anonymous participants are excluded: their whole point is that the room
+    /// does not reveal who they are, and a feed card outside the room is the
+    /// last place that should.
+    pub async fn preview_participants(
+        &self,
+        room_ids: &[RoomId],
+        per_room: i64,
+    ) -> RepositoryResult<Vec<(RoomId, UserId)>> {
+        if room_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ids: Vec<uuid::Uuid> = room_ids.iter().map(|id| id.as_uuid()).collect();
+
+        let rows: Vec<(uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
+            "SELECT room_id, user_id FROM (
+                 SELECT p.room_id,
+                        p.user_id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY p.room_id ORDER BY p.joined_at
+                        ) AS seat
+                   FROM room_participants p
+                  WHERE p.room_id = ANY($1)
+                    AND NOT p.is_anonymous
+             ) ranked
+             WHERE seat <= $2",
+        )
+        .bind(&ids)
+        .bind(per_room)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::from)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(room, user)| (RoomId(room), UserId(user)))
+            .collect())
     }
 
     /// The other participant in each of the given direct rooms.
@@ -754,6 +865,42 @@ impl RoomRepository {
 
         tx.commit().await?;
         Ok(expired.rows_affected())
+    }
+
+    /// End playground rooms that everybody has left.
+    ///
+    /// The throwaway half of the product only: a room with a community behind
+    /// it is a channel, and an empty channel is just a quiet one. A standalone
+    /// public room with nobody in it is over, and leaving it in the feed sends
+    /// the next person who swipes onto it into an empty room.
+    ///
+    /// `grace` is how long the room must have been empty. `emptied_at` is
+    /// stamped by [`recount_participants`] the moment the last person leaves
+    /// and cleared the moment anybody joins, so this reads a settled fact
+    /// rather than racing the count.
+    ///
+    /// Direct conversations are excluded by the same predicate that excludes
+    /// them from discovery: a DM sits empty between replies by design.
+    pub async fn end_empty_playground_rooms(&self, grace: Duration) -> RepositoryResult<u64> {
+        let mut tx = self.pool.begin().await?;
+
+        let ended = sqlx::query(
+            "UPDATE rooms
+                SET status = 'ended',
+                    ended_at = COALESCE(ended_at, now())
+              WHERE status = 'active'
+                AND community_id IS NULL
+                AND category <> 'dm'
+                AND current_participants = 0
+                AND emptied_at IS NOT NULL
+                AND emptied_at <= now() - make_interval(secs => $1)",
+        )
+        .bind(as_seconds(grace))
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(ended.rows_affected())
     }
 
 

@@ -10,6 +10,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   Compass,
   Copy,
   Crown,
@@ -93,6 +94,7 @@ export const UsersIcon: IconComponent = (props: IconProps) => <Users size={18} {
 export const MenuIcon: IconComponent = (props: IconProps) => <MenuLucide size={18} {...props} />
 export const XIcon: IconComponent = (props: IconProps) => <X size={18} {...props} />
 export const ChevronDownIcon: IconComponent = (props: IconProps) => <ChevronDown size={18} {...props} />
+export const ChevronUpIcon: IconComponent = (props: IconProps) => <ChevronUp size={18} {...props} />
 export const ArrowDownIcon: IconComponent = (props: IconProps) => <ArrowDown size={18} {...props} />
 export const ArrowLeftIcon: IconComponent = (props: IconProps) => <ArrowLeft size={18} {...props} />
 

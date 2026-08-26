@@ -36,6 +36,23 @@ impl Session {
     }
 }
 
+/// One account as other people see it: the handle, and the shown parts of the
+/// profile.
+///
+/// Not a `(User, Profile)` pair: `User` carries the e-mail and the password
+/// hash, and a screen that renders twenty faces has no business holding twenty
+/// of those. What is absent here cannot leak.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct PublicIdentity {
+    pub id: UserId,
+    pub handle: String,
+    pub display_name: String,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
+    pub avatar_effect: Option<String>,
+    pub accent_color: Option<String>,
+}
+
 /// Accounts and profiles.
 #[derive(Debug, Clone)]
 pub struct UserRepository {
@@ -143,6 +160,38 @@ impl UserRepository {
         )
         .bind(user_id)
         .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::from)
+    }
+
+    /// Resolve a batch of ids to the handle-and-profile pair each one shows as.
+    ///
+    /// One query for a whole screenful of people rather than one per face. The
+    /// playground feed is the caller that forced this: every room on it wants a
+    /// host and a handful of participant avatars, and resolving those one id at
+    /// a time is a request waterfall the length of the feed.
+    ///
+    /// Ids that match nobody are simply absent, and the order is not the order
+    /// asked for — callers index the result by id.
+    pub async fn find_public_identities(
+        &self,
+        user_ids: &[UserId],
+    ) -> RepositoryResult<Vec<PublicIdentity>> {
+        if user_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ids: Vec<uuid::Uuid> = user_ids.iter().map(|id| id.as_uuid()).collect();
+
+        sqlx::query_as(
+            "SELECT u.id, u.handle, p.display_name, p.bio, p.avatar_url,
+                    p.avatar_effect, p.accent_color
+               FROM users u
+               JOIN profiles p ON p.user_id = u.id
+              WHERE u.id = ANY($1)",
+        )
+        .bind(&ids)
+        .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::from)
     }

@@ -8,9 +8,10 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Bell, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
+import { Bell, Compass, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
 
 import { LoadingPanel } from '../components/Spinner';
+import { useAppMode } from '../context/AppModeContext';
 import { useAuth } from '../context/AuthContext';
 import { ProfileSheet } from '../features/profile/ProfileSheet';
 import { useNotifications } from '../lib/useNotifications';
@@ -25,6 +26,7 @@ import { MemberListScreen } from '../screens/communities/MemberListScreen';
 import { ExperienceRoomScreen } from '../screens/experiences/ExperienceRoomScreen';
 import { FriendsScreen } from '../screens/friends/FriendsScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
+import { PlaygroundFeedScreen } from '../screens/playground/PlaygroundFeedScreen';
 import { InfoScreen } from '../screens/info/InfoScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
@@ -34,40 +36,56 @@ import { useColors, useTheme } from '../theme/ThemeContext';
 import { TabBar } from './TabBar';
 
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
 
-function MainTabs() {
+/*
+ * One navigator per half of the product, not one navigator with a filtered set
+ * of tabs.
+ *
+ * The two modes disagree about what the app *is* — a column of rooms you leave
+ * versus a list of places you stay — and sharing a navigator would mean sharing
+ * a history stack, so switching modes would drop you wherever the other half
+ * happened to have been. Two navigators means each half remembers its own
+ * place, and the switch is a door rather than a filter.
+ */
+const PlaygroundTab = createBottomTabNavigator();
+const ServersTab = createBottomTabNavigator();
+
+/** Shared by both bars: the bar renders itself, a screen only names its glyph. */
+const tabNavigatorProps = {
+  screenOptions: { headerShown: false as const },
+};
+
+/**
+ * The throwaway half. The feed is the app; everything else is one tap away
+ * from it.
+ */
+function PlaygroundTabs() {
   const { unread } = useNotifications();
 
   return (
-    // The bar renders itself — colours, the active wash and the badge all live
-    // in TabBar, so a screen only has to say which glyph and which word it is.
-    <Tab.Navigator tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false }}>
-      <Tab.Screen
-        name="HomeTab"
+    <PlaygroundTab.Navigator
+      {...tabNavigatorProps}
+      tabBar={(props) => <TabBar {...props} />}
+    >
+      <PlaygroundTab.Screen
+        name="FeedTab"
+        component={PlaygroundFeedScreen}
+        options={{
+          tabBarLabel: 'Feed',
+          tabBarIcon: ({ color }) => <Compass size={22} color={color} />,
+        }}
+      />
+      {/* The same rooms, laid out to browse rather than to swipe — for the
+          reader who wants to pick rather than be shown. */}
+      <PlaygroundTab.Screen
+        name="BrowseTab"
         component={HomeScreen}
         options={{
-          tabBarLabel: 'Home',
+          tabBarLabel: 'Browse',
           tabBarIcon: ({ color }) => <Home size={22} color={color} />,
         }}
       />
-      <Tab.Screen
-        name="CommunitiesTab"
-        component={CommunitiesScreen}
-        options={{
-          tabBarLabel: 'Servers',
-          tabBarIcon: ({ color }) => <Users size={22} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="FriendsTab"
-        component={FriendsScreen}
-        options={{
-          tabBarLabel: 'Friends',
-          tabBarIcon: ({ color }) => <MessageSquare size={22} color={color} />,
-        }}
-      />
-      <Tab.Screen
+      <PlaygroundTab.Screen
         name="NotificationsTab"
         component={NotificationsScreen}
         options={{
@@ -78,7 +96,7 @@ function MainTabs() {
           tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
         }}
       />
-      <Tab.Screen
+      <PlaygroundTab.Screen
         name="SettingsTab"
         component={SettingsScreen}
         options={{
@@ -86,14 +104,72 @@ function MainTabs() {
           tabBarIcon: ({ color }) => <Settings size={22} color={color} />,
         }}
       />
-    </Tab.Navigator>
+    </PlaygroundTab.Navigator>
   );
+}
+
+/** The half you belong to: communities, their channels, and the people in them. */
+function ServersTabs() {
+  const { unread } = useNotifications();
+
+  return (
+    <ServersTab.Navigator
+      {...tabNavigatorProps}
+      tabBar={(props) => <TabBar {...props} />}
+    >
+      <ServersTab.Screen
+        name="CommunitiesTab"
+        component={CommunitiesScreen}
+        options={{
+          tabBarLabel: 'Servers',
+          tabBarIcon: ({ color }) => <Users size={22} color={color} />,
+        }}
+      />
+      <ServersTab.Screen
+        name="FriendsTab"
+        component={FriendsScreen}
+        options={{
+          tabBarLabel: 'Friends',
+          tabBarIcon: ({ color }) => <MessageSquare size={22} color={color} />,
+        }}
+      />
+      <ServersTab.Screen
+        name="NotificationsTab"
+        component={NotificationsScreen}
+        options={{
+          tabBarLabel: 'Activity',
+          tabBarBadge: unread > 0 ? unread : undefined,
+          tabBarAccessibilityLabel:
+            unread > 0 ? `Activity, ${unread} unread` : 'Activity',
+          tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
+        }}
+      />
+      <ServersTab.Screen
+        name="SettingsTab"
+        component={SettingsScreen}
+        options={{
+          tabBarLabel: 'Settings',
+          tabBarIcon: ({ color }) => <Settings size={22} color={color} />,
+        }}
+      />
+    </ServersTab.Navigator>
+  );
+}
+
+/** Whichever half the user last chose. */
+function MainTabs() {
+  const { mode } = useAppMode();
+  return mode === 'playground' ? <PlaygroundTabs /> : <ServersTabs />;
 }
 
 export function RootNavigator() {
   const c = useColors();
   const { scheme } = useTheme();
   const { status } = useAuth();
+  // Which half of the app to open is a stored choice, and reading it is a
+  // round-trip to disk. Waiting is right: landing in the feed and jumping to
+  // the server list a frame later is worse than a beat of nothing.
+  const { ready: modeReady } = useAppMode();
 
   /*
    * Which screen is on top.
@@ -113,7 +189,7 @@ export function RootNavigator() {
     setRouteName(navigationRef.getCurrentRoute()?.name);
   }, [navigationRef]);
 
-  if (status === 'loading') return <LoadingPanel />;
+  if (status === 'loading' || !modeReady) return <LoadingPanel />;
 
   // The base has to switch too, not just the colours: react-navigation reads
   // `dark` for the things it draws itself — the modal scrim and the default

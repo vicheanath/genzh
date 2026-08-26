@@ -94,6 +94,7 @@ export type {
 export {
   roomKeys,
   useDiscoveryRooms,
+  usePlaygroundFeed,
   useTrendingRooms,
   useLiveRooms,
   useCommunityRoomsQuery,
@@ -119,6 +120,8 @@ export type {
   CreateCommunityRoomInput,
   CreateStandaloneRoomInput,
   DiscoveryResponse,
+  FeedRoom,
+  PlaygroundFeedResponse,
   MediaJoinResponse,
   Room,
   RoomAnonymousIdentity,

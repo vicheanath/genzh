@@ -14,6 +14,7 @@ import { useCommunitiesVM, type Community } from '@genzh/shared';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
+import { ModeSwitch } from '../../components/ModeSwitch';
 import { Radius, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 import { CreateCommunityModal } from './CreateCommunityModal';
@@ -57,8 +58,14 @@ export function CommunitiesScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Servers</Text>
+        <View>
+          <Text style={styles.title}>Servers</Text>
+          <Text style={styles.subtitle}>Places you stay</Text>
+        </View>
         <View style={styles.headerActions}>
+          {/* The way back to the other half of the app. It sits with the
+              actions rather than in the title because it is one — leaving. */}
+          <ModeSwitch />
           <TouchableOpacity
             style={styles.iconBtn}
             onPress={() => navigation.navigate('Explore')}
@@ -136,6 +143,12 @@ const makeStyles = (c: Palette) =>
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
+  },
+  subtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: c.textSubtle,
+    marginTop: 1,
   },
   title: {
     fontSize: 26,

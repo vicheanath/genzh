@@ -198,15 +198,16 @@ chmod 600 /opt/genzh/.env
 If `ufw` is active:
 
 ```bash
-sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 7880/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 50000:60000/udp
+sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 8081/tcp && sudo ufw allow 3478/tcp && sudo ufw allow 3478/udp && sudo ufw allow 49152:49250/udp && sudo ufw allow 32768:60999/udp
 ```
 
 | Port | Proto | What |
 |---|---|---|
 | 80 | tcp | the site |
-| 7880 | tcp | LiveKit signalling (WebSocket) |
-| 7881 | tcp | LiveKit HTTP API |
-| 50000–60000 | udp | WebRTC media |
+| 8081 | tcp | media signalling |
+| 3478 | tcp / udp | STUN & TURN signalling |
+| 49152–49250 | udp | TURN media relay |
+| 32768–60999 | udp | WebRTC direct media |
 | 22 | tcp | ssh |
 
 50000–60000 is LiveKit's own default RTC port range — `livekit.yaml.template`

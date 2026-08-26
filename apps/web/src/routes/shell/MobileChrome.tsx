@@ -7,11 +7,13 @@ import {
   CompassIcon,
   HomeIcon,
   MenuIcon,
+  MessageSquareIcon,
   ShieldIcon,
   UsersIcon,
 } from '@/components/Icons'
 import { useIsStaff } from '@/features/api'
 import { NotificationBadge } from '@/features/notifications'
+import { useAppMode } from '@/lib/appMode'
 import { useAuth } from '@/lib/auth'
 import { cx } from '@/lib/cx'
 import { useNotifications } from '@/lib/useNotifications'
@@ -55,11 +57,26 @@ export function MobileNav() {
   const { unread } = useNotifications()
   const isStaff = useIsStaff()
 
+  // The bar belongs to whichever half of the app you are in. Carrying both
+  // halves' destinations at once is what made the two feel like one pile of
+  // features rather than two products with a door between them.
+  const { mode } = useAppMode()
+
   return (
     <nav className={styles.mobileNav} aria-label="Main">
-      <MobileNavLink to="/" end icon={<HomeIcon size={20} />} label="Home" />
-      <MobileNavLink to="/friends" icon={<UsersIcon size={20} />} label="Friends" />
-      <MobileNavLink to="/explore" icon={<CompassIcon size={20} />} label="Explore" />
+      {mode === 'playground' ? (
+        <>
+          <MobileNavLink to="/" end icon={<CompassIcon size={20} />} label="Feed" />
+          <MobileNavLink to="/browse" icon={<HomeIcon size={20} />} label="Browse" />
+          <MobileNavLink to="/servers" icon={<UsersIcon size={20} />} label="Servers" />
+        </>
+      ) : (
+        <>
+          <MobileNavLink to="/servers" icon={<UsersIcon size={20} />} label="Servers" />
+          <MobileNavLink to="/friends" icon={<MessageSquareIcon size={20} />} label="Friends" />
+          <MobileNavLink to="/explore" icon={<CompassIcon size={20} />} label="Explore" />
+        </>
+      )}
       {isStaff && (
         <MobileNavLink to="/admin" icon={<ShieldIcon size={20} />} label="Admin" />
       )}

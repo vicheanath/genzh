@@ -409,6 +409,236 @@ async fn text_rooms_refuse_media_joins() {
     assert_eq!(response.error_code(), "UNSUPPORTED_ROOM_TYPE");
 }
 
+/// The playground feed carries only throwaway rooms.
+///
+/// This is the line the whole product now splits on, and it is a filter rather
+/// than a ranking: a community channel scored low would still surface for
+/// somebody who scrolled far enough, and a stranger dropped into `#general`
+/// has walked into a place they do not belong. A direct conversation is
+/// excluded by the same rule.
+#[tokio::test]
+async fn the_playground_feed_shows_moments_and_never_channels_or_dms() {
+    let Some(api) = boot().await else {
+        return skip("the_playground_feed_shows_moments_and_never_channels_or_dms");
+    };
+
+    let alice = api.register("feed1").await;
+    let bob = api.register("feed2").await;
+
+    // One of each of the three things a room can be.
+    let community_id = api.create_community(&alice, "Persistent Place").await;
+    let channel_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    let moment_id = api
+        .send(
+            "POST",
+            "/api/v1/rooms",
+            Some(&alice.access_token),
+            Some(serde_json::json!({
+                "name": "Unpopular opinions",
+                "room_type": "hot_takes",
+                "visibility": "public",
+            })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED)
+        .json["id"]
+        .as_str()
+        .expect("room id")
+        .to_owned();
+
+    let dm_id = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/dm/{}", bob.user_id),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json["id"]
+        .as_str()
+        .expect("dm id")
+        .to_owned();
+
+    let feed = api
+        .send("GET", "/api/v1/rooms/feed", Some(&bob.access_token), None)
+        .await
+        .expect_status(StatusCode::OK);
+
+    let ids: Vec<&str> = feed.json["rooms"]
+        .as_array()
+        .expect("rooms array")
+        .iter()
+        .map(|room| room["id"].as_str().expect("id"))
+        .collect();
+
+    assert!(ids.contains(&moment_id.as_str()), "the moment is the feed");
+    assert!(!ids.contains(&channel_id.as_str()), "a channel is not a moment");
+    assert!(!ids.contains(&dm_id.as_str()), "a DM is not a moment");
+}
+
+/// A playground room ends itself; a community channel never does.
+///
+/// Both halves of the throwaway promise in one test: the room the creator made
+/// carries a deadline it was never asked for, and the channel beside it does
+/// not. The deadline is what makes an abandoned room disappear even when
+/// nobody was there to leave it properly.
+#[tokio::test]
+async fn a_playground_room_expires_by_default_and_a_channel_does_not() {
+    let Some(api) = boot().await else {
+        return skip("a_playground_room_expires_by_default_and_a_channel_does_not");
+    };
+
+    let alice = api.register("ttl1").await;
+
+    let moment = api
+        .send(
+            "POST",
+            "/api/v1/rooms",
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "name": "3am thoughts", "room_type": "confession" })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+
+    assert!(
+        moment.json["expires_at"].is_string(),
+        "a playground room nobody gave a duration still gets one"
+    );
+
+    let community_id = api.create_community(&alice, "Somewhere To Stay").await;
+    let channel = api
+        .send(
+            "POST",
+            &format!("/api/v1/communities/{community_id}/rooms"),
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "name": "general", "room_type": "text" })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED);
+
+    assert!(
+        channel.json["expires_at"].is_null(),
+        "a channel is not a moment and must not expire"
+    );
+
+    // And a direct conversation is standalone but is not a moment either.
+    let bob = api.register("ttl2").await;
+    let dm = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/dm/{}", bob.user_id),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK);
+
+    assert!(
+        dm.json["expires_at"].is_null(),
+        "a direct conversation must not be reaped for going quiet"
+    );
+}
+
+/// An empty playground room is over; an empty channel is just quiet.
+///
+/// The other half of the throwaway lifecycle. Leaving stamps `emptied_at`, and
+/// the reaper ends what has been empty past the grace period — but only on the
+/// playground side. A channel nobody happens to be sitting in, and a direct
+/// conversation between replies, are both normal and must survive.
+#[tokio::test]
+async fn the_reaper_ends_empty_playground_rooms_and_leaves_everything_else() {
+    let Some(api) = boot().await else {
+        return skip("the_reaper_ends_empty_playground_rooms_and_leaves_everything_else");
+    };
+
+    let alice = api.register("reap1").await;
+    let bob = api.register("reap2").await;
+
+    let moment_id = api
+        .send(
+            "POST",
+            "/api/v1/rooms",
+            Some(&alice.access_token),
+            Some(serde_json::json!({ "name": "Fleeting", "room_type": "quick_chat" })),
+        )
+        .await
+        .expect_status(StatusCode::CREATED)
+        .json["id"]
+        .as_str()
+        .expect("room id")
+        .to_owned();
+
+    let community_id = api.create_community(&alice, "Still Here").await;
+    let channel_id = api
+        .create_room(&alice, &community_id, "general", "text")
+        .await;
+
+    let dm_id = api
+        .send(
+            "POST",
+            &format!("/api/v1/rooms/dm/{}", bob.user_id),
+            Some(&alice.access_token),
+            None,
+        )
+        .await
+        .expect_status(StatusCode::OK)
+        .json["id"]
+        .as_str()
+        .expect("dm id")
+        .to_owned();
+
+    // Empty all three the way a person would, so `emptied_at` is stamped by
+    // the same code path the app uses rather than written by the test.
+    for room_id in [&moment_id, &channel_id, &dm_id] {
+        api.send(
+            "POST",
+            &format!("/api/v1/rooms/{room_id}/leave"),
+            Some(&alice.access_token),
+            None,
+        )
+        .await;
+    }
+
+    let rooms = genzh_room::RoomRepository::new(api.pool.clone());
+
+    // A grace of zero: the question under test is *which* rooms the sweep
+    // takes, not how long it waits before taking them.
+    rooms
+        .end_empty_playground_rooms(std::time::Duration::from_secs(0))
+        .await
+        .expect("reap");
+
+    let status = |room_id: String| {
+        let pool = api.pool.clone();
+        async move {
+            let uuid: uuid::Uuid = room_id.parse().expect("room id");
+            sqlx::query_scalar::<_, String>(
+                "SELECT status::text FROM rooms WHERE id = $1",
+            )
+            .bind(uuid)
+            .fetch_one(&pool)
+            .await
+            .expect("room status")
+        }
+    };
+
+    assert_eq!(status(moment_id).await, "ended", "an empty moment is over");
+    assert_eq!(
+        status(channel_id).await,
+        "active",
+        "an empty channel is only quiet"
+    );
+    assert_eq!(
+        status(dm_id).await,
+        "active",
+        "a direct conversation sits empty between replies by design"
+    );
+}
+
 #[tokio::test]
 async fn paging_back_through_history_never_skips_a_message() {
     let Some(api) = boot().await else {

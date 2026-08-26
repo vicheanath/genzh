@@ -261,6 +261,17 @@ impl AuthService {
         Ok(self.users.find_profile(user_id).await?)
     }
 
+    /// A batch of public identities, for a screen that shows many people at once.
+    ///
+    /// Ids that match nobody are absent rather than an error, and the order is
+    /// the database's — callers index by id.
+    pub async fn public_identities(
+        &self,
+        user_ids: &[UserId],
+    ) -> AuthResult<Vec<crate::repository::PublicIdentity>> {
+        Ok(self.users.find_public_identities(user_ids).await?)
+    }
+
     /// Resolve `@handle` mentions to the accounts they name.
     ///
     /// Handles that match nobody are simply absent from the result — a mention

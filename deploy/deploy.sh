@@ -107,9 +107,10 @@ echo
 echo "==> deployed"
 docker compose -f $COMPOSE_FILE ps
 echo
-echo "  web      http://${DEPLOY_HOST}:${WEB_PORT:-80}/"
-echo "  livekit  ws://${DEPLOY_HOST}:7880"
-echo "  ready    ${api_ready:-<no answer from /ready — run: docker compose -f $COMPOSE_FILE logs api>}"
+echo "  web    http://${DEPLOY_HOST}:${WEB_PORT:-80}/"
+echo "  media  ws://${DEPLOY_HOST}:8081/ws/media"
+echo "  turn   turn://${DEPLOY_HOST}:3478 (STUN/TURN)"
+echo "  ready  ${api_ready:-<no answer from /ready — run: docker compose -f $COMPOSE_FILE logs api>}"
 
 # Old image layers accumulate fast with two images per deploy.
 docker image prune -f >/dev/null 2>&1 || true

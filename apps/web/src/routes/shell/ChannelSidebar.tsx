@@ -10,6 +10,7 @@ import {
   HeartIcon,
   HelpCircleIcon,
   LockIcon,
+  MessageSquareIcon,
   MicIcon,
   PaletteIcon,
   RadioIcon,
@@ -148,17 +149,21 @@ export function ChannelSidebar({
       <nav className={styles.nav} aria-label="Navigation">
         {!communityId && (
           <>
-            <NavGroup heading="Social & Playground">
+            {/* The playground is not in this list. It is the *other* half of
+                the app, reached through the mode switch rather than through a
+                nav item alongside the community screens — a link to it here
+                read as one more feature of this side. */}
+            <NavGroup heading="Servers">
               <NavItem
-                to="/"
+                to="/servers"
                 end
-                label="Discover Moments"
-                leading={<SparkleIcon size={17} className={styles.navIcon} />}
+                label="Your Servers"
+                leading={<UsersIcon size={17} className={styles.navIcon} />}
               />
               <NavItem
                 to="/friends"
                 label="Friends"
-                leading={<UsersIcon size={17} className={styles.navIcon} />}
+                leading={<MessageSquareIcon size={17} className={styles.navIcon} />}
               />
               <NavItem
                 to="/explore"

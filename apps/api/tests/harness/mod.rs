@@ -271,6 +271,8 @@ fn api_config(database_url: String) -> api::Config {
             session_prune_interval: Duration::from_secs(3600),
             store_sweep_interval: Duration::from_secs(3600),
             ephemeral_room_expire_interval: Duration::from_secs(3600),
+            playground_reap_interval: Duration::from_secs(3600),
+            playground_empty_grace: Duration::from_secs(3600),
             invite_prune_interval: Duration::from_secs(3600),
             notification_prune_interval: Duration::from_secs(3600),
             notification_read_retention: Duration::from_secs(30 * 86400),

@@ -13,13 +13,13 @@
 use std::collections::HashMap;
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use genzh_domain::community::Community;
 use genzh_domain::room::{RoomParticipant, RoomType};
 use genzh_domain::social::Friendship;
 use genzh_domain::{CommunityId, Room, RoomId, UserId};
 use genzh_room::MediaJoinResponse;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::ApiResult;
 use crate::middleware::CurrentUser;
@@ -29,6 +29,7 @@ use crate::routes::communities::{CommunityResponse, MemberView, RoleView};
 use crate::routes::messages::{HistoryResponse, MessageView};
 use crate::routes::oauth::{AuthConfigResponse, OAuthProvidersConfig};
 use crate::routes::rooms::{RoomResponse, UserRoomResponse};
+use crate::routes::users::PublicProfile;
 use crate::state::AppState;
 
 /// How many messages a fresh room session opens with.
@@ -83,6 +84,57 @@ pub struct RoomSessionResponse {
     pub recent_messages: HistoryResponse,
     /// SFU / WebRTC media token if voice/video/stage room.
     pub media_session: Option<MediaJoinResponse>,
+}
+
+/// How many faces one feed card shows.
+const FEED_FACE_LIMIT: usize = 5;
+
+/// How many rooms one page of the feed carries.
+const FEED_PAGE_DEFAULT: i64 = 20;
+
+/// One card in the playground feed.
+///
+/// The room, plus the people already in it. A feed you swipe through decides
+/// nothing about permissions — you have not joined yet — so unlike
+/// [`RoomSessionResponse`] there is nothing here about what you may do.
+#[derive(Debug, Serialize)]
+pub struct FeedRoomView {
+    /// The room itself.
+    #[serde(flatten)]
+    pub room: Room,
+    /// Whoever started it, when they still have an account.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<PublicProfile>,
+    /// A few of the people in the room right now, oldest joiner first.
+    ///
+    /// Anonymous participants are not among them: a room that hides who is
+    /// inside it must not show them on the card outside it.
+    pub faces: Vec<PublicProfile>,
+}
+
+/// One page of the playground feed.
+#[derive(Debug, Serialize)]
+pub struct PlaygroundFeedResponse {
+    /// The cards, in swipe order.
+    pub rooms: Vec<FeedRoomView>,
+    /// The offset to ask for next, or `None` at the end of the feed.
+    ///
+    /// The server decides where the page ends rather than the client counting
+    /// what it got — a short page is the end of the feed, and saying so is one
+    /// field cheaper than a request that comes back empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<i64>,
+}
+
+/// Query for `GET /api/v1/rooms/feed`.
+#[derive(Debug, Deserialize)]
+pub struct FeedQuery {
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+    #[serde(default)]
+    pub offset: Option<i64>,
 }
 
 /// The caller's social graph in one payload.
@@ -366,5 +418,79 @@ pub async fn social_overview(
         incoming_requests,
         outgoing_requests,
         blocked,
+    }))
+}
+
+/// `GET /api/v1/rooms/feed`
+///
+/// The throwaway half of the product, as a column you swipe. Every card is a
+/// live public room somebody can drop into and leave, with the faces already
+/// inside it — which is the whole decision the feed asks the reader to make.
+///
+/// Three queries regardless of page size: the rooms, their participants, and
+/// the profiles behind every id in both.
+pub async fn playground_feed(
+    State(state): State<AppState>,
+    _caller: CurrentUser,
+    Query(query): Query<FeedQuery>,
+) -> ApiResult<Json<PlaygroundFeedResponse>> {
+    let limit = query.limit.unwrap_or(FEED_PAGE_DEFAULT).clamp(1, 50);
+    let offset = query.offset.unwrap_or(0).max(0);
+
+    let (rooms, faces) = state
+        .directory
+        .feed(query.category.as_deref(), limit, offset)
+        .await?;
+
+    // Every id the page will render, hosts and faces alike, resolved together.
+    // Split into two lookups they would overlap anyway — a host is usually
+    // sitting in their own room.
+    let mut wanted: Vec<UserId> = Vec::new();
+    for room in &rooms {
+        if let Some(owner) = room.owner_id
+            && !wanted.contains(&owner)
+        {
+            wanted.push(owner);
+        }
+    }
+    for (_, user_id) in &faces {
+        if !wanted.contains(user_id) {
+            wanted.push(*user_id);
+        }
+    }
+
+    let people: HashMap<UserId, PublicProfile> = state
+        .auth
+        .public_identities(&wanted)
+        .await?
+        .into_iter()
+        .map(|identity| (identity.id, PublicProfile::from(identity)))
+        .collect();
+
+    let mut by_room: HashMap<RoomId, Vec<PublicProfile>> = HashMap::new();
+    for (room_id, user_id) in faces {
+        let seats = by_room.entry(room_id).or_default();
+        if seats.len() < FEED_FACE_LIMIT
+            && let Some(profile) = people.get(&user_id)
+        {
+            seats.push(profile.clone());
+        }
+    }
+
+    // A full page means there is probably another; a short one is the end.
+    let next_offset = (rooms.len() as i64 == limit).then_some(offset + limit);
+
+    let cards = rooms
+        .into_iter()
+        .map(|room| FeedRoomView {
+            host: room.owner_id.and_then(|id| people.get(&id).cloned()),
+            faces: by_room.remove(&room.id).unwrap_or_default(),
+            room,
+        })
+        .collect();
+
+    Ok(Json(PlaygroundFeedResponse {
+        rooms: cards,
+        next_offset,
     }))
 }

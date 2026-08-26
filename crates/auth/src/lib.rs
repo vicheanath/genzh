@@ -41,5 +41,6 @@ pub mod sessions;
 pub use error::{AuthError, AuthResult};
 pub use jwt::{AccessClaims, CurrentUser, JwtService, TokenPair};
 pub use oauth::OAuthUserInput;
+pub use repository::PublicIdentity;
 pub use service::{AuthService, AuthenticatedUser, LoginInput, RegisterInput, UpdateProfile};
 pub use sessions::{SessionContext, SessionManager};

@@ -185,11 +185,23 @@ impl RoomRecommender {
             "WITH candidate AS (
                  SELECT r.id, r.category, r.current_participants, r.started_at
                    FROM rooms r
-                   LEFT JOIN communities c ON c.id = r.community_id
                   WHERE r.status = 'active'
                     AND r.visibility = 'public'
+                    -- Playground rooms only, the same scope discovery and the
+                    -- feed use. A community's channel is not somewhere to be
+                    -- *sent*: you reach it by belonging to the community, and
+                    -- suggesting one on the playground side of the app offers a
+                    -- place to stay where the whole promise is places to leave.
+                    --
+                    -- This is also why there is no join to `communities` here
+                    -- any more: the quarantine rule it enforced only ever
+                    -- applied to rooms that had a community, and none of these
+                    -- do.
+                    AND r.community_id IS NULL
                     -- A DM is a conversation, not a place to be sent.
                     AND r.category <> 'dm'
+                    -- An expired room is over even before the reaper notices.
+                    AND (r.expires_at IS NULL OR r.expires_at > now())
                     -- Never suggest somewhere they already are.
                     AND r.id <> ALL($2)
                     -- Nor a room they own. Ownership does not create a
@@ -197,8 +209,6 @@ impl RoomRecommender {
                     -- is guaranteed to already know about is also the one the
                     -- feed is most likely to hand back to them.
                     AND (r.owner_id IS NULL OR r.owner_id <> $1)
-                    -- A quarantined community's rooms are not discoverable.
-                    AND (c.id IS NULL OR c.is_quarantined = FALSE)
                     AND ($3::text IS NULL OR r.category = $3)
                   ORDER BY r.current_participants DESC, r.started_at DESC NULLS LAST
                   LIMIT $6

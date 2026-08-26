@@ -1,0 +1,329 @@
+/*
+ * The feed is a scroll-snap column, not a list.
+ *
+ * Each room is one viewport-tall panel and the scroller stops on it, so the
+ * gesture is the same one the phone app makes: a flick moves you to the next
+ * room rather than a little further down a page.
+ */
+.feed {
+  height: 100%;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  background: #0d0d0b;
+  overscroll-behavior-y: contain;
+}
+
+.feed::-webkit-scrollbar {
+  display: none;
+}
+
+.card {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: calc(var(--space-6) + 44px) var(--space-6) var(--space-6);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/*
+ * The ground, generated from the room's own name.
+ *
+ * A throwaway room lives minutes; asking whoever started it for cover art
+ * would leave the whole feed grey. The hue is set inline per card.
+ */
+.ground {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      160deg,
+      hsl(var(--room-hue) 62% 26%) 0%,
+      hsl(calc(var(--room-hue) + 28) 55% 15%) 55%,
+      #0d0d0b 100%
+    );
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  background: rgb(12 12 10 / 50%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  color: rgb(255 255 255 / 90%);
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+}
+
+/* The one thing on the card allowed to shout: whether anybody is in there. */
+.liveChip {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: 800;
+}
+
+/*
+ * The name sits low, just above the actions, rather than floating in the middle
+ * of the panel. A room's title and the button to walk into it are one thought,
+ * and a screen-height gap between them reads as two.
+ */
+.middle {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  max-width: 46rem;
+  min-height: 0;
+}
+
+.typeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgb(255 255 255 / 86%);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.name {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.topic {
+  margin: 0;
+  color: rgb(255 255 255 / 78%);
+  font-size: var(--text-lg, 1.0625rem);
+  line-height: 1.45;
+}
+
+.hostRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: rgb(255 255 255 / 74%);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.faces {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: rgb(255 255 255 / 74%);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Overlapped, so a row of faces reads as a group rather than as a list. */
+.faceStack {
+  display: flex;
+  align-items: center;
+}
+
+.faceStack > * + * {
+  margin-left: -10px;
+}
+
+.face {
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 2px #0d0d0b;
+}
+
+.join {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-press);
+}
+
+.join:hover {
+  transform: translateY(-1px);
+}
+
+.nextHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgb(255 255 255 / 66%);
+  font-size: 12px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* ── screen chrome ───────────────────────────────────────────────────────── */
+
+.screen {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  background: #0d0d0b;
+}
+
+/*
+ * Floating over the feed rather than sitting in a header: the card behind is
+ * the whole screen, and a bar across the top would cost every room its first
+ * line. These belong to the screen, so they stay put while rooms move under.
+ */
+.chrome {
+  position: absolute;
+  inset: var(--space-4) var(--space-6) auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.chrome > * {
+  pointer-events: auto;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  max-width: 100%;
+}
+
+.filters::-webkit-scrollbar {
+  display: none;
+}
+
+.filter {
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: rgb(12 12 10 / 50%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  color: rgb(255 255 255 / 86%);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.filterSelected {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.create {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  background: rgb(12 12 10 / 55%);
+  border: 1px solid rgb(255 255 255 / 22%);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.centre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  height: 100%;
+  padding: var(--space-6);
+  text-align: center;
+  background: #0d0d0b;
+  color: #fff;
+}
+
+.centreTitle {
+  margin: 0;
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 800;
+}
+
+.centreBody {
+  margin: 0;
+  max-width: 30rem;
+  color: rgb(255 255 255 / 72%);
+  line-height: 1.5;
+}
+
+.centreActions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  /*
+   * Two rows rather than one. A phone has no width for the switch, eight topic
+   * pills and the create button side by side — squeezed onto one line the pills
+   * are clipped mid-word, which reads as broken rather than as scrollable.
+   */
+  .chrome {
+    inset: var(--space-3) var(--space-4) auto;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  .filters {
+    order: 3;
+    flex-basis: 100%;
+    /* Clear of the rounded edge the pills scroll under. */
+    padding-right: var(--space-2);
+  }
+
+  .card {
+    padding: calc(var(--space-6) + 92px) var(--space-4) var(--space-5);
+  }
+}

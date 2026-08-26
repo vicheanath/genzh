@@ -192,9 +192,34 @@ impl RoomService {
         };
 
         let timestamp = now();
-        let expires_at = input.duration_minutes.map(|mins| {
-            timestamp + chrono::Duration::minutes(mins)
-        });
+        let category = input
+            .category
+            .clone()
+            .unwrap_or_else(|| "random".to_string());
+
+        // Where the two halves of the product part company. A community
+        // channel expires only if its creator said so — normally never. A
+        // standalone playground room is a *moment*, and a moment that nobody
+        // gave an end to still ends: it gets the default TTL, and no room on
+        // that side may outlive the ceiling.
+        //
+        // Direct conversations are standalone too and must be left alone; they
+        // are excluded by category, the same way they are excluded from
+        // discovery and from the empty-room reaper.
+        let is_playground = community_id.is_none() && category != room::DIRECT_CATEGORY;
+        let duration_minutes = if is_playground {
+            Some(
+                input
+                    .duration_minutes
+                    .unwrap_or(room::DEFAULT_PLAYGROUND_TTL_MINUTES)
+                    .clamp(1, room::MAX_PLAYGROUND_TTL_MINUTES),
+            )
+        } else {
+            input.duration_minutes
+        };
+
+        let expires_at =
+            duration_minutes.map(|mins| timestamp + chrono::Duration::minutes(mins));
 
         let candidate = Room {
             id: RoomId::new(),
@@ -202,7 +227,7 @@ impl RoomService {
             owner_id: Some(user_id),
             name,
             topic: input.topic,
-            category: input.category.unwrap_or_else(|| "random".to_string()),
+            category,
             room_type: input.room_type,
             visibility: input.visibility.unwrap_or(RoomVisibility::Public),
             status: RoomStatus::Active,
@@ -445,6 +470,20 @@ impl RoomService {
     /// End rooms whose duration has elapsed (`expires_at <= now()`).
     pub async fn expire_ephemeral_rooms(&self) -> ServiceResult<u64> {
         Ok(self.rooms.expire_ephemeral_rooms().await?)
+    }
+
+    /// End playground rooms that everybody has left.
+    ///
+    /// Paired with [`expire_ephemeral_rooms`] rather than folded into it: a
+    /// room dies of a deadline or of abandonment, and the two happen at
+    /// different times for different reasons.
+    ///
+    /// [`expire_ephemeral_rooms`]: Self::expire_ephemeral_rooms
+    pub async fn end_empty_playground_rooms(
+        &self,
+        grace: std::time::Duration,
+    ) -> ServiceResult<u64> {
+        Ok(self.rooms.end_empty_playground_rooms(grace).await?)
     }
 }
 

@@ -2,29 +2,24 @@ import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Compass, Lock, MessageSquare, Plus, Sparkles, Users } from 'lucide-react-native';
+import { Lock, Plus, Sparkles, Users } from 'lucide-react-native';
 import {
   rooms as roomsApi,
-  useCommunitiesVM,
   useRoomsVM,
   type Room,
   type RoomType,
-  type UserRoom,
 } from '@genzh/shared';
 
-import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { ModeSwitch } from '../../components/ModeSwitch';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { SkeletonRows } from '../../components/Skeleton';
 import { ToggleGroup } from '../../components/ToggleGroup';
 import { useToast } from '../../components/Toast';
-import { UserRow } from '../../components/UserRow';
 import { useAuth } from '../../context/AuthContext';
 import { isExperienceRoom, roomTypeIcon, roomTypeLabel } from '../../lib/roomTypes';
-import { usePresence } from '../../lib/usePresence';
-import { useProfiles } from '../../lib/useProfiles';
 import { Radius, Spacing, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
@@ -45,18 +40,21 @@ const CATEGORIES = [
 ];
 
 /**
- * The playground: live moments, your communities, and your conversations.
+ * The playground, laid out to browse rather than to swipe.
  *
- * The web app's home screen, as a phone destination. Everything on it is a real
- * endpoint — discovery, the community list, and `rooms.mine` for the direct
- * messages the mobile app previously had no way to reach at all.
+ * The same rooms the feed shows, as a scrollable wall with the category filter
+ * up front — for the reader who wants to pick rather than be shown one at a
+ * time. The feed is the front door of this half of the app; this is the index.
+ *
+ * Deliberately rooms only. Communities and direct messages used to share this
+ * screen, and they are the other half of the product now: they live on the
+ * servers side, which the switch in the header goes to.
  */
 export function HomeScreen({ navigation }: any) {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { token, getToken } = useAuth();
   const toast = useToast();
-  const { isOnline } = usePresence();
 
   const [category, setCategory] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -66,15 +64,9 @@ export function HomeScreen({ navigation }: any) {
   // react-query, so coming back to this screen paints from cache and refreshes
   // behind the paint — the hand-rolled fetch hook this replaced refetched
   // everything from scratch on every mount and showed skeletons each time.
-  const communitiesVM = useCommunitiesVM(token);
   const roomsVM = useRoomsVM(token, {
     discovery: { enabled: true, category: category || undefined },
-    includeMine: true,
   });
-
-  const directRooms = roomsVM.myRooms.filter((room) => room.category === 'dm');
-  const peerIds = directRooms.flatMap((room) => (room.dm_peer_id ? [room.dm_peer_id] : []));
-  const lookup = useProfiles(peerIds);
 
   function openRoom(roomId: string, name: string, roomType: RoomType) {
     navigation.navigate(isExperienceRoom(roomType) ? 'ExperienceRoom' : 'RoomChat', {
@@ -102,28 +94,18 @@ export function HomeScreen({ navigation }: any) {
     }
   }
 
-  const refreshing = roomsVM.isLoadingDiscovery && communitiesVM.isLoading;
+  const refreshing = roomsVM.isLoadingDiscovery;
 
   function refreshAll() {
     void roomsVM.refreshDiscovery();
-    void roomsVM.refreshMine();
-    void communitiesVM.refresh();
   }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScreenHeader
-        title="genzh"
-        subtitle="Don’t join communities. Join moments."
-        actions={
-          <Button
-            title=""
-            size="sm"
-            variant="secondary"
-            onPress={() => setCreateOpen(true)}
-            icon={<Plus size={17} color={c.text} />}
-          />
-        }
+        title="Browse"
+        subtitle="Every moment happening right now"
+        actions={<ModeSwitch />}
       />
 
       <ScrollView
@@ -248,93 +230,6 @@ export function HomeScreen({ navigation }: any) {
           );
         })}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Direct messages</Text>
-        </View>
-
-        {roomsVM.isLoadingMine ? <SkeletonRows rows={2} /> : null}
-
-        {!roomsVM.isLoadingMine && directRooms.length === 0 ? (
-          <EmptyState
-            icon={<MessageSquare size={26} color={c.textDim} />}
-            title="No conversations yet"
-            description="Open a profile and send a direct message to start one."
-          />
-        ) : null}
-
-        {directRooms.map((room: UserRoom) => {
-          // A DM's stored name is fixed to whoever opened it, so it names the
-          // wrong person for the other half of every conversation. The server
-          // resolves the peer per caller as `dm_peer_id`.
-          const peer = room.dm_peer_id ? lookup(room.dm_peer_id) : null;
-          const label = peer?.display_name ?? room.name.replace(/^DM:\s*/, '');
-
-          return (
-            <UserRow
-              key={room.id}
-              name={label}
-              avatarUrl={peer?.avatar_url}
-              accentColor={peer?.accent_color}
-              presence={
-                room.dm_peer_id && isOnline(room.dm_peer_id) ? 'online' : 'offline'
-              }
-              secondary={peer ? `@${peer.handle}` : 'Direct message'}
-              onSelect={() =>
-                navigation.navigate('RoomChat', { roomId: room.id, roomName: label })
-              }
-            />
-          );
-        })}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your communities</Text>
-          <Button
-            title="Explore"
-            size="sm"
-            variant="ghost"
-            onPress={() => navigation.navigate('Explore')}
-            icon={<Compass size={14} color={c.textMuted} />}
-          />
-        </View>
-
-        {communitiesVM.isLoading ? <SkeletonRows rows={2} /> : null}
-
-        {!communitiesVM.isLoading && communitiesVM.communities.length === 0 ? (
-          <EmptyState
-            icon={<Compass size={26} color={c.textDim} />}
-            title="No communities yet"
-            description="Browse what is public and join one."
-            actionLabel="Browse communities"
-            onAction={() => navigation.navigate('Explore')}
-          />
-        ) : null}
-
-        {communitiesVM.communities.map((community, index) => (
-          <Animated.View
-            key={community.id}
-            entering={FadeInDown.delay(Math.min(index, 6) * 45).duration(260)}
-          >
-          <Pressable
-            onPress={() =>
-              navigation.navigate('CommunityDetail', {
-                communityId: community.id,
-                communityName: community.name,
-              })
-            }
-            style={({ pressed }) => [styles.communityCard, pressed && styles.pressed]}
-          >
-            <Avatar name={community.name} url={community.icon_url} size={40} />
-            <View style={styles.communityText}>
-              <Text style={styles.communityName} numberOfLines={1}>
-                {community.name}
-              </Text>
-              <Text style={styles.communityDescription} numberOfLines={1}>
-                {community.description ?? 'Server'}
-              </Text>
-            </View>
-          </Pressable>
-          </Animated.View>
-        ))}
       </ScrollView>
 
       <CreateRoomSheet
@@ -488,28 +383,5 @@ const makeStyles = (c: Palette) =>
     color: c.accentText,
     fontSize: 12,
     fontWeight: '800',
-  },
-  communityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    backgroundColor: c.surface,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: Spacing.md,
-  },
-  communityText: {
-    flex: 1,
-  },
-  communityName: {
-    color: c.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  communityDescription: {
-    color: c.textSubtle,
-    fontSize: 12,
-    marginTop: 1,
   },
 });
