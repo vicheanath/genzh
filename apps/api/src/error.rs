@@ -75,12 +75,35 @@ pub enum ApiError {
     /// retrying is reasonable in a way that retrying a rejected write is not.
     #[error(transparent)]
     Store(#[from] StoreError),
+
+    /// Database query failure.
+    #[error("database failure: {0}")]
+    Database(#[from] sqlx::Error),
 }
 
 impl ApiError {
+    /// Create a BadRequest error.
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        ApiError::BadRequest(message.into())
+    }
+
+    /// Create a NotFound error.
+    pub fn not_found(entity: &'static str) -> Self {
+        ApiError::Domain(DomainError::NotFound(entity))
+    }
+
+    /// Create a Conflict error.
+    pub fn conflict(entity: &'static str) -> Self {
+        ApiError::Domain(DomainError::Conflict(entity))
+    }
+
     /// The status and code for this failure.
     fn parts(&self) -> (StatusCode, String, String) {
         match self {
+            ApiError::Database(error) => {
+                tracing::error!(%error, "database error in API handler");
+                internal()
+            }
             ApiError::Domain(error) => domain_parts(error),
             ApiError::Service(ServiceError::Domain(error)) => domain_parts(error),
             ApiError::Service(ServiceError::Repository(error)) => {

@@ -152,6 +152,21 @@ pub enum AuditAction {
     /// reaching for the button is, and it is the entry that explains why rows
     /// disappeared at a time no schedule accounts for.
     SystemJobTriggered,
+
+    /// A cosmetic item was added to the store catalog.
+    StoreItemCreated,
+    /// A store item was edited — including repriced.
+    StoreItemUpdated,
+    /// A store item was removed from the catalog.
+    StoreItemRemoved,
+    /// Points were credited to an account by hand.
+    ///
+    /// The only way currency enters the system without somebody having earned
+    /// it, which is exactly why it is logged: an unaudited mint is how a
+    /// closed-loop economy stops being closed.
+    PointsGranted,
+    /// A cosmetic item was given to an account without payment.
+    ItemGranted,
 }
 
 impl AuditAction {
@@ -229,6 +244,12 @@ impl AuditAction {
             AuditAction::AutomodRuleRemoved => "automod.rule_removed",
 
             AuditAction::SystemJobTriggered => "system.job_triggered",
+
+            AuditAction::StoreItemCreated => "store.item_created",
+            AuditAction::StoreItemUpdated => "store.item_updated",
+            AuditAction::StoreItemRemoved => "store.item_removed",
+            AuditAction::PointsGranted => "economy.points_granted",
+            AuditAction::ItemGranted => "economy.item_granted",
         }
     }
 
@@ -293,6 +314,11 @@ impl AuditAction {
         AuditAction::AutomodRuleCreated,
         AuditAction::AutomodRuleRemoved,
         AuditAction::SystemJobTriggered,
+        AuditAction::StoreItemCreated,
+        AuditAction::StoreItemUpdated,
+        AuditAction::StoreItemRemoved,
+        AuditAction::PointsGranted,
+        AuditAction::ItemGranted,
     ];
 }
 

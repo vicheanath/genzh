@@ -53,6 +53,32 @@ pub fn build(state: AppState) -> Router {
         // Composite views: one round-trip for a whole screen (see routes::bff).
         .route("/me/overview", get(routes::bff::me_overview))
         .route("/me/social", get(routes::bff::social_overview))
+        // ---- points, referrals & the cosmetics store ----
+        .route("/referrals/overview", get(routes::gamification::get_referral_overview))
+        .route("/referrals/claim", post(routes::gamification::claim_referral))
+        .route("/economy/balance", get(routes::gamification::get_balance))
+        .route("/economy/daily-checkin", post(routes::gamification::claim_daily_checkin))
+        .route("/store/items", get(routes::gamification::list_store_items))
+        .route("/store/items/{id}/purchase", post(routes::gamification::purchase_store_item))
+        .route("/inventory/my-items", get(routes::gamification::get_my_inventory))
+        .route("/inventory/equipped", get(routes::gamification::get_my_equipped))
+        .route("/inventory/equip", post(routes::gamification::equip_cosmetics))
+        // What a set of people are wearing, for the surfaces that draw many
+        // faces at once: a voice grid, a member list, a page of chat.
+        .route("/cosmetics", get(routes::gamification::get_cosmetics_batch))
+        // The catalog is curated, not seeded — these are where it comes from.
+        .route(
+            "/admin/store/items",
+            get(routes::gamification::admin_list_store_items)
+                .post(routes::gamification::admin_create_store_item),
+        )
+        .route(
+            "/admin/store/items/{id}",
+            patch(routes::gamification::admin_update_store_item)
+                .delete(routes::gamification::admin_delete_store_item),
+        )
+        .route("/admin/store/items/{id}/grant", post(routes::gamification::admin_grant_item))
+        .route("/admin/economy/grant", post(routes::gamification::admin_grant_points))
         // ---- platform console ----
         //
         // Gated by extractor, not by path: `StaffUser` and `AdminUser` are

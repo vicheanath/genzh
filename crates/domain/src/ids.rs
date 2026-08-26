@@ -95,6 +95,22 @@ typed_id!(
     /// Identifies one delivered notification.
     NotificationId
 );
+typed_id!(
+    /// Identifies an item in the cosmetics catalog.
+    StoreItemId
+);
+typed_id!(
+    /// Identifies an item owned in user inventory.
+    InventoryId
+);
+typed_id!(
+    /// Identifies a points ledger transaction.
+    TransactionId
+);
+typed_id!(
+    /// Identifies a referral record.
+    ReferralId
+);
 
 #[cfg(test)]
 mod tests {

@@ -9,6 +9,7 @@ pub mod admin;
 pub mod auth;
 pub mod bff;
 pub mod communities;
+pub mod gamification;
 pub mod health;
 pub mod media;
 pub mod messages;

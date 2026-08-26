@@ -18,6 +18,7 @@
 pub mod audit;
 pub mod community;
 pub mod error;
+pub mod gamification;
 pub mod ids;
 pub mod mention;
 pub mod message;
@@ -31,8 +32,13 @@ pub mod support;
 pub mod user;
 
 pub use error::{DomainError, DomainResult};
+pub use gamification::{
+    BalanceTransaction, EquippedCosmetics, ItemRarity, ItemType, ReferralMilestone, ReferralRecord,
+    ReferralWithProfile, StoreItem, StoreListing, UserBalance, UserInventoryItem,
+};
 pub use ids::{
-    CommunityId, MessageId, NotificationId, RoleId, RoomId, SessionId, UserId,
+    CommunityId, InventoryId, MessageId, NotificationId, ReferralId, RoleId, RoomId, SessionId,
+    StoreItemId, TransactionId, UserId,
 };
 pub use permission::{Permission, PermissionSet};
 pub use platform::PlatformRole;
