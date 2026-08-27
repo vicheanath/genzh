@@ -60,6 +60,15 @@ export const queryKeys = {
     all: ['notifications'] as const,
     list: () => [...queryKeys.notifications.all, 'list'] as const,
   },
+  economy: {
+    all: ['economy'] as const,
+    balance: () => [...queryKeys.economy.all, 'balance'] as const,
+  },
+  store: {
+    all: ['store'] as const,
+    items: () => [...queryKeys.store.all, 'items'] as const,
+    inventory: () => [...queryKeys.store.all, 'inventory'] as const,
+  },
   /**
    * The composite views.
    *

@@ -8,7 +8,7 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Bell, Compass, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
+import { Bell, Compass, Gift, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
 
 import { LoadingPanel } from '../components/Spinner';
 import { useAppMode } from '../context/AppModeContext';
@@ -29,6 +29,7 @@ import { HomeScreen } from '../screens/home/HomeScreen';
 import { PlaygroundFeedScreen } from '../screens/playground/PlaygroundFeedScreen';
 import { InfoScreen } from '../screens/info/InfoScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
+import { RewardsScreen } from '../screens/rewards/RewardsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { VoiceOverlay } from '../components/VoiceOverlay';
 import { useColors, useTheme } from '../theme/ThemeContext';
@@ -131,6 +132,14 @@ function ServersTabs() {
         options={{
           tabBarLabel: 'Friends',
           tabBarIcon: ({ color }) => <MessageSquare size={22} color={color} />,
+        }}
+      />
+      <ServersTab.Screen
+        name="RewardsTab"
+        component={RewardsScreen}
+        options={{
+          tabBarLabel: 'Rewards',
+          tabBarIcon: ({ color }) => <Gift size={22} color={color} />,
         }}
       />
       <ServersTab.Screen
