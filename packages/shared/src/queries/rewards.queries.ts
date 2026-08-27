@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cosmetics, economy, store } from '../api/endpoints'
+import type { EquipInput } from '../api/types'
 import { queryKeys } from './keys'
 
 export function useBalanceQuery(token: string | null) {
@@ -46,6 +47,25 @@ export function usePurchaseMutation(token: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.economy.balance() })
       queryClient.invalidateQueries({ queryKey: queryKeys.store.inventory() })
+    },
+  })
+}
+
+export function useEquippedQuery(token: string | null) {
+  return useQuery({
+    queryKey: queryKeys.store.all.concat(['equipped']),
+    queryFn: () => cosmetics.equipped(token),
+    enabled: !!token,
+    staleTime: 30_000,
+  })
+}
+
+export function useEquipMutation(token: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: EquipInput) => cosmetics.equip(token, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.store.all.concat(['equipped']) })
     },
   })
 }

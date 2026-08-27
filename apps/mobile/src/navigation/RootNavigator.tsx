@@ -29,7 +29,7 @@ import { HomeScreen } from '../screens/home/HomeScreen';
 import { PlaygroundFeedScreen } from '../screens/playground/PlaygroundFeedScreen';
 import { InfoScreen } from '../screens/info/InfoScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
-import { RewardsScreen } from '../screens/rewards/RewardsScreen';
+import { RewardsRoute } from '../screens/rewards/RewardsRoute';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { VoiceOverlay } from '../components/VoiceOverlay';
 import { useColors, useTheme } from '../theme/ThemeContext';
@@ -136,7 +136,7 @@ function ServersTabs() {
       />
       <ServersTab.Screen
         name="RewardsTab"
-        component={RewardsScreen}
+        component={RewardsRoute}
         options={{
           tabBarLabel: 'Rewards',
           tabBarIcon: ({ color }) => <Gift size={22} color={color} />,
