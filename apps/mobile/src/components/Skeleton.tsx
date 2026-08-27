@@ -121,7 +121,7 @@ const makeStyles = (c: Palette) =>
     overflow: 'hidden',
   },
   sheen: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     left: 0,
     backgroundColor: c.surfaceHover,
     opacity: 0.9,

@@ -14,6 +14,7 @@ import { CallDock } from './CallDock';
 import { CallHeader } from './CallHeader';
 import { CallRoster } from './CallRoster';
 import { ParticipantTile } from './ParticipantTile';
+import { PersonaToggle } from './PersonaToggle';
 import { StageBackdrop } from './StageBackdrop';
 import { useCallRoster } from './useCallRoster';
 
@@ -37,6 +38,7 @@ export function CallScreen({ navigation }: any) {
   const c = useColors();
   const bottomInset = useBottomInset();
   const {
+    activeRoomId,
     activeRoomName,
     status,
     error,
@@ -64,8 +66,17 @@ export function CallScreen({ navigation }: any) {
   const [rosterOpen, setRosterOpen] = useState(false);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [preferGrid, setPreferGrid] = useState<boolean | null>(null);
+  const [isAnonymous, setIsAnonymous] = useState(true);
 
   const { tiles, spotlight, hasScreenShare, screenShare } = useCallRoster(pinnedId);
+
+  // Update anonymous state based on tiles (self member)
+  useEffect(() => {
+    const self = tiles.find((t) => t.isSelf);
+    if (self) {
+      setIsAnonymous(self.anonymous);
+    }
+  }, [tiles]);
 
   // Leaving is a side effect, so it happens in an effect. Calling `goBack()`
   // straight from the render body — which is what this did — navigates while
@@ -118,6 +129,15 @@ export function CallScreen({ navigation }: any) {
           headcount={tiles.length}
           onMinimize={() => navigation.goBack()}
           onOpenRoster={() => setRosterOpen(true)}
+          action={
+            activeRoomId ? (
+              <PersonaToggle
+                roomId={activeRoomId}
+                isAnonymous={isAnonymous}
+                onToggle={setIsAnonymous}
+              />
+            ) : null
+          }
         />
 
         {error ? (
@@ -192,9 +212,9 @@ export function CallScreen({ navigation }: any) {
 
                 {RTCView && sharedScreen ? (
                   <View style={styles.screenSurface}>
-                    <RTCView
-                      streamURL={(sharedScreen as any).toURL()}
-                      style={StyleSheet.absoluteFillObject}
+                    <webrtcModule.RTCView
+                      streamURL={(screenShare!.screenStream as any).toURL()}
+                      style={StyleSheet.absoluteFill}
                       // Contain, not cover: a shared screen cropped to fill the
                       // frame is a shared screen you cannot read.
                       objectFit="contain"

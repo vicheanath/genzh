@@ -1,22 +1,67 @@
-# genzh-backend
+# genzh
 
-Rust backend for a mobile-first social hangout platform: accounts, communities,
-rooms, permissions, chat — and realtime voice, video and screen sharing through
-LiveKit.
+A mobile-first social platform that is deliberately **two products sharing one
+backend**:
 
-One independently deployable binary, one PostgreSQL database, LiveKit for media,
-no other infrastructure.
+| **Playground** | **Servers** |
+| --- | --- |
+| Throwaway rooms you drop into and leave. A full-screen feed you swipe. Nothing in it is still here tomorrow. | Discord-style communities you belong to. Channels, roles, history, people who are still there next week. |
+
+Accounts, communities, rooms, permissions and chat — plus realtime voice, video
+and screen sharing through a selective forwarding unit. Two independently
+deployable Rust binaries, one PostgreSQL database, no other infrastructure.
 
 ```
-apps/api    control plane  — who you are, what you may do
-apps/web    web client     — React + Base UI + CSS Modules
+apps/api          control plane  — who you are, what you may do
+apps/media        media plane    — WebRTC, RTP forwarding
+apps/web          web client     — React + Base UI + CSS Modules
+apps/mobile       phone client   — Expo + React Navigation
+packages/shared   @genzh/shared  — wire types, endpoints, queries, sockets
 ```
+
+### Documentation
+
+| Document | Covers |
+| --- | --- |
+| [`docs/architecture.md`](docs/architecture.md) | **Start here.** The two halves, the three planes, layering, the client stack, how data moves |
+| [`docs/rooms.md`](docs/rooms.md) | The room model in full: pillars, the three kinds of room, lifecycle, the feed |
+| [`docs/clients.md`](docs/clients.md) | The web and mobile apps: the mode split in the UI, the query layers, the design system, the traps |
+| [`docs/api.md`](docs/api.md) | Endpoint reference |
+| [`docs/media-protocol.md`](docs/media-protocol.md) | The signalling wire protocol |
+| [`docs/sfu.md`](docs/sfu.md) | How the SFU forwards packets |
+| [`docs/deploy-cloudflare-tunnel.md`](docs/deploy-cloudflare-tunnel.md) | Getting it onto the internet |
 
 ---
 
 ## 1. Architecture
 
-### The separation of concerns
+Summarised here; the full treatment is [`docs/architecture.md`](docs/architecture.md).
+
+### The product split, and why it is in the schema
+
+The two halves make opposite promises, so the difference cannot live only in the
+UI. One predicate in `crates/domain/src/room.rs` decides which half a room
+belongs to:
+
+```rust
+pub fn is_playground(&self) -> bool {
+    self.community_id.is_none() && !self.is_direct()
+}
+```
+
+| Kind | `community_id` | `category` | Expires | Discoverable |
+| --- | --- | --- | --- | --- |
+| Community channel | set | anything | no | no |
+| Direct conversation | `NULL` | `'dm'` | no | no |
+| **Playground room** | `NULL` | anything else | **always** | **yes** |
+
+A playground room always ends — at a TTL it is given whether or not the creator
+asked for one, or shortly after the last person leaves. A channel and a DM never
+do. Every surface that shows rooms to a stranger filters on that scope in SQL,
+as a filter and never as a ranking. See [`docs/rooms.md`](docs/rooms.md).
+
+### The two binaries, and why
+
 
 The API handles all control-plane logic: accounts, communities, roles, rooms,
 messages, and permissions. LiveKit handles all media: peer connections, tracks,
@@ -72,65 +117,97 @@ permission model has 25 tests that run in microseconds.
 ### Dependency direction
 
 ```
-apps/api ──▶ genzh-{auth,community,room,messaging,graph} ──▶ genzh-domain ──▶ (sqlx)
+apps/api ──▶ genzh-{auth,community,room,messaging,graph,notification,
+    │                recommend,admin,cron} ──▶ genzh-domain ──▶ (sqlx)
     │
-    └──▶ (standard dependencies: axum, tokio, etc.)
+    └──▶ genzh-media-core ◀── genzh-room ◀── apps/media
+                       ▲
+        the ONLY crate both planes share:
+        token claims, media permissions, ICE config,
+        codec registry, track kinds, room events, VAD trait
 ```
 
-The API has no dependency on media infrastructure. LiveKit integration happens
-purely at the HTTP level: the API generates tokens and responds with LiveKit
-connection details; the client connects to LiveKit directly.
+`genzh-media-core` has no SQLx, no HTTP, and no dependency on `genzh-domain`.
+The media plane therefore *cannot* reference a database model even by accident.
 
 ---
 
 ## 2. Repository layout
 
 ```
-genzh-backend/
+genzh/
 ├── Cargo.toml                   workspace, shared dependency versions
-├── docker-compose.yml           postgres + api + livekit (docker-compose handles livekit setup)
-├── Dockerfile.api
-├── Dockerfile.seed              seed database for development
+├── pnpm-workspace.yaml          apps/web, apps/mobile, packages/shared
+├── docker-compose.yml           postgres + api + media + coturn
+├── Dockerfile.api  Dockerfile.media  Dockerfile.web
 ├── .env.example
 │
 ├── apps/
 │   ├── api/                     control plane (lib + bin, so tests get the real router)
 │   │   ├── src/
 │   │   │   ├── main.rs          startup, tracing, graceful shutdown
-│   │   │   ├── lib.rs
 │   │   │   ├── config.rs        environment → Config, with the secret checks
 │   │   │   ├── state.rs         dependency injection container
 │   │   │   ├── router.rs        the routing table and middleware stack
 │   │   │   ├── error.rs         domain errors → HTTP status + stable codes
 │   │   │   ├── extract.rs       ApiJson: rejections in the API's error shape
 │   │   │   ├── middleware/      CurrentUser, request id, rate limiting
-│   │   │   └── routes/          thin handlers
+│   │   │   ├── jobs/            the recurring work, one file each
+│   │   │   ├── oauth/           provider flows
+│   │   │   └── routes/          thin handlers — incl. bff.rs and ws/
 │   │   └── tests/               integration tests against real PostgreSQL
 │   │
-│   └── web/                     web client (see apps/web/README.md)
+│   ├── media/                   media plane
+│   │   └── src/
+│   │       ├── auth.rs          media token verification — the whole trust boundary
+│   │       ├── signaling.rs     the per-connection loop
+│   │       └── config.rs        no DATABASE_URL, no JWT_SECRET
+│   │
+│   ├── web/                     React + Base UI + CSS Modules
+│   │   └── src/
+│   │       ├── components/      one folder each
+│   │       ├── features/        <domain>/api holds that domain's React Query hooks
+│   │       │   └── playground/  the swipe feed
+│   │       ├── routes/          screens, and shell/ for the rail + sidebar
+│   │       └── lib/             api, auth, media, appMode, roomTypes, store
+│   │
+│   └── mobile/                  Expo + React Navigation
 │       └── src/
-│           ├── components/      Base UI + CSS Modules, one folder each
-│           ├── routes/          screens
-│           └── lib/
-│               ├── api/         typed client
-│               ├── auth/        session and refresh
-│               └── media/       LiveKit client integration
+│           ├── navigation/      two tab navigators — one per mode
+│           ├── context/         Auth, AppMode, Chat, Voice
+│           ├── screens/         one folder per destination, incl. playground/
+│           ├── components/      the design system, mirrored from the web's
+│           └── theme/           tokens, as plain objects (RN has no cascade)
+│
+├── packages/
+│   └── shared/                  @genzh/shared — aliased to source, not built
+│       └── src/
+│           ├── api/             types.ts (mirrors the Rust DTOs), endpoints.ts
+│           ├── queries/         React Query hooks + the query-key factory
+│           ├── viewmodels/      composed hooks (mobile)
+│           ├── ws/              ChatSocket
+│           ├── media/           the client half of the SFU protocol
+│           └── chat/            mentions, emoji, limits, notification rules
 │
 ├── crates/
-│   ├── domain/                  ids, entities, RoomType, Permission — pure
-│   ├── infrastructure/          pool, migrations, error translation
-│   ├── auth/                    Argon2id, JWT, sessions
-│   ├── community/               communities, roles, the permission resolver
-│   ├── social/                  friendships, blocks
-│   ├── room/                    rooms, room authorization, LiveKit token issuing
-│   ├── messaging/               messages, reactions
-│   ├── notification/            notifications
-│   ├── admin/                   admin functions
-│   ├── cron/                    scheduled jobs
-│   └── recommend/               recommendation engine
+│   ├── domain/                  ids, entities, RoomType, Permission — pure, depends on nothing
+│   ├── infrastructure/          pool, migrations, error translation, the volatile ports
+│   ├── auth/                    Argon2id, JWT, sessions, OAuth, profiles
+│   ├── community/               communities, roles, invites, the permission resolver
+│   ├── social/                  friendships and blocks — package name `genzh-graph`
+│   ├── room/                    rooms, authorization, discovery, media issuing
+│   ├── messaging/               messages, reactions, pins, search
+│   ├── notification/            the inbox, and what is worth waking somebody for
+│   ├── recommend/               ranked suggestions — rooms, communities, people
+│   ├── admin/                   platform staff, support queue, audit log, moderation
+│   ├── cron/                    the job trait and the scheduler
+│   ├── media-core/              the two-plane contract (no db, no http)
+│   ├── media-signaling/         the wire protocol and its limits
+│   └── media-room/              rooms, participants, tracks, and the SFU
 │
-├── migrations/                  database schema and seed data
-└── docs/                        API reference
+├── migrations/                  0001…0017, applied by sqlx and embedded at build
+├── deploy/                      home-server compose, TURN, deploy script
+└── docs/                        architecture, rooms, API, protocol, SFU
 ```
 
 ---
@@ -211,13 +288,17 @@ application-level joins for no benefit at this size.
 
 ```
 User ──1:1──▶ Profile
-  └──*──▶ Session
+  ├──*──▶ Session
+  ├──*──▶ Friendship (unordered pair)   Block (one-directional)
+  └──*──▶ Notification   Inventory   Referral
 
 Community ──▶ Members ──▶ MemberRoles ──▶ Roles ──▶ RolePermissions ──▶ Permissions
     └──▶ Rooms ──▶ RoomPermissions (per-room allow/deny overrides)
+           ├──▶ RoomParticipants ──▶ RoomAnonymousIdentity
            └──▶ Messages ──▶ MessageReactions
 
-Friendship (unordered pair)   Block (one-directional)
+Rooms with community_id IS NULL are standalone: a playground room, or —
+when category = 'dm' — a direct conversation.
 ```
 
 UUID primary keys, generated by the application. `TIMESTAMPTZ` everywhere; there
@@ -231,6 +312,21 @@ carries its own schema. To apply them by hand:
 cargo install sqlx-cli --no-default-features --features postgres
 sqlx migrate run --database-url "$DATABASE_URL"
 ```
+
+Three traps, all met the hard way — the third took the API down completely:
+
+* **Never apply a migration by hand with `psql -f`.** It records no row in
+  `_sqlx_migrations`, so the next sqlx run retries it and fails, which silently
+  turns every integration test into a *skip* reported as "N passed" in 0.00s.
+* **`CREATE TYPE` is not idempotent** — Postgres has no `IF NOT EXISTS` for it.
+  Use the `DO $$ … EXCEPTION WHEN duplicate_object` block the existing
+  migrations use.
+* **A new enum label cannot be used by the migration that adds it.** sqlx wraps
+  each migration in one transaction and Postgres rejects it as *"unsafe use of
+  new value"*. Compare as text: `WHERE room_type::text IN (…)`.
+
+Since migrations are embedded at compile time, editing a `.sql` and re-running
+an existing binary changes nothing. Rebuild.
 
 Queries are **runtime-checked** (`query_as`, not `query_as!`) so `cargo check`
 works on a fresh clone with no database and no `.sqlx` cache to go stale.
@@ -247,25 +343,39 @@ error, has one shape:
 ```
 
 ```
-POST   /api/v1/auth/register            GET    /api/v1/communities
-POST   /api/v1/auth/login               POST   /api/v1/communities
-POST   /api/v1/auth/refresh             GET    /api/v1/communities/{id}
-POST   /api/v1/auth/logout              PATCH  /api/v1/communities/{id}
-GET    /api/v1/me                       DELETE /api/v1/communities/{id}
-GET    /api/v1/users/{id}
-PATCH  /api/v1/me                       POST   /api/v1/communities/{id}/members
-                                        DELETE /api/v1/communities/{id}/members/{user_id}
-GET    /api/v1/communities/{id}/rooms   POST   /api/v1/communities/{id}/roles
-POST   /api/v1/communities/{id}/rooms   PATCH  /api/v1/communities/{id}/roles/{role_id}
-GET    /api/v1/rooms/{id}
-PATCH  /api/v1/rooms/{id}               GET    /api/v1/rooms/{id}/messages
-DELETE /api/v1/rooms/{id}               POST   /api/v1/rooms/{id}/messages
+── auth ──                              ── communities ──
+POST   /auth/register                   GET    /communities
+POST   /auth/login                      POST   /communities
+POST   /auth/refresh                    GET    /communities/{id}
+POST   /auth/logout                     PATCH  /communities/{id}
+GET    /me   PATCH /me                  DELETE /communities/{id}
+GET    /users/{id}                      POST   /communities/{id}/members
+                                        POST   /communities/{id}/roles
+── rooms ──                             GET    /communities/{id}/rooms
+POST   /rooms          (playground)     POST   /communities/{id}/rooms
+GET    /rooms/mine
+GET    /rooms/{id}                      ── the playground ──
+PATCH  /rooms/{id}                      GET    /rooms/feed
+DELETE /rooms/{id}                      GET    /rooms/discovery
+POST   /rooms/{id}/join                 GET    /rooms/trending
+POST   /rooms/{id}/leave                GET    /rooms/live
+PATCH  /rooms/{id}/persona              GET    /rooms/random
+POST   /rooms/dm/{user_id}
 
-POST   /api/v1/rooms/{id}/media/join    GET    /health
-POST   /api/v1/rooms/{id}/media/leave   GET    /ready
+── messages ──                          ── composite views (BFF) ──
+GET    /rooms/{id}/messages             GET    /me/overview
+POST   /rooms/{id}/messages             GET    /me/social
+PATCH  /messages/{id}                   GET    /communities/{id}/overview
+GET    /search/messages                 POST   /rooms/{id}/session
+
+── media ──                             ── realtime & health ──
+POST   /rooms/{id}/media/join           GET    /ws
+POST   /rooms/{id}/media/leave          GET    /health   GET /ready
 ```
 
-Plus friends and blocks under `/api/v1/friends` and `/api/v1/blocks`.
+Plus friends and blocks under `/friends` and `/blocks`, the inbox under
+`/notifications`, rewards under `/economy`, `/store` and `/inventory`, and the
+platform console under `/admin`.
 
 > Route patterns are written `{id}` because Axum 0.8 uses that syntax. The URLs
 > clients call are unchanged: `/api/v1/rooms/6f1c…/media/join`.
@@ -355,11 +465,21 @@ To confirm media is actually flowing rather than trusting the UI, open
 3. **Integration tests skip without a database.** `cargo test --workspace`
    passes on a fresh clone because the database-backed tests announce a skip.
    Set `TEST_DATABASE_URL` to actually run them — and do, in CI.
-4. **No presence, activities, marketplace or monetisation.** Out of scope for
-   this phase; the schema and room model leave room for them.
-5. **Media features are LiveKit's responsibility.** Simulcast, SVC, transcoding,
-   dynamic bandwidth adaptation, and other media-layer features are handled by
-   LiveKit and its configuration.
+9. **One screen share per participant**, enforced by the track model.
+10. **iOS screen share is impossible** without a broadcast extension. It works
+    on Android.
+11. **Expo Go cannot carry voice.** There is no WebRTC in it, so a call joins
+    and carries no audio — a dev build is mandatory for the mobile client.
+12. **`rooms.family` is written and never read.** Migration 0017 adds the
+    column, backfills it and indexes it, but no query selects it: `RoomFamily`
+    is derived in Rust from `room_type`. Either it should drive the pillar
+    queries or it should be dropped; today it is neither.
+13. **`RoomVisibility::FriendsOnly` is not enforced anywhere.** The variant
+    exists; nothing reads it. Discovery filters on `public`, and access is
+    decided by the `view_room` permission.
+14. **The mobile playground feed has not been run on a device.** It typechecks
+    and shares its logic with the verified web implementation, but the swipe
+    snapping and safe-area insets are unproven on real hardware.
 
 ---
 
@@ -405,16 +525,31 @@ but outside this backend's scope.
 ```bash
 cargo test --workspace                                   # unit tests, no database needed
 TEST_DATABASE_URL=postgres://…/social cargo test         # + integration tests
+
+# the client side
+cd packages/shared && npx tsc --noEmit
+cd apps/web       && npx tsc --noEmit -p tsconfig.app.json
+cd apps/mobile    && npx tsc --noEmit
 ```
+
+> **The integration tests skip silently without a database** and still report
+> "ok". A run that finishes in milliseconds skipped; a real run takes seconds.
 
 Roughly 200 tests. The ones worth knowing about:
 
 | Area | Where |
 |---|---|
 | Permission resolution, room overrides, escalation guard | `crates/domain`, `crates/community` |
-| LiveKit token: forged, expired, wrong room, wrong issuer, tampered | `crates/room`, `apps/api/src/routes/media.rs` |
-| Register → community → voice room → LiveKit token, end to end | `apps/api/tests/api.rs` |
-| Outsiders get no room access and no LiveKit token | `apps/api/tests/api.rs` |
+| Media token: forged, expired, wrong room, wrong issuer, tampered | `crates/media-core`, `apps/media/src/auth.rs` |
+| Room lifecycle: join, publish, subscribe, unpublish, leave, destroy | `crates/media-room` |
+| RTP fan-out, lag behaviour, header stripping, keyframe relay | `crates/media-room` |
+| Register → community → voice room → media token, end to end | `apps/api/tests/api.rs` |
+| Outsiders get no room access and no media token | `apps/api/tests/api.rs` |
+| The playground/servers split: what the feed shows, what expires, what gets reaped | `apps/api/tests/api.rs` |
+
+The media-room tests run the whole participant lifecycle against a recording
+transport double, so "does leaving detach every subscriber?" is answerable in
+milliseconds instead of by hand with two browsers.
 
 ## License
 

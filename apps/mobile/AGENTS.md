@@ -1,15 +1,13 @@
 # Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before
+Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before
 writing any code. Note that Expo retires old versioned doc pages — if that URL
 404s, the version set this project actually installs is the authority:
 `node_modules/expo/bundledNativeModules.json`, which is what `expo install`
 itself reads.
 
-This project is pinned to **SDK 54.0.37** (React Native 0.81.5, React 19.1.0)
-to match the Expo Go build on the target device. Do not "upgrade to latest"
-without confirming which Expo Go the device runs — Expo Go only ever runs the
-one SDK it was compiled for.
+This project is pinned to **SDK 57.0.17** (React Native 0.85.0, React 19.1.0).
+Since dev builds are used, this is independent of the Expo Go version on your device.
 
 # Dev server port: 8090, not 8081
 

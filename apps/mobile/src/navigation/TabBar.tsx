@@ -199,13 +199,13 @@ const makeStyles = (c: Palette, e: ElevationSet) =>
     justifyContent: 'center',
   },
   wash: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: Radius.full,
     backgroundColor: c.accentSubtle,
   },
   // Stacked on the idle glyph, which is the one that sets the slot's size.
   iconOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

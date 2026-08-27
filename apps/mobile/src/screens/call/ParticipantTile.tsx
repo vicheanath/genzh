@@ -80,10 +80,10 @@ export function ParticipantTile({
         pressStyle,
       ]}
     >
-      {RTCView && videoStream ? (
-        <RTCView
-          streamURL={(videoStream as any).toURL()}
-          style={StyleSheet.absoluteFillObject}
+      {showsVideo ? (
+        <webrtcModule.RTCView
+          streamURL={(member.cameraStream as any).toURL()}
+          style={StyleSheet.absoluteFill}
           objectFit="cover"
           // You expect your own camera to behave like a mirror.
           mirror={member.isSelf}

@@ -34,6 +34,7 @@ export function CallHeader({
   headcount,
   onMinimize,
   onOpenRoster,
+  action,
 }: {
   roomName: string;
   status: CallStatus;
@@ -41,6 +42,7 @@ export function CallHeader({
   headcount: number;
   onMinimize: () => void;
   onOpenRoster: () => void;
+  action?: React.ReactNode;
 }) {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
@@ -88,16 +90,19 @@ export function CallHeader({
         </View>
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${headcount} in this call. Open the participant list`}
-        onPress={onOpenRoster}
-        style={styles.headcountPill}
-        hitSlop={8}
-      >
-        <Users size={13} color={c.accentText} />
-        <Text style={styles.headcountText}>{headcount}</Text>
-      </Pressable>
+      <View style={styles.rightControls}>
+        {action}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${headcount} in this call. Open the participant list`}
+          onPress={onOpenRoster}
+          style={styles.headcountPill}
+          hitSlop={8}
+        >
+          <Users size={13} color={c.accentText} />
+          <Text style={styles.headcountText}>{headcount}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -110,6 +115,11 @@ const makeStyles = (c: Palette) =>
     gap: Spacing.sm,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
+  },
+  rightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
   },
   circleButton: {
     width: 40,

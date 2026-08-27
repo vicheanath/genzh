@@ -30,12 +30,15 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Allow GenZH to access your camera for video calls and profile pictures.",
         "NSMicrophoneUsageDescription": "Allow GenZH to access your microphone for voice rooms and calls.",
-        "UIBackgroundModes": ["audio", "voip"]
-      }
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ]
+      },
+      "bitcode": false
     },
     "android": {
       "package": "com.genzh.mobile",
-      "usesCleartextTraffic": true,
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
@@ -43,7 +46,12 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PROJECTION",
         "FOREGROUND_SERVICE_MICROPHONE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.INTERNET",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#181815",
@@ -55,6 +63,17 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "58b78782-3fbb-4b17-aaa3-4a9cbdd48724"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/58b78782-3fbb-4b17-aaa3-4a9cbdd48724"
     }
   }
 }

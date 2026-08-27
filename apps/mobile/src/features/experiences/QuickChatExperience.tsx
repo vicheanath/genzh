@@ -212,7 +212,7 @@ const makeStyles = (c: Palette) =>
     fontSize: 24,
   },
   burstLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   floating: {
     position: 'absolute',

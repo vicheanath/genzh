@@ -241,24 +241,119 @@ already hold everything there is to grant.
 
 ## Rooms
 
+Full model in [`rooms.md`](rooms.md). Three kinds of room share this table, and
+which one you have is decided by `community_id` and `category`:
+
+| Kind                | `community_id` | `category`    | Expires    | Discoverable |
+| ------------------- | -------------- | ------------- | ---------- | ------------ |
+| Community channel   | set            | anything      | no         | no           |
+| Direct conversation | `null`         | `"dm"`        | no         | no           |
+| Playground room     | `null`         | anything else | **always** | **yes**      |
+
 | Method   | Path                      | Requires                                   |
 | -------- | ------------------------- | ------------------------------------------ |
 | `GET`    | `/communities/{id}/rooms` | membership — filtered to rooms you can see |
 | `POST`   | `/communities/{id}/rooms` | `manage_room`                              |
+| `POST`   | `/rooms`                  | authenticated — creates a playground room  |
+| `GET`    | `/rooms/mine`             | authenticated                              |
 | `GET`    | `/rooms/{id}`             | `view_room`                                |
 | `PATCH`  | `/rooms/{id}`             | `manage_room`                              |
 | `DELETE` | `/rooms/{id}`             | `manage_room`                              |
+| `POST`   | `/rooms/{id}/join`        | `view_room`                                |
+| `POST`   | `/rooms/{id}/leave`       | participant — **204**                      |
+| `GET`    | `/rooms/{id}/participants`| `view_room`                                |
+| `PATCH`  | `/rooms/{id}/persona`     | participant, anonymous rooms only          |
+| `POST`   | `/rooms/dm/{user_id}`     | authenticated — opens or returns the DM    |
 
 ```json
 { "name": "lounge", "room_type": "voice", "topic": "…", "max_participants": 20 }
 ```
 
-`room_type` is one of `text`, `voice`, `video`, `activity`, and is **not**
-updatable: turning a text room into a voice room mid-flight would strand
-clients and invalidate every media token already issued for it.
+`room_type` is one of twenty values across three pillars — `text`, `voice`,
+`video`, `stage`; `truth_or_dare`, `would_you_rather`, `hot_takes`, `poll`,
+`trivia`, `debate`, `guess_who`, `game`, `activity`; `random_chat`,
+`anonymous_chat`, `match_interest`, `friend_finder`, `topic_room`, `confession`,
+`quick_chat`. It is **not** updatable: turning a text room into a voice room
+mid-flight would strand clients and invalidate every media token already issued
+for it.
+
+`duration_minutes` is optional. On a **playground room** it is clamped to
+1–1440 and **defaults to 360 (6 hours) if omitted** — a moment nobody gave an
+end to still ends. A community channel gets `expires_at: null` unless one is
+explicitly asked for; a DM always does.
 
 `GET /rooms/{id}` returns the room plus `your_permissions`, resolved for that
 specific room with its overrides applied.
+
+`POST /rooms/{id}/leave` returns **204** and stamps `emptied_at`, which is what
+lets an emptied playground room be reaped. Leaving is advisory for calls: the
+media server treats a closed socket as the authoritative departure.
+
+## Playground discovery
+
+Everything in this section is scoped identically — public, active, unexpired,
+`community_id IS NULL`, `category <> 'dm'`. That is a filter and never a
+ranking: a community channel must be *absent*, not merely scored low.
+
+| Method | Path               | Returns                                            |
+| ------ | ------------------ | -------------------------------------------------- |
+| `GET`  | `/rooms/feed`      | one page of the swipe feed, with hosts and faces    |
+| `GET`  | `/rooms/discovery` | trending + live + categories + a wall of rooms      |
+| `GET`  | `/rooms/trending`  | up to 20 rooms by participants                      |
+| `GET`  | `/rooms/live`      | up to 20 live voice/video/stage/game rooms          |
+| `GET`  | `/rooms/random`    | one room, or `null` — one-click matchmaking         |
+
+### `GET /rooms/feed`
+
+Query: `category` (optional), `limit` (1–50, default 20), `offset` (default 0).
+
+```json
+{
+  "rooms": [
+    {
+      "id": "92700374-…",
+      "community_id": null,
+      "owner_id": "d544dbfe-…",
+      "name": "Unpopular opinions only",
+      "topic": "A place to be wrong out loud",
+      "category": "debate",
+      "room_type": "hot_takes",
+      "visibility": "public",
+      "status": "active",
+      "is_anonymous": false,
+      "current_participants": 4,
+      "expires_at": "2026-08-26T20:27:22Z",
+      "created_at": "2026-08-26T14:27:22Z",
+      "host": {
+        "id": "d544dbfe-…",
+        "handle": "feedtester",
+        "display_name": "Feed Tester",
+        "avatar_url": null,
+        "avatar_effect": null,
+        "accent_color": null
+      },
+      "faces": [ { "id": "…", "handle": "…", "display_name": "…" } ]
+    }
+  ],
+  "next_offset": 20
+}
+```
+
+`host` is absent when the owner's account is gone. `faces` is at most five
+participants, oldest joiner first, and **never includes an anonymous
+participant** — a room that hides who is inside it must not show them on the
+card outside it.
+
+`next_offset` is absent at the end of the feed; the server decides where the
+page ends rather than the client counting what it got.
+
+Ordering is for swiping, not browsing: a room with somebody in it beats an empty
+one outright, then busiest, then freshest. Offsets rather than a cursor, because
+that ordering shifts between pages and a cursor into a moving list would
+silently skip rooms.
+
+Cost is three queries regardless of page size — the rooms, their participants,
+then one batch lookup of every profile behind both.
 
 ## Media
 
@@ -358,7 +453,7 @@ block is not observable from the outside, and blocking ends any friendship.
 
 ## Composite views
 
-Four endpoints answer a whole *screen* instead of a single table. The server
+Five endpoints answer a whole *screen* instead of a single table. The server
 composes them from the same services the granular endpoints use — this is the
 backend-for-frontend layer — so a client renders a screen from one response
 instead of walking a waterfall of six.
@@ -369,6 +464,7 @@ instead of walking a waterfall of six.
 | `GET`  | `/me/social`                    | friends, online friends, incoming and outgoing requests, blocklist               |
 | `GET`  | `/communities/{id}/overview`    | community with `your_permissions`, its rooms, its members with roles, its roles  |
 | `POST` | `/rooms/{id}/session`           | room with `your_permissions` and persona, participants, the last 50 messages, and a media token for a voice/video/stage room |
+| `GET`  | `/rooms/feed`                   | one page of the playground feed: rooms, each with its host and up to five faces — see [Playground discovery](#playground-discovery) |
 
 Every one of these enforces exactly the same authorization as the granular
 endpoint it stands in for; composing changes the number of requests, never who
@@ -378,8 +474,10 @@ may see what.
 room mints an SFU credential, the same one `POST /rooms/{id}/media/join` issues.
 Use `GET /rooms/{id}` when you only want to look at a room.
 
-There is no composite discovery endpoint — `GET /rooms/discovery` is already
-one, and it takes `category` and `limit` besides.
+`GET /rooms/feed` lives here for the same reason: a card needs a host and a
+handful of avatars, and resolving those room by room is the waterfall this layer
+exists to avoid. `GET /rooms/discovery` is likewise already composite — trending,
+live, categories and a wall of rooms in one response.
 
 Nothing forces a client to use these. The granular endpoints remain the
 contract; the composite ones are an optimization a client opts into.
