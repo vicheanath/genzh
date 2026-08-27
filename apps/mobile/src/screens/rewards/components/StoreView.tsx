@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Gift, Zap } from 'lucide-react-native';
+import { Zap } from 'lucide-react-native';
 import { useBalanceQuery, useStoreItemsQuery, useInventoryQuery, usePurchaseMutation } from '@genzh/shared';
 
-import { Button } from '../../components/Button';
-import { ScreenHeader } from '../../components/ScreenHeader';
-import { ToggleGroup } from '../../components/ToggleGroup';
-import { useToast } from '../../components/Toast';
-import { useAuth } from '../../context/AuthContext';
-import { Radius, Spacing, type Palette } from '../../theme/tokens';
-import { useThemedStyles, useColors } from '../../theme/ThemeContext';
+import { ToggleGroup } from '../../../components/ToggleGroup';
+import { useToast } from '../../../components/Toast';
+import { useAuth } from '../../../context/AuthContext';
+import { Radius, Spacing, type Palette } from '../../../theme/tokens';
+import { useThemedStyles, useColors } from '../../../theme/ThemeContext';
 
 const COSMETIC_TYPES = [
   { value: null, label: 'All' },
@@ -24,7 +21,7 @@ const COSMETIC_TYPES = [
   { value: 'chat_bubble', label: 'Chat Bubble' },
 ];
 
-export function StoreScreen() {
+export function StoreView() {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { token } = useAuth();
@@ -66,14 +63,7 @@ export function StoreScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScreenHeader
-        title="Cosmetics Store"
-        subtitle={`${balance?.balance || 0} points`}
-        actions={<Gift size={20} color={c.accent} />}
-      />
-
-      {/* Filters */}
+    <View style={styles.container}>
       <View style={styles.filtersContainer}>
         <ToggleGroup
           mode="single"
@@ -89,7 +79,6 @@ export function StoreScreen() {
         />
       </View>
 
-      {/* Store Grid */}
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => item.id}
@@ -115,7 +104,7 @@ export function StoreScreen() {
                 ]}
               >
                 <View style={styles.itemPreview}>
-                  <Gift size={40} color={owned ? c.accent : c.textMuted} />
+                  <Text style={styles.icon}>✨</Text>
                 </View>
 
                 <Text style={styles.itemName} numberOfLines={2}>
@@ -160,13 +149,13 @@ export function StoreScreen() {
         }}
         contentContainerStyle={styles.list}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    safeArea: {
+    container: {
       flex: 1,
       backgroundColor: c.bg,
     },
@@ -204,6 +193,9 @@ const makeStyles = (c: Palette) =>
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: Spacing.md,
+    },
+    icon: {
+      fontSize: 40,
     },
     itemName: {
       color: c.text,
