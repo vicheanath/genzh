@@ -27,3 +27,6 @@ dist-ssr
 .env
 test-results/*
 playwright-report/*
+
+# Storybook static build
+storybook-static/
