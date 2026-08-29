@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Shirt } from 'lucide-react-native';
 import { useInventoryQuery, useEquippedQuery } from '@genzh/shared';
 
-import { ScreenHeader } from '../../components/ScreenHeader';
-import { ToggleGroup } from '../../components/ToggleGroup';
-import { useAuth } from '../../context/AuthContext';
-import { Radius, Spacing, type Palette } from '../../theme/tokens';
-import { useThemedStyles, useColors } from '../../theme/ThemeContext';
+import { ToggleGroup } from '../../../components/ToggleGroup';
+import { useAuth } from '../../../context/AuthContext';
+import { Spacing, type Palette } from '../../../theme/tokens';
+import { useThemedStyles, useColors } from '../../../theme/ThemeContext';
 
 const COSMETIC_TYPES = [
   { value: null, label: 'All' },
@@ -22,7 +19,7 @@ const COSMETIC_TYPES = [
   { value: 'chat_bubble', label: 'Chat Bubble' },
 ];
 
-export function InventoryScreen() {
+export function InventoryView() {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { token } = useAuth();
@@ -41,13 +38,7 @@ export function InventoryScreen() {
     : inventory;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScreenHeader
-        title="My Cosmetics"
-        subtitle={`${inventory.length} items owned`}
-        actions={<Shirt size={20} color={c.accent} />}
-      />
-
+    <View style={styles.container}>
       {/* Filters */}
       <View style={styles.filtersContainer}>
         <ToggleGroup
@@ -104,13 +95,13 @@ export function InventoryScreen() {
         }}
         contentContainerStyle={styles.list}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    safeArea: {
+    container: {
       flex: 1,
       backgroundColor: c.bg,
     },

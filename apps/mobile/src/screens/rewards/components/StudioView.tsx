@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { FlatList, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Palette as PaletteIcon, Plus, X } from 'lucide-react-native';
 import { useInventoryQuery, useEquippedQuery, useEquipMutation } from '@genzh/shared';
 
-import { Button } from '../../components/Button';
-import { ScreenHeader } from '../../components/ScreenHeader';
-import { useToast } from '../../components/Toast';
-import { useAuth } from '../../context/AuthContext';
-import { Radius, Spacing, type Palette } from '../../theme/tokens';
-import { useThemedStyles, useColors } from '../../theme/ThemeContext';
+import { useToast } from '../../../components/Toast';
+import { useAuth } from '../../../context/AuthContext';
+import { Radius, Spacing, type Palette } from '../../../theme/tokens';
+import { useThemedStyles, useColors } from '../../../theme/ThemeContext';
 
 const COSMETIC_SLOTS = [
   { id: 'frame', label: 'Frame', icon: '🖼️' },
@@ -21,7 +19,7 @@ const COSMETIC_SLOTS = [
   { id: 'chat_bubble', label: 'Chat Bubble', icon: '💬' },
 ];
 
-export function StudioScreen() {
+export function StudioView() {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { token } = useAuth();
@@ -72,13 +70,7 @@ export function StudioScreen() {
   const currentSlot = COSMETIC_SLOTS.find((s) => s.id === selectedSlot);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScreenHeader
-        title="Outfit Studio"
-        subtitle="Customize your look"
-        actions={<PaletteIcon size={20} color={c.accent} />}
-      />
-
+    <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         {/* Avatar Preview */}
         <View style={styles.previewSection}>
@@ -168,13 +160,13 @@ export function StudioScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    safeArea: {
+    container: {
       flex: 1,
       backgroundColor: c.bg,
     },

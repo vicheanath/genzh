@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { SafeAreaView, StyleSheet, View } from 'react-native';
-import { Gift, Palette, Shirt, Zap } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
+import { Gift } from 'lucide-react-native';
 
 import { ToggleGroup } from '../../components/ToggleGroup';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { useAuth } from '../../context/AuthContext';
 import { useBalanceQuery } from '@genzh/shared';
-import { Radius, Spacing, type Palette as PaletteType } from '../../theme/tokens';
+import { Spacing, type Palette as PaletteType } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { StoreView } from './components/StoreView';

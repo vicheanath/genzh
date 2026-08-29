@@ -1,13 +1,12 @@
 import React from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { ArrowDown, ArrowUp, Zap } from 'lucide-react-native';
 import { useBalanceQuery } from '@genzh/shared';
 
-import { ScreenHeader } from '../../components/ScreenHeader';
-import { useAuth } from '../../context/AuthContext';
-import { Radius, Spacing, type Palette } from '../../theme/tokens';
-import { useThemedStyles, useColors } from '../../theme/ThemeContext';
+import { useAuth } from '../../../context/AuthContext';
+import { Radius, Spacing, type Palette } from '../../../theme/tokens';
+import { useThemedStyles, useColors } from '../../../theme/ThemeContext';
 
 // Mock transaction history
 const MOCK_TRANSACTIONS = [
@@ -67,7 +66,7 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString();
 }
 
-export function HistoryScreen() {
+export function HistoryView() {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { token } = useAuth();
@@ -76,13 +75,7 @@ export function HistoryScreen() {
   const balance = balanceQuery.data;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScreenHeader
-        title="Transaction History"
-        subtitle="Lifetime earned: ${balance?.lifetime_earned || 0}"
-        actions={<Zap size={20} color={c.accent} />}
-      />
-
+    <View style={styles.container}>
       {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
@@ -142,13 +135,13 @@ export function HistoryScreen() {
         }}
         contentContainerStyle={styles.list}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    safeArea: {
+    container: {
       flex: 1,
       backgroundColor: c.bg,
     },
