@@ -1,5 +1,5 @@
 import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip'
-import { cloneElement } from 'react'
+import { Children, cloneElement, isValidElement } from 'react'
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react'
 
 import styles from './Tooltip.module.css'
@@ -12,9 +12,36 @@ export interface TooltipProps
   side?: 'top' | 'right' | 'bottom' | 'left'
 }
 
+/** Does `node` render any non-whitespace text, at any depth? */
+function hasVisibleText(node: ReactNode): boolean {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node).trim().length > 0
+  }
+  if (Array.isArray(node)) {
+    return node.some(hasVisibleText)
+  }
+  if (isValidElement(node)) {
+    return hasVisibleText((node.props as { children?: ReactNode }).children)
+  }
+  return false
+}
+
+/**
+ * Does the trigger already have an accessible name of its own — either an
+ * explicit `aria-label`/`aria-labelledby`, or visible text content?
+ *
+ * The text-content check matters: a button that already reads "Try on" gets
+ * its accessible name from that text for free. Auto-filling `aria-label`
+ * from a *different* string (the tooltip's fuller explanation) would
+ * override it — a screen reader would announce the explanation instead of
+ * the visible label, which is worse than announcing nothing extra at all.
+ * Auto-fill exists for the icon-only case, where there is no visible text to
+ * lose.
+ */
 function hasOwnAccessibleName(element: ReactElement): boolean {
   const props = element.props as Record<string, unknown>
-  return Boolean(props['aria-label'] || props['aria-labelledby'])
+  if (props['aria-label'] || props['aria-labelledby']) return true
+  return hasVisibleText(Children.toArray(props.children as ReactNode))
 }
 
 function isDisabled(element: ReactElement): boolean {
@@ -37,13 +64,17 @@ function isDisabled(element: ReactElement): boolean {
  *
  * Two things happen to the child before Base UI ever sees it:
  *
- * 1. A plain-string `content` becomes the trigger's `aria-label`, unless the
- *    child already sets one. The tooltip text and the accessible name are the
- *    same information almost everywhere this is used — writing it twice
- *    invites the two copies to drift, which had already happened at more than
- *    one call site. An explicit `aria-label` on the child still wins, for the
- *    genuine cases where the visible tooltip and the accessible name should
- *    differ (a badge count in one, a stable label in the other).
+ * 1. A plain-string `content` becomes the trigger's `aria-label`, but only
+ *    when the child has no accessible name of its own already — no explicit
+ *    `aria-label`/`aria-labelledby`, and no visible text content either. That
+ *    second condition matters as much as the first: a button that already
+ *    reads "Try on" gets its accessible name from that text for free, and
+ *    auto-filling a *different* string over it would make a screen reader
+ *    announce the tooltip's fuller explanation instead of the visible label
+ *    — worse than announcing nothing extra. This is squarely an icon-only-
+ *    trigger feature. Where it does apply, it also closes real drift: two
+ *    call sites had already let their separately-written aria-label and
+ *    tooltip text disagree.
  * 2. A `disabled` child is wrapped in an inert span. A native `disabled`
  *    element does not reliably dispatch the hover/focus events a tooltip
  *    needs — several browsers suppress them outright — so without the
