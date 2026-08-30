@@ -1,4 +1,5 @@
 import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip'
+import { cloneElement } from 'react'
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react'
 
 import styles from './Tooltip.module.css'
@@ -9,6 +10,16 @@ export interface TooltipProps
   children: ReactElement
   content: ReactNode
   side?: 'top' | 'right' | 'bottom' | 'left'
+}
+
+function hasOwnAccessibleName(element: ReactElement): boolean {
+  const props = element.props as Record<string, unknown>
+  return Boolean(props['aria-label'] || props['aria-labelledby'])
+}
+
+function isDisabled(element: ReactElement): boolean {
+  const props = element.props as Record<string, unknown>
+  return Boolean(props.disabled) || props['aria-disabled'] === true || props['aria-disabled'] === 'true'
 }
 
 /**
@@ -23,11 +34,39 @@ export interface TooltipProps
  * the props and ref that make it a trigger. Without the spread below those land
  * on this component and stop — the button gets no `onClick`, and the popover it
  * is supposed to open never opens.
+ *
+ * Two things happen to the child before Base UI ever sees it:
+ *
+ * 1. A plain-string `content` becomes the trigger's `aria-label`, unless the
+ *    child already sets one. The tooltip text and the accessible name are the
+ *    same information almost everywhere this is used — writing it twice
+ *    invites the two copies to drift, which had already happened at more than
+ *    one call site. An explicit `aria-label` on the child still wins, for the
+ *    genuine cases where the visible tooltip and the accessible name should
+ *    differ (a badge count in one, a stable label in the other).
+ * 2. A `disabled` child is wrapped in an inert span. A native `disabled`
+ *    element does not reliably dispatch the hover/focus events a tooltip
+ *    needs — several browsers suppress them outright — so without the
+ *    wrapper, a tooltip explaining *why* a control is disabled would silently
+ *    never appear, in exactly the situation where it matters most. Only a
+ *    disabled child is wrapped; every other trigger, including one composed
+ *    with Popover above, is untouched.
  */
 export function Tooltip({ children, content, side = 'top', ...triggerProps }: TooltipProps) {
+  const labeled =
+    typeof content === 'string' && !hasOwnAccessibleName(children)
+      ? cloneElement(children, { 'aria-label': content } as Record<string, unknown>)
+      : children
+
+  const trigger = isDisabled(children) ? (
+    <span className={styles.disabledWrapper}>{labeled}</span>
+  ) : (
+    labeled
+  )
+
   return (
     <BaseTooltip.Root>
-      <BaseTooltip.Trigger {...triggerProps} render={children} />
+      <BaseTooltip.Trigger {...triggerProps} render={trigger} />
       <BaseTooltip.Portal>
         <BaseTooltip.Positioner
           className={styles.positioner}

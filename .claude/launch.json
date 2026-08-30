@@ -7,6 +7,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort"],
       "port": 5173
+    },
+    {
+      "name": "web-storybook",
+      "cwd": "apps/web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["run", "storybook"],
+      "port": 6006
     }
   ]
 }

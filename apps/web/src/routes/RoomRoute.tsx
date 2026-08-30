@@ -309,7 +309,6 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
                   type="button"
                   className={cx(styles.headerButton, searchOpen && styles.headerButtonActive)}
                   onClick={() => setSearchOpen(true)}
-                  aria-label="Search messages"
                 >
                   <SearchIcon size={17} />
                 </button>
@@ -320,7 +319,6 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
                   type="button"
                   className={cx(styles.headerButton, pinsOpen && styles.headerButtonActive)}
                   onClick={() => setPinsOpen(true)}
-                  aria-label="Pinned messages"
                   style={{ position: 'relative' }}
                 >
                   <PinIcon size={17} />
@@ -336,7 +334,6 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
                 type="button"
                 className={cx(styles.headerButton, voiceChatOpen && styles.headerButtonActive)}
                 onClick={() => setVoiceChatOpen((o) => !o)}
-                aria-label="Toggle text chat"
               >
                 <MessageSquareIcon size={17} />
               </button>
@@ -350,7 +347,6 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
                 className={cx(styles.headerButton, membersOpen && styles.headerButtonActive)}
                 onClick={() => setMembersOpen((open) => !open)}
                 aria-pressed={membersOpen}
-                aria-label="Toggle member list"
               >
                 <UsersIcon size={17} />
               </button>

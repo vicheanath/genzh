@@ -8,10 +8,24 @@
   font-size: var(--text-xs);
   line-height: 1.4;
   box-shadow: var(--shadow-md);
+  max-width: 17rem;
+  text-align: center;
   transform-origin: var(--transform-origin);
   transition:
     opacity var(--duration-fast) var(--ease-out),
     scale var(--duration-fast) var(--ease-out);
+}
+
+/*
+ * Only wraps a `disabled` trigger (see Tooltip.tsx) — a native disabled
+ * element does not reliably dispatch the hover/focus events a tooltip needs.
+ * `inline-block` rather than `contents`: a `display: contents` wrapper is
+ * removed from the box model entirely and stops receiving pointer events
+ * itself, which would defeat the wrapper's only purpose.
+ */
+.disabledWrapper {
+  display: inline-block;
+  cursor: not-allowed;
 }
 
 .popup[data-starting-style],

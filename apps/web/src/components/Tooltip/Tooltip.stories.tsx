@@ -44,3 +44,36 @@ export const AllSides: Story = {
     </TooltipProvider>
   ),
 };
+
+/**
+ * A tooltip on a `disabled` native button — the case that used to silently
+ * never show. Hover (or tab to) the button below; the reason it's disabled
+ * should appear same as any other tooltip.
+ */
+export const OnADisabledTrigger: Story = {
+  args: {} as any,
+  render: () => (
+    <Tooltip content="You need speaker permission to unmute">
+      <button type="button" disabled style={{ padding: "0.5rem 1rem" }}>
+        Unmute
+      </button>
+    </Tooltip>
+  ),
+};
+
+/**
+ * No `aria-label` written anywhere here — inspect the trigger in devtools
+ * and its accessible name should already be "Delete conversation", filled
+ * in from `content` because the child sets neither `aria-label` nor
+ * `aria-labelledby` itself.
+ */
+export const AutoFilledAccessibleName: Story = {
+  args: {} as any,
+  render: () => (
+    <Tooltip content="Delete conversation">
+      <Button variant="danger" iconOnly round>
+        🗑
+      </Button>
+    </Tooltip>
+  ),
+};
