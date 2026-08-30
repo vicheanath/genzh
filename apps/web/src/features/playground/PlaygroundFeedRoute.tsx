@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/Button'
 import { PlusIcon } from '@/components/Icons'
@@ -7,21 +7,26 @@ import { ModeSwitch } from '@/components/ModeSwitch'
 import { Spinner } from '@/components/Spinner'
 import { usePlaygroundFeed, type FeedRoom } from '@/features/api'
 import { cx } from '@/lib/cx'
+import { ROOM_CATEGORIES, roomCategoryLabel } from '@/lib/roomTypes'
 
 import { CreatePlaygroundRoomDialog } from '@/routes/CreatePlaygroundRoomDialog'
 
 import { MomentCard } from './MomentCard'
 import styles from './playground.module.css'
 
-const CATEGORIES: ReadonlyArray<{ key: string | null; label: string }> = [
+/**
+ * The filter row: everything, then one pill per topic.
+ *
+ * Built from `ROOM_CATEGORIES` rather than restated, which is what closes the
+ * gap this list used to have — it was missing Art, a topic the create dialog
+ * happily filed rooms under, so those rooms could not be reached by browsing.
+ */
+const FILTERS: ReadonlyArray<{ key: string | null; label: string }> = [
   { key: null, label: '✨ Everything' },
-  { key: 'random', label: '🎲 Random' },
-  { key: 'gaming', label: '🎮 Gaming' },
-  { key: 'debate', label: '🔥 Debates' },
-  { key: 'confession', label: '🤫 Confessions' },
-  { key: 'music', label: '🎵 Music' },
-  { key: 'memes', label: '😂 Memes' },
-  { key: 'tech', label: '💻 Tech' },
+  ...ROOM_CATEGORIES.map((entry) => ({
+    key: entry.key,
+    label: `${entry.emoji} ${entry.label}`,
+  })),
 ]
 
 /**
@@ -38,7 +43,18 @@ const CATEGORIES: ReadonlyArray<{ key: string | null; label: string }> = [
 export function PlaygroundFeedRoute() {
   const navigate = useNavigate()
 
-  const [category, setCategory] = useState<string | null>(null)
+  /*
+   * The topic lives in the address, not in component state.
+   *
+   * Same argument `appMode` makes for which half of the app you are in: on the
+   * web the URL is the state. Held in `useState` it was lost the moment you
+   * opened a room — walk into something from the Music filter, come back, and
+   * you were staring at an unfiltered feed from the top, with no way to tell
+   * what had happened. It also means a filtered playground is a link somebody
+   * can send.
+   */
+  const [params, setParams] = useSearchParams()
+  const category = params.get('topic')
   const [createOpen, setCreateOpen] = useState(false)
 
   const feed = usePlaygroundFeed(category ?? undefined)
@@ -54,7 +70,10 @@ export function PlaygroundFeedRoute() {
   }
 
   function pickCategory(next: string | null) {
-    setCategory(next)
+    // Replaced rather than pushed: the filter row is a control, and eight
+    // history entries between the reader and wherever they came from is not
+    // what Back is for.
+    setParams(next ? { topic: next } : {}, { replace: true })
     // A new filter is a new feed, not a scrolled one — leaving the reader on
     // panel nine of a list that just changed underneath them is disorienting.
     scroller.current?.scrollTo({ top: 0 })
@@ -87,25 +106,67 @@ export function PlaygroundFeedRoute() {
     />
   )
 
+  const topicName = roomCategoryLabel(category)
+
+  /*
+   * One chrome, drawn for every state of the feed.
+   *
+   * The empty state used to render its own cut-down version with nothing in it
+   * but the mode switch — so filtering to a topic that happened to be quiet
+   * took the filter row away with it. You could not see which topic you were
+   * on, could not move to another, and the only ways out were starting a room
+   * or going back to everything. The row is navigation; it has to survive the
+   * screen having nothing to show.
+   */
+  const chrome = (
+    <div className={styles.chrome}>
+      <ModeSwitch showTagline={false} />
+
+      <div className={styles.filters}>
+        {FILTERS.map((entry) => (
+          <button
+            key={entry.key ?? 'all'}
+            type="button"
+            aria-pressed={entry.key === category}
+            className={cx(styles.filter, entry.key === category && styles.filterSelected)}
+            onClick={() => pickCategory(entry.key)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        className={styles.create}
+        aria-label="Start a room"
+        onClick={() => setCreateOpen(true)}
+      >
+        <PlusIcon size={20} />
+      </button>
+    </div>
+  )
+
+  let body
   if (feed.isLoading) {
-    return (
+    body = (
       <div className={styles.centre}>
         <Spinner />
         <p className={styles.centreBody}>Finding what is happening</p>
       </div>
     )
-  }
-
-  if (items.length === 0) {
-    return (
+  } else if (items.length === 0) {
+    body = (
       <div className={styles.centre}>
-        <div className={styles.chrome}>
-          <ModeSwitch overlay />
-        </div>
-        <h1 className={styles.centreTitle}>Nothing is on right now</h1>
+        <h1 className={styles.centreTitle}>
+          {/* Names the topic. "No rooms in this topic yet" left the reader to
+              remember which one they had picked, on the one screen that no
+              longer showed it. */}
+          {topicName ? `Nothing in ${topicName} right now` : 'Nothing is on right now'}
+        </h1>
         <p className={styles.centreBody}>
           {category
-            ? 'No rooms in this topic yet. Start one, or look at everything.'
+            ? 'Start one and it will be the first thing anybody sees here.'
             : 'The playground is quiet. Start the first room and people will find it.'}
         </p>
         <div className={styles.centreActions}>
@@ -116,43 +177,10 @@ export function PlaygroundFeedRoute() {
             </Button>
           ) : null}
         </div>
-        {createDialog}
       </div>
     )
-  }
-
-  return (
-    <div className={styles.screen}>
-      {/* Floating over the feed rather than sitting in a header: the card
-          behind is the whole screen, and a bar across the top would cost every
-          room its first line. */}
-      <div className={styles.chrome}>
-        <ModeSwitch overlay showTagline={false} />
-
-        <div className={styles.filters}>
-          {CATEGORIES.map((entry) => (
-            <button
-              key={entry.key ?? 'all'}
-              type="button"
-              aria-pressed={entry.key === category}
-              className={cx(styles.filter, entry.key === category && styles.filterSelected)}
-              onClick={() => pickCategory(entry.key)}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          className={styles.create}
-          aria-label="Start a room"
-          onClick={() => setCreateOpen(true)}
-        >
-          <PlusIcon size={20} />
-        </button>
-      </div>
-
+  } else {
+    body = (
       <div ref={scroller} className={styles.feed} onScroll={onScroll}>
         {items.map((room, index) => (
           <MomentCard
@@ -164,7 +192,13 @@ export function PlaygroundFeedRoute() {
           />
         ))}
       </div>
+    )
+  }
 
+  return (
+    <div className={styles.screen}>
+      {chrome}
+      {body}
       {createDialog}
     </div>
   )

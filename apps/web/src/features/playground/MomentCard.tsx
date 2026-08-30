@@ -67,6 +67,17 @@ export function MomentCard({
   const overflow = Math.max(0, live - faces.length)
   const hostName = room.host?.display_name ?? room.host?.handle ?? null
 
+  /*
+   * Whether the host *is* the room, so far.
+   *
+   * A freshly started room comes back with the host as its only face, and the
+   * card then drew them twice on consecutive lines — the same avatar beside
+   * "started by Vichea" and again beside "inside right now". One of the two is
+   * enough, and the one that also says who is in there is the one to keep.
+   */
+  const hostIsOnlyOneInside =
+    Boolean(room.host) && faces.length === 1 && faces[0]?.id === room.host?.id && overflow === 0
+
   return (
     <article
       className={styles.card}
@@ -78,25 +89,27 @@ export function MomentCard({
     >
       <div className={styles.ground} aria-hidden />
 
-      {/* Only the two facts that change per card. The mode switch and the
-          create button float above the whole feed instead, because they belong
-          to the screen rather than to whichever room is under them. */}
-      <div className={styles.top}>
-        {live > 0 && (
-          <span className={cx(styles.chip, styles.liveChip)}>
-            <RadioIcon size={12} />
-            {live} live
-          </span>
-        )}
-        {countdown && (
-          <span className={styles.chip}>
-            <TimerIcon size={12} />
-            {countdown}
-          </span>
-        )}
-      </div>
-
       <div className={styles.middle}>
+        {/* Up here with the name rather than stranded in the opposite corner.
+            These two facts are the argument for walking in — how busy it is and
+            how long it has left — and they were pinned to the top right while
+            everything else sat bottom left, so a card read as two unrelated
+            clusters with a screen of empty gradient between them. */}
+        <div className={styles.top}>
+          {live > 0 && (
+            <span className={cx(styles.chip, styles.liveChip)}>
+              <RadioIcon size={12} />
+              {live} live
+            </span>
+          )}
+          {countdown && (
+            <span className={styles.chip}>
+              <TimerIcon size={12} />
+              {countdown}
+            </span>
+          )}
+        </div>
+
         <div className={styles.typeRow}>
           <Glyph size={16} />
           <span>{roomTypeLabel(room.room_type)}</span>
@@ -107,7 +120,7 @@ export function MomentCard({
 
         {room.topic && <p className={styles.topic}>{room.topic}</p>}
 
-        {hostName && (
+        {hostName && !hostIsOnlyOneInside && (
           <div className={styles.hostRow}>
             <Avatar
               name={hostName}
@@ -135,7 +148,13 @@ export function MomentCard({
                 />
               ))}
             </div>
-            <span>{overflow > 0 ? `+${overflow} more inside` : 'inside right now'}</span>
+            <span>
+              {overflow > 0
+                ? `+${overflow} more inside`
+                : hostIsOnlyOneInside
+                  ? `${hostName} started this — nobody else yet`
+                  : 'inside right now'}
+            </span>
           </div>
         ) : (
           <div className={styles.faces}>

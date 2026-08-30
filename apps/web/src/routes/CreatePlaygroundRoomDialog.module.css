@@ -95,12 +95,53 @@
   gap: var(--space-4);
 }
 
+/*
+ * One field: its label and its control, as a stack.
+ *
+ * These three rules replace four copies of the same eight inline style
+ * properties, which had already drifted — two of the labels carried
+ * `margin-bottom: var(--space-1)` and one `var(--space-2)`, so the form's rows
+ * did not line up with each other.
+ */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.fieldLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+@media (max-width: 500px) {
+  .fieldRow {
+    grid-template-columns: 1fr;
+  }
+}
+
 .pillarTabs {
   display: flex;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
   overflow-x: auto;
   padding-bottom: var(--space-1);
+}
+
+.pillarBlurb {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-text-muted);
 }
 
 .pillarTab {

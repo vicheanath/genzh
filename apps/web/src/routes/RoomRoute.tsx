@@ -7,27 +7,19 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import {
   ArrowLeftIcon,
-  FlameIcon,
-  GamepadIcon,
-  HashIcon,
   LockIcon,
   MessageSquareIcon,
-  MicIcon,
-  PaletteIcon,
   PhoneIcon,
   PhoneOffIcon,
   PinIcon,
-  RadioIcon,
   SearchIcon,
-  SparkleIcon,
   UsersIcon,
   VideoIcon,
-  VoteIcon,
-  ZapIcon,
 } from '@/components/Icons'
 import { LoadingPanel } from '@/components/Spinner'
 import { Tooltip } from '@/components/Tooltip'
-import { type RoomType, type RoomWithPermissions, type Uuid } from '@/lib/api'
+import { type RoomWithPermissions, type Uuid } from '@/lib/api'
+import { roomTypeIcon } from '@/lib/roomTypes'
 import {
   useJoinedRoomQuery,
   useMarkRoomReadMutation,
@@ -60,34 +52,6 @@ import { MemberList } from './MemberList'
 import { ProfileDialog } from './ProfileDialog'
 import { VoicePanel } from './VoicePanel'
 import styles from './RoomRoute.module.css'
-
-const ROOM_ICONS: Record<RoomType, typeof HashIcon> = {
-  // 💬 Conversation
-  text: HashIcon,
-  voice: MicIcon,
-  video: VideoIcon,
-  stage: RadioIcon,
-
-  // 🎮 Social Games
-  truth_or_dare: SparkleIcon,
-  would_you_rather: SparkleIcon,
-  hot_takes: FlameIcon,
-  poll: VoteIcon,
-  trivia: SparkleIcon,
-  debate: FlameIcon,
-  guess_who: UsersIcon,
-  game: GamepadIcon,
-  activity: PaletteIcon,
-
-  // 🧭 Social Discovery
-  random_chat: ZapIcon,
-  anonymous_chat: LockIcon,
-  match_interest: SparkleIcon,
-  friend_finder: UsersIcon,
-  topic_room: HashIcon,
-  confession: LockIcon,
-  quick_chat: ZapIcon,
-}
 
 export function RoomRoute() {
   const { roomId = '' } = useParams<{ roomId: string }>()
@@ -135,8 +99,10 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   const [voiceChatOpen, setVoiceChatOpen] = useState(false)
   const isMediaRoom = room.room_type === 'voice' || room.room_type === 'video' || room.room_type === 'stage'
   const isDM = room.category === 'dm'
-  // Only the non-DM header uses this; a DM is headed by an avatar.
-  const Icon = ROOM_ICONS[room.room_type] ?? HashIcon
+  // Only the non-DM header uses this; a DM is headed by an avatar. Read from
+  // the shared table so this room wears the same glyph here as it did on the
+  // card the visitor clicked to get here.
+  const Icon = roomTypeIcon(room.room_type)
 
   function handleJumpToMessage(messageId: Uuid) {
     const el = document.getElementById(`msg-${messageId}`)
@@ -183,6 +149,23 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
     await voice.leave()
   }
 
+  /**
+   * Out of a throwaway room, back to where you were in the feed.
+   *
+   * `navigate(-1)` rather than `navigate('/')` when there is history to go
+   * back to: the feed's topic is in its URL and its scroll position is the
+   * browser's, so stepping back restores both. Pushing `/` threw away the
+   * filter *and* dropped the reader at the top of the column, which after
+   * scrolling through nine rooms is a long way from where they left.
+   *
+   * A room opened from a shared link has nothing behind it, so that falls
+   * through to the feed's front door.
+   */
+  function backToFeed() {
+    if (window.history.length > 1) void navigate(-1)
+    else void navigate('/')
+  }
+
   async function handleTogglePersona(nextIsAnon: boolean) {
     setIsAnonymous(nextIsAnon)
     try {
@@ -201,8 +184,8 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
               size="sm"
               variant="ghost"
               iconOnly
-              onClick={() => void navigate('/')}
-              aria-label="Back to Playground"
+              onClick={backToFeed}
+              aria-label="Back to the playground"
             >
               <ArrowLeftIcon size={16} />
             </Button>

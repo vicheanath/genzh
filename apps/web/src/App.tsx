@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+// Commented out alongside its use below, so re-enabling is one line in each place.
+// import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { LoadingPanel } from '@/components/Spinner'
@@ -63,7 +64,7 @@ export function App() {
       </AuthProvider>
       {/* Tree-shaken out of a production build: the import resolves to an
           empty component when `process.env.NODE_ENV === 'production'`. */}
-      <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+      {/* <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" /> */}
     </QueryClientProvider>
   )
 }

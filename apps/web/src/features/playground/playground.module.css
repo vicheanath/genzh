@@ -1,34 +1,57 @@
 /*
- * The feed is a scroll-snap column, not a list.
+ * A column of moments down the middle, not a full-bleed screen.
  *
- * Each room is one viewport-tall panel and the scroller stops on it, so the
- * gesture is the same one the phone app makes: a flick moves you to the next
- * room rather than a little further down a page.
+ * The shape Reels and Shorts both landed on: the app's own navigation stays
+ * where it is and the moment is a portrait panel in the content area. The
+ * scroll-snap gesture is unchanged — a flick still moves you a whole room
+ * rather than a little further down a page — it just happens inside a column
+ * now instead of across the window.
  */
 .feed {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
   scrollbar-width: none;
-  background: #0d0d0b;
   overscroll-behavior-y: contain;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-4);
 }
 
 .feed::-webkit-scrollbar {
   display: none;
 }
 
+/*
+ * One room, as a portrait panel.
+ *
+ * `aspect-ratio` off the height is what makes it read as a reel rather than as
+ * a page section: the panel is as tall as the column allows and takes its
+ * width from that, so it stays portrait at every window size instead of
+ * stretching into a letterbox on a wide monitor. `max-width` hands the whole
+ * width back on a phone, where the column *is* the screen.
+ */
 .card {
   position: relative;
+  flex: none;
   height: 100%;
-  min-height: 0;
-  scroll-snap-align: start;
+  aspect-ratio: 9 / 16;
+  max-width: 100%;
+  scroll-snap-align: center;
   scroll-snap-stop: always;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  /* Everything sits at the bottom now that nothing is pinned to the top: an
+     open field of colour above one dense block, rather than content pushed
+     into two opposite corners. */
+  justify-content: flex-end;
   gap: var(--space-5);
-  padding: calc(var(--space-6) + 44px) var(--space-6) var(--space-6);
+  padding: var(--space-5);
+  border-radius: var(--radius-2xl);
+  border: 1px solid var(--stage-border);
   overflow: hidden;
   isolation: isolate;
 }
@@ -48,16 +71,18 @@
       160deg,
       hsl(var(--room-hue) 62% 26%) 0%,
       hsl(calc(var(--room-hue) + 28) 55% 15%) 55%,
-      #0d0d0b 100%
+      var(--stage-bg) 100%
     );
 }
 
+/* Now the first line of the content block, so it reads left-to-right with the
+   name under it rather than across the diagonal from it. */
 .top {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
+  margin-bottom: var(--space-1);
 }
 
 .chip {
@@ -66,9 +91,9 @@
   gap: 5px;
   padding: 5px 10px;
   border-radius: var(--radius-full);
-  background: rgb(12 12 10 / 50%);
-  border: 1px solid rgb(255 255 255 / 18%);
-  color: rgb(255 255 255 / 90%);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--stage-text);
   font-size: 12px;
   font-weight: 700;
   backdrop-filter: blur(6px);
@@ -101,7 +126,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: rgb(255 255 255 / 86%);
+  color: var(--stage-text);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -109,7 +134,7 @@
 
 .name {
   margin: 0;
-  color: #fff;
+  color: var(--stage-text);
   font-family: var(--font-display, var(--font-sans));
   font-size: clamp(2rem, 5vw, 3.4rem);
   line-height: 1.05;
@@ -119,7 +144,7 @@
 
 .topic {
   margin: 0;
-  color: rgb(255 255 255 / 78%);
+  color: var(--stage-text-subtle);
   font-size: var(--text-lg, 1.0625rem);
   line-height: 1.45;
 }
@@ -128,7 +153,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: rgb(255 255 255 / 74%);
+  color: var(--stage-text-subtle);
   font-size: 13px;
   font-weight: 600;
 }
@@ -144,7 +169,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: rgb(255 255 255 / 74%);
+  color: var(--stage-text-subtle);
   font-size: 13px;
   font-weight: 600;
 }
@@ -161,7 +186,7 @@
 
 .face {
   border-radius: var(--radius-full);
-  box-shadow: 0 0 0 2px #0d0d0b;
+  box-shadow: 0 0 0 2px var(--stage-bg);
 }
 
 .join {
@@ -187,7 +212,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: rgb(255 255 255 / 66%);
+  color: var(--stage-text-subtle);
   font-size: 12px;
   font-weight: 600;
   background: none;
@@ -199,39 +224,51 @@
 /* ── screen chrome ───────────────────────────────────────────────────────── */
 
 .screen {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: #0d0d0b;
+  /* The app's own ground, not the stage's. The dark belongs to the panel now
+     — the screen around it is the same surface every other route sits on, and
+     that is what makes the sidebar beside it look like one app. */
+  background: var(--color-bg);
 }
 
 /*
- * Floating over the feed rather than sitting in a header: the card behind is
- * the whole screen, and a bar across the top would cost every room its first
- * line. These belong to the screen, so they stay put while rooms move under.
+ * Two rows, at every width: the switch and the create button on one, the topic
+ * pills on their own beneath.
+ *
+ * All three used to share a single row, wrapping to two only under 720px. But
+ * nine pills plus the switch plus the button need about 1130px of chrome, so
+ * every window between those two numbers — which is most laptops — silently
+ * clipped the row: "Memes" was cut mid-word and "Tech" was not on screen at
+ * all, with nothing to suggest either existed. Giving the pills their own row
+ * unconditionally is both one layout instead of two and the one that is never
+ * wrong.
  */
 .chrome {
-  position: absolute;
-  inset: var(--space-4) var(--space-6) auto;
-  display: flex;
+  flex: none;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  z-index: 2;
-  pointer-events: none;
-}
-
-.chrome > * {
-  pointer-events: auto;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
 }
 
 .filters {
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   overflow-x: auto;
   scrollbar-width: none;
-  max-width: 100%;
+  /*
+   * Fade the trailing edge, so a row that *does* still overflow — a narrow
+   * phone — looks scrollable rather than cut off. The mask is transparent for
+   * the last 2rem, which reads as "there is more this way".
+   */
+  mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent 100%);
 }
 
 .filters::-webkit-scrollbar {
@@ -241,14 +278,21 @@
 .filter {
   padding: 6px 12px;
   border-radius: var(--radius-full);
-  background: rgb(12 12 10 / 50%);
-  border: 1px solid rgb(255 255 255 / 18%);
-  color: rgb(255 255 255 / 86%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
-  backdrop-filter: blur(6px);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.filter:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .filterSelected {
@@ -257,18 +301,20 @@
   color: var(--color-accent-contrast);
 }
 
+/* The far end of the top row, beside the switch rather than after the pills. */
 .create {
+  grid-column: 3;
+  grid-row: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 38px;
   height: 38px;
   border-radius: var(--radius-full);
-  background: rgb(12 12 10 / 55%);
-  border: 1px solid rgb(255 255 255 / 22%);
-  color: #fff;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   cursor: pointer;
-  backdrop-filter: blur(8px);
 }
 
 .centre {
@@ -280,8 +326,7 @@
   height: 100%;
   padding: var(--space-6);
   text-align: center;
-  background: #0d0d0b;
-  color: #fff;
+  color: var(--color-text);
 }
 
 .centreTitle {
@@ -293,7 +338,7 @@
 .centreBody {
   margin: 0;
   max-width: 30rem;
-  color: rgb(255 255 255 / 72%);
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 
@@ -306,24 +351,20 @@
 
 @media (max-width: 720px) {
   /*
-   * Two rows rather than one. A phone has no width for the switch, eight topic
-   * pills and the create button side by side — squeezed onto one line the pills
-   * are clipped mid-word, which reads as broken rather than as scrollable.
+   * The column is the screen. A phone has no room beside the panel to spend on
+   * gutters, and the aspect ratio has to give way rather than leave the card
+   * as a narrow strip down the middle of an already narrow display.
    */
   .chrome {
-    inset: var(--space-3) var(--space-4) auto;
-    flex-wrap: wrap;
-    row-gap: var(--space-2);
+    padding: var(--space-3) var(--space-3) var(--space-2);
   }
 
-  .filters {
-    order: 3;
-    flex-basis: 100%;
-    /* Clear of the rounded edge the pills scroll under. */
-    padding-right: var(--space-2);
+  .feed {
+    padding: 0 var(--space-3) var(--space-3);
   }
 
   .card {
-    padding: calc(var(--space-6) + 92px) var(--space-4) var(--space-5);
+    width: 100%;
+    aspect-ratio: auto;
   }
 }

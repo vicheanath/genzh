@@ -5,26 +5,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import {
-  CompassIcon,
-  FlameIcon,
-  GamepadIcon,
-  HashIcon,
-  HeartIcon,
-  HelpCircleIcon,
-  LockIcon,
-  MicIcon,
-  PaletteIcon,
-  RadioIcon,
-  ShuffleIcon,
-  SparkleIcon,
-  TagIcon,
-  UsersIcon,
-  VideoIcon,
-  VoteIcon,
-  XIcon,
-  ZapIcon,
-} from '@/components/Icons'
+import { LockIcon, SparkleIcon, XIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Select } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
@@ -34,6 +15,7 @@ import type { RoomFamily, RoomType } from '@/lib/api'
 import { useCreateStandaloneRoomMutation } from '@/features/api'
 import { errorText } from '@/lib/errors'
 import { cx } from '@/lib/cx'
+import { ROOM_CATEGORIES, ROOM_FAMILIES, roomTypesIn } from '@/lib/roomTypes'
 
 import styles from './CreatePlaygroundRoomDialog.module.css'
 
@@ -49,63 +31,6 @@ interface CreatePlaygroundRoomDialogProps {
   onClose: () => void
   onCreated?: () => void
 }
-
-interface RoomTypeConfig {
-  type: RoomType
-  label: string
-  icon: typeof HashIcon
-}
-
-interface PillarGroup {
-  family: RoomFamily
-  label: string
-  icon: string
-  types: RoomTypeConfig[]
-}
-
-const PILLAR_GROUPS: PillarGroup[] = [
-  {
-    family: 'conversation',
-    label: 'Conversation',
-    icon: '💬',
-    types: [
-      { type: 'text', label: 'Chat', icon: HashIcon },
-      { type: 'voice', label: 'Voice & Screen', icon: MicIcon },
-      { type: 'video', label: 'Video Grid', icon: VideoIcon },
-      { type: 'stage', label: 'Stage', icon: RadioIcon },
-    ],
-  },
-  {
-    family: 'social_games',
-    label: 'Social Games',
-    icon: '🎮',
-    types: [
-      { type: 'truth_or_dare', label: 'Truth / Dare', icon: SparkleIcon },
-      { type: 'would_you_rather', label: 'Would You Rather', icon: ShuffleIcon },
-      { type: 'hot_takes', label: 'Hot Takes', icon: FlameIcon },
-      { type: 'poll', label: 'Live Poll', icon: VoteIcon },
-      { type: 'trivia', label: 'Trivia Quiz', icon: HelpCircleIcon },
-      { type: 'debate', label: 'Debates', icon: FlameIcon },
-      { type: 'guess_who', label: 'Guess Who', icon: UsersIcon },
-      { type: 'game', label: 'Party Games', icon: GamepadIcon },
-      { type: 'activity', label: 'Activity Lounge', icon: PaletteIcon },
-    ],
-  },
-  {
-    family: 'social_discovery',
-    label: 'Social Discovery',
-    icon: '🧭',
-    types: [
-      { type: 'random_chat', label: 'Random Chat', icon: ZapIcon },
-      { type: 'anonymous_chat', label: 'Anonymous Chat', icon: LockIcon },
-      { type: 'match_interest', label: 'Match by Interest', icon: TagIcon },
-      { type: 'friend_finder', label: 'Friend Finder', icon: HeartIcon },
-      { type: 'topic_room', label: 'Topic Room', icon: CompassIcon },
-      { type: 'confession', label: 'Confessions', icon: LockIcon },
-      { type: 'quick_chat', label: 'Speed Chat', icon: ZapIcon },
-    ],
-  },
-]
 
 export function CreatePlaygroundRoomDialog({
   open,
@@ -167,7 +92,8 @@ export function CreatePlaygroundRoomDialog({
     }
   }
 
-  const currentPillar = PILLAR_GROUPS.find((g) => g.family === activeFamily) ?? PILLAR_GROUPS[0]
+  const currentPillar =
+    ROOM_FAMILIES.find((entry) => entry.family === activeFamily) ?? ROOM_FAMILIES[0]!
 
   return (
     <BaseDialog.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -206,50 +132,43 @@ export function CreatePlaygroundRoomDialog({
               autoFocus
             />
 
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  color: 'var(--color-text-subtle)',
-                  marginBottom: 'var(--space-2)',
-                }}
-              >
-                Pillar & Room Type
-              </label>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>What kind of room</span>
 
-              {/* 3 Pillars Tabs */}
-              <div className={styles.pillarTabs}>
-                {PILLAR_GROUPS.map((pillar) => (
+              <div className={styles.pillarTabs} role="tablist" aria-label="Kind of room">
+                {ROOM_FAMILIES.map((pillar) => (
                   <button
                     key={pillar.family}
                     type="button"
+                    role="tab"
+                    aria-selected={activeFamily === pillar.family}
                     className={cx(
                       styles.pillarTab,
                       activeFamily === pillar.family && styles.pillarTabActive,
                     )}
                     onClick={() => {
                       setActiveFamily(pillar.family)
-                      const firstType = pillar.types[0]?.type
-                      if (firstType) {
-                        setSelectedType(firstType)
-                      }
+                      const firstType = roomTypesIn(pillar.family)[0]?.type
+                      if (firstType) setSelectedType(firstType)
                     }}
                   >
-                    <span>{pillar.icon}</span>
+                    <span aria-hidden>{pillar.emoji}</span>
                     <span>{pillar.label}</span>
                   </button>
                 ))}
               </div>
 
-              {/* Room Types Grid for Selected Pillar */}
+              {/* Says what the pillar is *for*. Three one-word tabs over a grid
+                  of twenty type names left the difference between them to be
+                  inferred from the names alone. */}
+              <p className={styles.pillarBlurb}>{currentPillar.blurb}</p>
+
               <div className={styles.typesGrid}>
-                {currentPillar?.types.map(({ type, label, icon: Icon }) => (
+                {roomTypesIn(activeFamily).map(({ type, label, icon: Icon }) => (
                   <button
                     key={type}
                     type="button"
+                    aria-pressed={selectedType === type}
                     className={cx(styles.typeCard, selectedType === type && styles.typeCardActive)}
                     onClick={() => setSelectedType(type)}
                   >
@@ -260,42 +179,32 @@ export function CreatePlaygroundRoomDialog({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-text-subtle)', marginBottom: 'var(--space-1)' }}>
-                  Category
-                </label>
+            <div className={styles.fieldRow}>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Topic</span>
                 <Select
                   value={category}
                   onValueChange={setCategory}
-                  options={[
-                    { value: 'random', label: '🎲 Random' },
-                    { value: 'gaming', label: '🎮 Gaming' },
-                    { value: 'debate', label: '🔥 Debates' },
-                    { value: 'confession', label: '🤫 Confessions' },
-                    { value: 'tech', label: '💻 Tech & Code' },
-                    { value: 'music', label: '🎵 Music' },
-                    { value: 'art', label: '🎨 Art' },
-                    { value: 'memes', label: '😂 Memes' },
-                  ]}
+                  options={ROOM_CATEGORIES.map((entry) => ({
+                    value: entry.key,
+                    label: `${entry.emoji} ${entry.label}`,
+                  }))}
                 />
-              </div>
+              </label>
 
-              <div>
-                <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-text-subtle)', marginBottom: 'var(--space-1)' }}>
-                  Duration
-                </label>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Ends after</span>
                 <Select
                   value={durationMinutes}
                   onValueChange={setDurationMinutes}
                   options={[
-                    { value: '30', label: '30 Minutes' },
-                    { value: '60', label: '1 Hour' },
-                    { value: '180', label: '3 Hours' },
-                    { value: '1440', label: '24 Hours' },
+                    { value: '30', label: '30 minutes' },
+                    { value: '60', label: '1 hour' },
+                    { value: '180', label: '3 hours' },
+                    { value: '1440', label: '24 hours' },
                   ]}
                 />
-              </div>
+              </label>
             </div>
 
             <div className={styles.toggleRow}>
