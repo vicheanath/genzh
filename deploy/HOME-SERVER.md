@@ -7,10 +7,10 @@ This is the *local server* path. [README.md](README.md) covers the CI-driven
 deploy to a public host; the two share the same compose stack and differ only
 in where the images come from and how the box is reached.
 
-**Why a home server is the easy case:** the media server runs with
-`network_mode: host`, which needs real Linux — it works here and does not work
-on Docker Desktop. And clients on your LAN can reach the SFU directly, so voice
-works without a TURN server, which is not true over the internet.
+**Why a home server is the easy case:** LiveKit runs with `network_mode: host`,
+which needs real Linux — it works here and does not work on Docker Desktop.
+And clients on your LAN can reach it directly, so voice works without a TURN
+server, which is not true over the internet.
 
 **The one thing that will bite you:** browsers block microphone access on plain
 `http://`, so voice will not work on `http://192.168.x.x/` no matter how
@@ -29,7 +29,7 @@ Everything else — text chat, presence, the whole app — works over plain HTTP
 | Network | a LAN IP that does not change |
 
 Pin the address first. If your router hands the server a new IP after a reboot,
-voice breaks silently — that address gets written into `MEDIA_SERVER_URL` and
+voice breaks silently — that address gets written into LiveKit's `node_ip` and
 browsers dial it directly. Set a DHCP reservation in your router, or configure
 a static IP on the box. This runbook uses `192.168.1.50`; substitute yours
 everywhere it appears.
@@ -76,29 +76,29 @@ git clone <your-repo-url> /opt/genzh/src
 
 ---
 
-## Step 3 — Build the three images
+## Step 3 — Build the two images
 
 ```bash
 cd /opt/genzh/src
-docker build --build-arg RUST_VERSION=1.94 -f Dockerfile.api   -t genzh/api:local   .
-docker build --build-arg RUST_VERSION=1.94 -f Dockerfile.media -t genzh/media:local .
-docker build -f Dockerfile.web   -t genzh/web:local   .
+docker build --build-arg RUST_VERSION=1.94 -f Dockerfile.api -t genzh/api:local .
+docker build -f Dockerfile.web -t genzh/web:local .
 ```
 
-> **Why the `--build-arg`.** The Dockerfiles pin the Rust builder to `1.90` to
-> match `rust-version` in the workspace manifest, but `Cargo.lock` carries
-> `sqlx 0.9.0`, which requires rustc 1.94. Without the override the API build
-> fails with `sqlx-core@0.9.0 requires rustc 1.94.0`. This is real drift in the
-> repository, not a quirk of this deployment — the same failure hits CI. The
-> proper fix is to raise `rust-version` in `Cargo.toml` and `ARG RUST_VERSION`
-> in both Dockerfiles together, after which this override can be dropped.
+> **Why the `--build-arg`.** `rust-version` in the workspace manifest already
+> reads `1.94` to match what `Cargo.lock`'s `sqlx 0.9.0` requires, and
+> `ARG RUST_VERSION` in `Dockerfile.api` defaults to the same value — so this
+> flag is usually redundant. It is spelled out here anyway because the two
+> drifting apart is exactly the failure mode (`sqlx-core@0.9.0 requires rustc
+> 1.94.0`) and CI would hit it too if they ever do; passing it explicitly
+> means this runbook does not silently depend on the Dockerfile's default.
 
-The two Rust images compile the same dependency graph, so the first is slow
-(10–20 minutes cold) and the second is much faster. The build context is the
-repository root for all three — `apps/mobile` is excluded by `.dockerignore`,
-which is what keeps it from shipping 3 GB of React Native to the daemon.
+LiveKit is a prebuilt image (`livekit/livekit-server`), not something this
+repository builds — `docker compose pull` in Step 7 fetches it same as
+`postgres`. The build context for the two images above is the repository
+root — `apps/mobile` is excluded by `.dockerignore`, which is what keeps it
+from shipping 3 GB of React Native to the daemon.
 
-Confirm all three exist:
+Confirm both exist:
 
 ```bash
 docker images | grep genzh
@@ -112,7 +112,7 @@ The stack runs from its own directory, separate from the source checkout:
 
 ```bash
 cd /opt/genzh
-cp src/deploy/docker-compose.prod.yml src/deploy/deploy.sh src/deploy/env.prod.example .
+cp src/deploy/docker-compose.prod.yml src/deploy/deploy.sh src/deploy/livekit.yaml.template src/deploy/env.prod.example .
 chmod +x deploy.sh
 ```
 
@@ -138,16 +138,18 @@ worth keeping, which is why this is a one-line change rather than a rewrite.
 
 ## Step 5 — Write the configuration
 
-Generate three secrets. Run this and keep the output:
+Generate two secrets. Run this and keep the output:
 
 ```bash
-echo "JWT_SECRET=$(openssl rand -base64 48)"; echo "MEDIA_TOKEN_SECRET=$(openssl rand -base64 48)"; echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"
+echo "JWT_SECRET=$(openssl rand -base64 48)"; echo "LIVEKIT_API_SECRET=$(openssl rand -base64 48)"; echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"
 ```
 
-`JWT_SECRET` and `MEDIA_TOKEN_SECRET` **must be different values**. The API
-refuses to start if they match or if either is under 32 characters — a media
-server able to forge user sessions would defeat the point of splitting the two
-planes apart. Generating them together as above avoids the copy-paste mistake.
+The API refuses to start if `JWT_SECRET` is under 32 characters — the other
+two have no such check, but `openssl rand` costs nothing extra and a short
+secret typed by hand is not a good habit to have. `LIVEKIT_API_KEY` is not a
+secret at all — any short identifier works, and this repo's default is
+`genzh` — but `LIVEKIT_API_SECRET` genuinely is: LiveKit uses it to verify
+every access token, and anyone who has it can mint their own.
 
 Now create `/opt/genzh/.env`:
 
@@ -164,12 +166,13 @@ WEB_PORT=80
 
 # Your locally built images from Step 3.
 IMAGE_API=genzh/api:local
-IMAGE_MEDIA=genzh/media:local
 IMAGE_WEB=genzh/web:local
 
-# Paste the three you just generated.
+# Paste from the two you just generated (LIVEKIT_API_KEY is fine left as the
+# env.prod.example default).
 JWT_SECRET=<paste>
-MEDIA_TOKEN_SECRET=<paste — must differ from JWT_SECRET>
+LIVEKIT_API_KEY=genzh
+LIVEKIT_API_SECRET=<paste>
 POSTGRES_USER=social
 POSTGRES_PASSWORD=<paste>
 POSTGRES_DB=social
@@ -177,12 +180,6 @@ POSTGRES_DB=social
 APP_ENV=production
 # Leave on until you have an account. See Step 7.
 ALLOW_PASSWORD_SIGNUP=true
-
-STUN_URL=stun:stun.l.google.com:19302
-# Leave TURN empty — on a LAN it is not needed.
-TURN_URL=
-TURN_USERNAME=
-TURN_PASSWORD=
 
 RUST_LOG=info
 LOG_FORMAT=json
@@ -201,21 +198,20 @@ chmod 600 /opt/genzh/.env
 If `ufw` is active:
 
 ```bash
-sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 8081/tcp && sudo ufw allow 32768:60999/udp
+sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 7880/tcp && sudo ufw allow 7881/tcp && sudo ufw allow 50000:60000/udp
 ```
 
 | Port | Proto | What |
 |---|---|---|
 | 80 | tcp | the site |
-| 8081 | tcp | media signalling |
-| 32768–60999 | udp | WebRTC media |
+| 7880 | tcp | LiveKit signalling (WebSocket) |
+| 7881 | tcp | LiveKit HTTP API |
+| 50000–60000 | udp | WebRTC media |
 | 22 | tcp | ssh |
 
-The UDP range is Linux's default ephemeral range. `MEDIA_UDP_BIND` is left at
-`0.0.0.0:0`, so the kernel picks a fresh port per connection out of that range.
-Check yours with `sysctl net.ipv4.ip_local_port_range` — if it differs, allow
-what it actually reports. To narrow it you must list addresses explicitly
-(`MEDIA_UDP_BIND=0.0.0.0:40000,0.0.0.0:40001,…`); it does not accept a range.
+50000–60000 is LiveKit's own default RTC port range — `livekit.yaml.template`
+does not override `rtc.port_range_start`/`port_range_end`, so this is what it
+actually uses. Narrow it there if you want a smaller range open.
 
 The API (8080) and PostgreSQL (5432) are deliberately never published. Do not
 open them.
@@ -223,8 +219,8 @@ open them.
 > **ufw and Docker do not compose the way you would expect.** Docker writes its
 > own iptables rules for published ports, so your `ufw` rules do not actually
 > gate port 80 — the web container is reachable regardless. They *do* apply to
-> the media server, which runs on host networking. On a trusted LAN this is
-> mostly harmless; it matters a great deal if you ever expose this box to the
+> LiveKit, which runs on host networking. On a trusted LAN this is mostly
+> harmless; it matters a great deal if you ever expose this box to the
 > internet.
 
 ---
@@ -309,11 +305,13 @@ myserver.tailnet-name.ts.net {
     reverse_proxy 127.0.0.1:8000
 }
 
-# The media plane is separate and must also be TLS — an HTTPS page cannot
-# open a plain ws:// socket.
+# LiveKit's signalling is separate and must also be TLS — an HTTPS page
+# cannot open a plain ws:// socket. This proxies only the signalling
+# handshake; the actual RTP media never goes through Caddy at all — it needs
+# a real UDP path, which is what LIVEKIT_NODE_IP below is for.
 myserver.tailnet-name.ts.net:8443 {
     tls /etc/caddy/tls/host.crt /etc/caddy/tls/host.key
-    reverse_proxy 127.0.0.1:8081
+    reverse_proxy 127.0.0.1:7880
 }
 ```
 
@@ -324,10 +322,15 @@ at the new hostname. In `.env`:
 DEPLOY_HOST=myserver.tailnet-name.ts.net
 WEB_PORT=8000
 FRONTEND_URL=https://myserver.tailnet-name.ts.net
-MEDIA_SERVER_URL=wss://myserver.tailnet-name.ts.net:8443/ws/media
+LIVEKIT_URL=wss://myserver.tailnet-name.ts.net:8443
+
+# DEPLOY_HOST is now a hostname, not an IP — LiveKit's node_ip needs the
+# latter. Every client reaching the site necessarily comes in over Tailscale
+# at this point, so the Tailscale IP is the right one:
+LIVEKIT_NODE_IP=<tailscale ip -4>
 ```
 
-`MEDIA_SERVER_URL` has to be set explicitly — its default is `ws://`, which an
+`LIVEKIT_URL` has to be set explicitly — its default is `ws://`, which an
 HTTPS page will refuse as mixed content.
 
 ```bash
@@ -355,7 +358,7 @@ trust your CA. Fine for one machine, tiresome for a household.
 ### Updating
 
 ```bash
-cd /opt/genzh/src && git pull && docker build --build-arg RUST_VERSION=1.94 -f Dockerfile.api -t genzh/api:local . && docker build --build-arg RUST_VERSION=1.94 -f Dockerfile.media -t genzh/media:local . && docker build -f Dockerfile.web -t genzh/web:local . && cd /opt/genzh && ./deploy.sh
+cd /opt/genzh/src && git pull && docker build --build-arg RUST_VERSION=1.94 -f Dockerfile.api -t genzh/api:local . && docker build -f Dockerfile.web -t genzh/web:local . && cd /opt/genzh && ./deploy.sh
 ```
 
 For rollbacks, tag builds with something meaningful rather than reusing
@@ -371,8 +374,8 @@ docker compose -f docker-compose.prod.yml logs -f api
 docker compose -f docker-compose.prod.yml exec api curl -s localhost:8080/ready
 ```
 
-`/ready` reports the database and whether the API knows of a media server. It
-is separate from `/health`, which is liveness only.
+`/ready` reports the database and whether LiveKit is configured. It is
+separate from `/health`, which is liveness only.
 
 ### Backups
 
@@ -393,12 +396,12 @@ Worth a weekly cron entry, with a copy landing on a different machine.
 |---|---|
 | API build fails, `sqlx-core@0.9.0 requires rustc 1.94.0` | the `--build-arg RUST_VERSION=1.94` in Step 3 was omitted |
 | `deploy.sh` fails on pull | the Step 4 edit did not apply — `grep pull deploy.sh`. As a fallback, skip the script: `docker compose -f docker-compose.prod.yml up -d` |
-| API crash-loops at startup | the two secrets match, or one is under 32 characters |
+| API crash-loops at startup | `JWT_SECRET` is under 32 characters |
 | site loads, API calls 502 | `api` container is down — read its logs |
 | site works on the server, not from other devices | firewall, or you used the dev `docker-compose.yml` instead of the prod one |
 | chat connects then drops every 60s | a proxy in front with a short read timeout; `deploy/nginx.conf` sets 1h |
 | **no microphone prompt at all** | plain HTTP — see [Step 8](#step-8--https-required-for-voice) |
-| voice joins, no audio | `MEDIA_SERVER_URL` wrong, or the UDP range is blocked |
+| join succeeds, permissions look right, no audio/video ever connects | LiveKit's `node_ip` is wrong — check `livekit.yaml` (generated by `deploy.sh`) has the address clients actually dial, not `127.0.0.1` or a container-internal one |
 | voice works at home, not away | expected — no TURN server. Tailscale sidesteps it |
 | IP changed after a reboot | set a DHCP reservation; update `DEPLOY_HOST` and redeploy |
 
@@ -414,7 +417,7 @@ through nginx, which is what makes it work from anywhere.
 ## Appendix — pulling images from GHCR
 
 If you would rather let CI build, push to `main` and let the workflow publish
-`ghcr.io/<owner>/<repo>/{api,media,web}`. On the server:
+`ghcr.io/<owner>/<repo>/{api,web}`. On the server:
 
 ```bash
 docker login ghcr.io -u <your-github-username>

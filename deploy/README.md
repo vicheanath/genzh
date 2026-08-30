@@ -1,8 +1,9 @@
 # Deploying genzh
 
-CI builds three images and pushes them to GitHub Container Registry. A server
-runs them with `docker compose`. The only thing that has to know *where* the
-server is, is one variable: `DEPLOY_HOST`.
+CI builds two images and pushes them to GitHub Container Registry. LiveKit is
+a third, prebuilt one (`livekit/livekit-server`) — nothing this repository
+builds. A server runs all of it with `docker compose`. The only thing that
+has to know *where* the server is, is one variable: `DEPLOY_HOST`.
 
 ```
 GitHub Actions                          your server
@@ -10,7 +11,7 @@ GitHub Actions                          your server
 CI  ──▶ test (Rust + PostgreSQL, web)
         │
         ▼
-      build ──▶ ghcr.io/<owner>/<repo>/{api,media,web}:<sha>
+      build ──▶ ghcr.io/<owner>/<repo>/{api,web}:<sha>
         │                                    │
         ▼                                    ▼
       ssh ────────────────────────────▶  docker compose pull && up -d
@@ -20,7 +21,7 @@ CI  ──▶ test (Rust + PostgreSQL, web)
                                   web:80    api      postgres
                                   (nginx)  (internal) (internal)
                                     │
-                                  media  (host network, 8081/tcp + UDP)
+                                  livekit  (host network, 7880/7881 tcp + UDP)
 ```
 
 ## Why the web image does not need to know the IP
@@ -35,9 +36,11 @@ That has three consequences worth stating plainly:
 - No cross-origin request is ever made, so `CORS_ALLOWED_ORIGINS` stays empty.
 - Postgres and the API are never published to the internet. Only port 80 is.
 
-The **media** plane is the exception. WebRTC needs UDP that genuinely reaches
-the browser, so clients dial the SFU directly and `MEDIA_SERVER_URL` must
-contain a real address. That is the one place `DEPLOY_HOST` is actually spent.
+**LiveKit is the exception.** WebRTC needs UDP that genuinely reaches the
+browser, so clients dial it directly, and its `node_ip` (written into
+`livekit.yaml` by `deploy.sh`, from `DEPLOY_HOST` or `LIVEKIT_NODE_IP` — see
+that script) must be a real, dialable IP address. That is the one place
+`DEPLOY_HOST` is actually spent beyond building URLs.
 
 ---
 
@@ -60,24 +63,23 @@ Open these ports:
 | Port | Proto | Who |
 |---|---|---|
 | 80 | tcp | everyone — the site |
-| 8081 | tcp | everyone — media signalling |
-| 32768–60999 | udp | everyone — WebRTC media |
+| 7880 | tcp | everyone — LiveKit signalling (WebSocket) |
+| 7881 | tcp | everyone — LiveKit HTTP API |
+| 50000–60000 | udp | everyone — WebRTC media |
 | 22 | tcp | you |
 
 `8080` (API) and `5432` (PostgreSQL) are deliberately **not** published.
 
-The UDP range is Linux's default ephemeral range, because `MEDIA_UDP_BIND` is
-left at `0.0.0.0:0` and the SFU lets the kernel pick a port per connection.
-`MEDIA_UDP_BIND` takes a comma-separated list of explicit addresses, not a
-range, so narrowing the firewall means listing them:
-`MEDIA_UDP_BIND=0.0.0.0:40000,0.0.0.0:40001,…`. Check the host's actual range
-with `sysctl net.ipv4.ip_local_port_range`.
+50000–60000 is LiveKit's own default RTC port range —
+`deploy/livekit.yaml.template` does not override
+`rtc.port_range_start`/`port_range_end`, so this is what it actually uses.
+Narrow it there if you want a smaller range open.
 
-> The media container runs with `network_mode: host`. Bridge networking cannot
-> give an SFU a UDP address a remote peer can reach — it can only advertise one
-> that does not work. Host networking or a TURN server; there is no third
-> option. Run coturn regardless: without TURN, anyone behind symmetric NAT
-> cannot join voice at all.
+> LiveKit runs with `network_mode: host`. Bridge networking cannot give it a
+> UDP address a remote peer can reach — it can only advertise one that does
+> not work. Host networking or a TURN server; there is no third option. Run
+> coturn regardless: without TURN, anyone behind symmetric NAT cannot join
+> voice at all.
 
 ---
 
@@ -96,6 +98,7 @@ environment is resolved, so it must be a *repository* variable):
 | `DEPLOY_SSH_PORT` | `22` | default `22` |
 | `WEB_PORT` | `80` | default `80` |
 | `ALLOW_PASSWORD_SIGNUP` | `true` | set `false` once OAuth works |
+| `LIVEKIT_API_KEY` | `genzh` | default `genzh` — not sensitive, only its secret is |
 
 **Secrets:**
 
@@ -104,20 +107,23 @@ environment is resolved, so it must be a *repository* variable):
 | `DEPLOY_SSH_KEY` | the private key, whole file including header lines |
 | `DEPLOY_KNOWN_HOSTS` | `ssh-keyscan -H <ip>` — see the note below |
 | `JWT_SECRET` | `openssl rand -base64 48` |
-| `MEDIA_TOKEN_SECRET` | `openssl rand -base64 48` — **must differ** from the above |
+| `LIVEKIT_API_SECRET` | `openssl rand -base64 48` |
 | `POSTGRES_PASSWORD` | `openssl rand -base64 24` |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | optional |
 | `DISCORD_CLIENT_ID` / `_SECRET` | optional |
-| `TURN_URL` / `TURN_USERNAME` / `TURN_PASSWORD` | strongly recommended |
+
+`LIVEKIT_API_KEY` is a **variable**, not a secret — it is not sensitive, only
+the secret it is paired with is. Set it if you want something other than the
+`genzh` default; either way it must match whatever a self-hosted LiveKit
+elsewhere already expects, if you are pointing at one instead of the `livekit`
+service this compose file runs.
 
 `DEPLOY_KNOWN_HOSTS` is optional and the deploy works without it — but without
 it the runner accepts whatever host key answers, every run, which is no
 verification at all against someone who can route that address. The workflow
 prints the keyscan output; save it as this secret to close the gap.
 
-The two secrets must differ and each be ≥32 characters. The API refuses to
-start otherwise: a media server able to forge user sessions would defeat the
-point of splitting the planes.
+`JWT_SECRET` must be ≥32 characters. The API refuses to start otherwise.
 
 Then push to `main`. That is the whole deploy.
 
@@ -128,7 +134,7 @@ Then push to `main`. That is the whole deploy.
 The workflow does nothing you cannot do yourself:
 
 ```bash
-scp deploy/docker-compose.prod.yml deploy/deploy.sh deploy/env.prod.example \
+scp deploy/docker-compose.prod.yml deploy/deploy.sh deploy/livekit.yaml.template deploy/env.prod.example \
     deploy@<ip>:/opt/genzh/
 ssh deploy@<ip>
 cd /opt/genzh
@@ -158,13 +164,13 @@ docker compose -f docker-compose.prod.yml logs -f api
 docker compose -f docker-compose.prod.yml exec api curl -s localhost:8080/ready
 ```
 
-`/ready` reports the database and whether the API knows of a media server; it
-is the endpoint to poll, and it is separate from `/health` on purpose.
+`/ready` reports the database and whether LiveKit is configured; it is the
+endpoint to poll, and it is separate from `/health` on purpose.
 
 | Symptom | Cause |
 |---|---|
 | site loads, API calls 502 | `api` container down — check its logs |
 | chat connects then drops every 60s | proxy read timeout; `deploy/nginx.conf` sets 1h |
-| voice joins, no audio | `MEDIA_SERVER_URL` wrong, or UDP blocked. `DEPLOY_HOST` must be the address a *browser* uses |
+| join succeeds, permissions look right, no audio/video ever connects | LiveKit's `node_ip` is wrong — check `livekit.yaml` (generated by `deploy.sh`) has the address clients actually dial |
 | voice works on LAN, not remotely | no TURN server |
-| API crash-loops at startup | the two secrets match, or one is under 32 chars |
+| API crash-loops at startup | `JWT_SECRET` is under 32 characters |

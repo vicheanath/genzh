@@ -1,0 +1,20 @@
+# Template for the LiveKit config mounted into the `livekit` service in
+# docker-compose.prod.yml. `deploy.sh` fills in DEPLOY_HOST and writes the
+# result to `livekit.yaml` next to it — not committed, since the address is
+# specific to each deployment.
+#
+# node_ip is the whole reason this is a file instead of environment
+# variables: it must be the address browsers actually dial. Left unset,
+# LiveKit advertises whatever address it discovers itself — the container's
+# own interface under host networking, or a STUN-discovered one — and on a
+# LAN neither is reliably what a client on another machine can reach. Every
+# ICE candidate then fails silently: the room join and the token both look
+# fine, and no audio or video ever connects. Setting it explicitly to the
+# same address already in DEPLOY_HOST is what makes this deployment's WebRTC
+# actually work, the same way LIVEKIT_URL and MEDIA_SERVER_URL before it
+# always needed the real dialable address rather than a compose-internal one.
+port: 7880
+rtc:
+  tcp_port: 7881
+  use_external_ip: false
+  node_ip: DEPLOY_HOST_PLACEHOLDER

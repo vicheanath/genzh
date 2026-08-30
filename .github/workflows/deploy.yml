@@ -25,7 +25,7 @@ jobs:
     if: ${{ !inputs.skip_tests }}
     uses: ./.github/workflows/ci.yml
 
-  # ── Build and publish the three images ────────────────────────────────────
+  # ── Build and publish the two images ──────────────────────────────────────
   images:
     name: build ${{ matrix.service }}
     needs: [test]
@@ -40,15 +40,13 @@ jobs:
       packages: write
 
     strategy:
-      # Three independent images; one failing should not cancel the others,
-      # because knowing all three states is more useful than failing fast.
+      # Two independent images; one failing should not cancel the other,
+      # because knowing both states is more useful than failing fast.
       fail-fast: false
       matrix:
         include:
           - service: api
             dockerfile: Dockerfile.api
-          - service: media
-            dockerfile: Dockerfile.media
           - service: web
             dockerfile: Dockerfile.web
 
@@ -122,7 +120,6 @@ jobs:
           sha=${{ github.sha }}
           {
             echo "api=${{ env.REGISTRY }}/$repo/api:$sha"
-            echo "media=${{ env.REGISTRY }}/$repo/media:$sha"
             echo "web=${{ env.REGISTRY }}/$repo/web:$sha"
           } >> "$GITHUB_OUTPUT"
 
@@ -134,15 +131,13 @@ jobs:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           WEB_PORT: ${{ vars.WEB_PORT || '80' }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          MEDIA_TOKEN_SECRET: ${{ secrets.MEDIA_TOKEN_SECRET }}
+          LIVEKIT_API_KEY: ${{ vars.LIVEKIT_API_KEY || 'genzh' }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
-          TURN_URL: ${{ secrets.TURN_URL }}
-          TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
-          TURN_PASSWORD: ${{ secrets.TURN_PASSWORD }}
         run: |
           umask 077
           cat > deploy/.env <<EOF
@@ -150,11 +145,11 @@ jobs:
           WEB_PORT=$WEB_PORT
 
           IMAGE_API=${{ steps.images.outputs.api }}
-          IMAGE_MEDIA=${{ steps.images.outputs.media }}
           IMAGE_WEB=${{ steps.images.outputs.web }}
 
           JWT_SECRET=$JWT_SECRET
-          MEDIA_TOKEN_SECRET=$MEDIA_TOKEN_SECRET
+          LIVEKIT_API_KEY=$LIVEKIT_API_KEY
+          LIVEKIT_API_SECRET=$LIVEKIT_API_SECRET
           POSTGRES_USER=social
           POSTGRES_PASSWORD=$POSTGRES_PASSWORD
           POSTGRES_DB=social
@@ -168,11 +163,6 @@ jobs:
           DISCORD_CLIENT_ID=$DISCORD_CLIENT_ID
           DISCORD_CLIENT_SECRET=$DISCORD_CLIENT_SECRET
           DISCORD_REDIRECT_URI=http://$DEPLOY_HOST/api/v1/auth/oauth/discord/callback
-
-          STUN_URL=${{ vars.STUN_URL || 'stun:stun.l.google.com:19302' }}
-          TURN_URL=$TURN_URL
-          TURN_USERNAME=$TURN_USERNAME
-          TURN_PASSWORD=$TURN_PASSWORD
 
           RUST_LOG=${{ vars.RUST_LOG || 'info' }}
           LOG_FORMAT=json
@@ -213,6 +203,7 @@ jobs:
           scp -i ~/.ssh/id_deploy -P "$PORT" \
             deploy/docker-compose.prod.yml \
             deploy/deploy.sh \
+            deploy/livekit.yaml.template \
             deploy/.env \
             "$SSH_USER@$HOST:$DIR/"
 
@@ -248,6 +239,5 @@ jobs:
             echo "| site | http://$HOST/ |"
             echo "| commit | \`${{ github.sha }}\` |"
             echo "| api | \`${{ steps.images.outputs.api }}\` |"
-            echo "| media | \`${{ steps.images.outputs.media }}\` |"
             echo "| web | \`${{ steps.images.outputs.web }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
