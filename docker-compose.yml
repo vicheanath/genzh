@@ -99,7 +99,10 @@ services:
     ports:
       # WebRTC signalling, over WebSocket (clients connect here)
       - "7880:7880"
-      # HTTP API (room/egress management)
+      # ICE over TCP — `rtc.tcp_port` in livekit.yaml, not an HTTP API. It is
+      # the fallback a client falls back *to* when UDP is blocked, which is
+      # the difference between "no media" and "media, slightly worse" on a
+      # phone whose network filters the RTP range.
       - "7881:7881"
       # Real RTP media. Must match rtc.port_range_start/end in livekit.yaml.
       - "50000-50019:50000-50019/udp"

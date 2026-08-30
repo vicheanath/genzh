@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import { isWebRTCAvailable } from './webrtc/MobileVoiceClient';
+import { isWebRTCAvailable } from './livekit/runtime';
 
 /**
  * What this build can actually do in a call.
@@ -21,16 +21,16 @@ export const VOICE_UNAVAILABLE_REASON = VOICE_AVAILABLE
 /**
  * Screen sharing.
  *
- * Android: react-native-webrtc ships its own `MediaProjectionService`, declared
- * with `foregroundServiceType="mediaProjection"` in the library's manifest, so
- * this needs only the foreground-service permissions in app.json.
+ * Android: `@livekit/react-native-expo-plugin` wires up the foreground service
+ * MediaProjection requires — see `enableScreenShareService` in app.json, which
+ * is what makes the foreground-service permissions there do anything.
  *
  * iOS: it does not work, and cannot without native work this app has not done.
  * ReplayKit captures the screen in a *separate process* — a Broadcast Upload
  * Extension — which hands frames back over a unix socket in a shared App Group
- * container. The extension is an Xcode target; neither react-native-webrtc nor
- * `@config-plugins/react-native-webrtc` creates one. Until that target exists,
- * `getDisplayMedia` has nothing on the other end of the socket.
+ * container. The extension is an Xcode target, and neither LiveKit's Expo
+ * plugin nor `@config-plugins/react-native-webrtc` creates one. Until that
+ * target exists, there is nothing on the other end of the socket.
  */
 export const SCREEN_SHARE_AVAILABLE: boolean =
   VOICE_AVAILABLE && Platform.OS === 'android';

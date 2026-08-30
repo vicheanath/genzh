@@ -19,21 +19,21 @@ import {
   requestCameraPermission,
   requestMicrophonePermission,
 } from '../lib/devicePermissions';
-import { MobileVoiceClient } from '../lib/webrtc/MobileVoiceClient';
+import { LiveKitVoiceClient } from '../lib/livekit/LiveKitVoiceClient';
 
 /**
  * The call, for this platform.
  *
  * Almost nothing lives here any more. `useCallVM` in `@genzh/shared` owns what
  * a call *is* — who is in it, what is being transmitted, how to join and leave —
- * and this supplies the three things that are genuinely local: the WebRTC
- * client, what this build is capable of, and the two device settings the SFU
+ * and this supplies the three things that are genuinely local: the LiveKit
+ * client, what this build is capable of, and the two device settings LiveKit
  * has no opinion about.
  *
  * The fourth thing it supplies is where a media credential comes from, and that
  * is now the room session: one `POST /rooms/{id}/session` that joins the room,
- * mints the SFU token and hands back the roster together, instead of the three
- * sequential requests a call used to open with.
+ * mints the LiveKit token and hands back the roster together, instead of the
+ * three sequential requests a call used to open with.
  *
  * Deafen and speakerphone are those two. Neither is a call concept: deafening
  * is a local output decision and speakerphone is a routing one, so both stay in
@@ -60,9 +60,9 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const toggleDeafen = useAppStore((s) => s.toggleDeafen);
   const setDevicePreferences = useAppStore((s) => s.setDevicePreferences);
 
-  // The room the client should negotiate for. Held in a ref because the client
-  // is built once and outlives any particular room, and asks for a session only
-  // at the moment it connects.
+  // The room the client should connect to. Held in a ref because the client is
+  // built once and outlives any particular room, and asks for a session only at
+  // the moment it connects.
   const roomIdRef = useRef<Uuid | null>(null);
 
   const openSession = useOpenRoomSessionMutation(token);
@@ -72,16 +72,16 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const openSessionRef = useRef(openSession);
   openSessionRef.current = openSession;
 
-  const clientRef = useRef<MobileVoiceClient | null>(null);
+  const clientRef = useRef<LiveKitVoiceClient | null>(null);
   if (!clientRef.current) {
-    clientRef.current = new MobileVoiceClient(async () => {
+    clientRef.current = new LiveKitVoiceClient(async () => {
       const roomId = roomIdRef.current;
       if (!roomId) throw new Error('No active voice room');
 
-      // Called again on every reconnect, which is why this re-opens the session
-      // rather than replaying a cached one: a media token expires, and a
-      // reconnect that presented a spent credential would be refused. Opening
-      // is idempotent — the join behind it only refreshes `last_seen_at`.
+      // Once per join. LiveKit owns reconnection and refreshes its own
+      // credential, so nothing here has to replay a token that may have
+      // expired mid-call. Opening is idempotent either way — the join behind
+      // it only refreshes `last_seen_at`.
       const session = await openSessionRef.current.mutateAsync(roomId);
       if (!session.media_session) {
         throw new Error('This room does not carry a call');

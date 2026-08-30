@@ -8,7 +8,7 @@ import Animated, {
 import { Hand, MicOff, Video } from 'lucide-react-native';
 
 import { Avatar } from '../../components/Avatar';
-import { webrtcModule } from '../../lib/webrtc/MobileVoiceClient';
+import { RTCView } from '../../lib/livekit/runtime';
 import { SPRING_CONTROL } from '../../theme/motion';
 import { Radius, Spacing, Stage, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
@@ -52,7 +52,8 @@ export function ParticipantTile({
   }));
 
   const strip = variant === 'strip';
-  const showsVideo = Boolean(member.cameraOn && member.cameraStream && webrtcModule?.RTCView);
+  const videoStream = member.cameraOn ? (member.cameraStream ?? null) : null;
+  const showsVideo = Boolean(RTCView && videoStream);
   const avatarSize = strip ? 44 : variant === 'solo' ? 92 : 64;
 
   return (
@@ -79,9 +80,9 @@ export function ParticipantTile({
         pressStyle,
       ]}
     >
-      {showsVideo ? (
-        <webrtcModule.RTCView
-          streamURL={(member.cameraStream as any).toURL()}
+      {RTCView && videoStream ? (
+        <RTCView
+          streamURL={(videoStream as any).toURL()}
           style={StyleSheet.absoluteFillObject}
           objectFit="cover"
           // You expect your own camera to behave like a mirror.

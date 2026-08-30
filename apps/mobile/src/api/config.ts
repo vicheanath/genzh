@@ -134,7 +134,12 @@ export function getApiUrl(): string {
 }
 
 /**
- * Rewrite media server WebSocket URL so it reaches the host on Android emulators and physical devices.
+ * Rewrite the LiveKit WebSocket URL so it reaches the host from this device.
+ *
+ * The API reports LiveKit's address as *it* sees it, which on a developer's
+ * machine is loopback — meaningless on a phone, and on an Android emulator it
+ * resolves to the emulator itself. The device has already proved it can reach
+ * the API host, so that is the host LiveKit gets too.
  */
 export function resolveMediaWsUrl(mediaUrl: string): string {
   try {

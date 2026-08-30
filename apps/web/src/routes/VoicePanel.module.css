@@ -168,6 +168,23 @@
   padding: var(--space-3) var(--space-4) 0;
 }
 
+/* Fills the callout so the whole strip is the target — this is the one
+   gesture standing between the user and hearing anybody. */
+.enableAudioButton {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.enableAudioButton:hover {
+  text-decoration: underline;
+}
+
 .viewportBody {
   display: flex;
   flex-direction: column;

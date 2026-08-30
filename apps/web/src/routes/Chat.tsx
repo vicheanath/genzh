@@ -100,6 +100,7 @@ interface PendingMessage {
   content: string
   createdAt: string
   failed: boolean
+  replyToId?: Uuid
 }
 
 export function Chat({
@@ -379,7 +380,7 @@ export function Chat({
   }, [sendTyping])
 
   const send = useCallback(
-    async (content: string) => {
+    async (content: string, replyToId?: Uuid) => {
       sendTyping(false)
       if (typingTimerRef.current) {
         clearTimeout(typingTimerRef.current)
@@ -389,13 +390,14 @@ export function Chat({
       const localId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
       setPending((current) => [
         ...current,
-        { localId, content, createdAt: new Date().toISOString(), failed: false },
+        { localId, content, createdAt: new Date().toISOString(), failed: false, replyToId },
       ])
 
       try {
         const posted = await sendMessage.mutateAsync({
           content,
           is_anonymous: isAnonymousPersona,
+          reply_to_id: replyToId,
         })
         setPending((current) => current.filter((item) => item.localId !== localId))
         // The socket echoes this back too, and the write is idempotent — but
@@ -426,7 +428,7 @@ export function Chat({
       const entry = pending.find((item) => item.localId === localId)
       if (!entry) return
       setPending((current) => current.filter((item) => item.localId !== localId))
-      void send(entry.content)
+      void send(entry.content, entry.replyToId)
     },
     [pending, send],
   )

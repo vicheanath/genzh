@@ -5,7 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { LoadingPanel } from '@/components/Spinner'
 import { SocketProvider } from '@/features/realtime'
 import { AuthProvider, useAuth } from '@/lib/auth'
-import { VoiceProvider } from '@/lib/media'
+import { GlobalAudioOutputs, VoiceProvider } from '@/lib/media'
 import { queryClient } from '@/lib/queryClient'
 import { useIsMobile } from '@/lib/useMediaQuery'
 import { CallProvider } from '@/lib/useCall'
@@ -46,6 +46,9 @@ export function App() {
             the session is the socket that keeps them current. */}
         <SocketProvider>
           <VoiceProvider>
+            {/* Above the router: remote audio must keep playing while you
+                move between rooms and screens. */}
+            <GlobalAudioOutputs />
             <BrowserRouter>
               {/* Inside the router, because answering a call navigates to
                   the conversation it is happening in. */}

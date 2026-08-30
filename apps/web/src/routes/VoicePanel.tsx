@@ -254,6 +254,19 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
         </div>
       )}
 
+      {/* Not an error: the call is connected and healthy, the browser is just
+          holding playback until this page gets a gesture. The button is the
+          gesture — it cannot be done for the user from an effect. */}
+      {voice.audioBlocked && (
+        <div className={styles.errorSlot}>
+          <Callout tone="info">
+            <button type="button" className={styles.enableAudioButton} onClick={() => void voice.enableAudio()}>
+              Click to enable sound
+            </button>
+          </Callout>
+        </div>
+      )}
+
       <div className={styles.viewportBody}>
         {activePresentation ? (
           <div className={styles.presentationView}>

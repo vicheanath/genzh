@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MonitorUp, Radio } from 'lucide-react-native';
 
 import { useVoice } from '../../context/VoiceContext';
-import { webrtcModule } from '../../lib/webrtc/MobileVoiceClient';
+import { RTCView } from '../../lib/livekit/runtime';
 import { useBottomInset } from '../../theme/layout';
 import { Radius, Spacing, Stage, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
@@ -104,8 +104,7 @@ export function CallScreen({ navigation }: any) {
   // both cases — until they say otherwise, and then their choice sticks.
   const gridView = preferGrid ?? !hasScreenShare;
 
-  const showsSharedScreen =
-    hasScreenShare && screenShare?.screenStream && webrtcModule?.RTCView;
+  const sharedScreen = hasScreenShare ? (screenShare?.screenStream ?? null) : null;
 
   return (
     <View style={styles.root}>
@@ -191,10 +190,10 @@ export function CallScreen({ navigation }: any) {
                     : (spotlight?.name ?? 'Nobody')}
                 </Text>
 
-                {showsSharedScreen ? (
+                {RTCView && sharedScreen ? (
                   <View style={styles.screenSurface}>
-                    <webrtcModule.RTCView
-                      streamURL={(screenShare!.screenStream as any).toURL()}
+                    <RTCView
+                      streamURL={(sharedScreen as any).toURL()}
                       style={StyleSheet.absoluteFillObject}
                       // Contain, not cover: a shared screen cropped to fill the
                       // frame is a shared screen you cannot read.

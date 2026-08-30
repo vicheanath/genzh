@@ -48,18 +48,38 @@ pub struct MediaJoinResponse {
 /// One function, one place to audit. Everything LiveKit is allowed to believe
 /// about a participant comes from here.
 fn livekit_grant(room_id: RoomId, permissions: PermissionSet) -> serde_json::Value {
-    let can_publish_audio = permissions.allows(Permission::Speak);
-    let can_publish_video = permissions.allows(Permission::UseVideo);
-    let can_publish_data = permissions.allows(Permission::ScreenShare);
-    let can_publish = can_publish_audio || can_publish_video || can_publish_data;
+    // `canPublish` is all-or-nothing, so on its own it would let anyone who may
+    // speak also turn on a camera. `canPublishSources` is what actually pins
+    // each permission to the track source it is about — without it the
+    // UseVideo and ScreenShare permissions are decorative, enforced only by a
+    // client that chooses to respect them.
+    let mut sources: Vec<&str> = Vec::new();
+    if permissions.allows(Permission::Speak) {
+        sources.push("microphone");
+    }
+    if permissions.allows(Permission::UseVideo) {
+        sources.push("camera");
+    }
+    if permissions.allows(Permission::ScreenShare) {
+        sources.push("screen_share");
+        // Screen audio rides its own source; a share that goes silent when the
+        // shared tab is playing something is the more surprising behaviour.
+        sources.push("screen_share_audio");
+    }
+
     let can_subscribe = permissions.allows(Permission::ViewRoom);
 
     serde_json::json!({
         "room": room_id.as_uuid().to_string(),
         "roomJoin": true,
-        "canPublish": can_publish,
+        "canPublish": !sources.is_empty(),
+        "canPublishSources": sources,
         "canSubscribe": can_subscribe,
-        "canPublishData": can_publish_data,
+        // Data messages are how LiveKit clients exchange anything that is not
+        // media. This app's own signalling goes over its WebSocket instead, so
+        // nothing needs it — and it is emphatically not the screen-share
+        // permission, which is a track source above.
+        "canPublishData": false,
     })
 }
 
@@ -246,11 +266,22 @@ mod tests {
         LiveKitTokenGenerator::new("test-key", "test-secret-at-least-32-bytes-long")
     }
 
+    /// The `canPublishSources` entries, for asserting on a grant.
+    fn sources(grant: &serde_json::Value) -> Vec<String> {
+        grant["canPublishSources"]
+            .as_array()
+            .expect("grant always carries a source list")
+            .iter()
+            .map(|value| value.as_str().expect("sources are strings").to_owned())
+            .collect()
+    }
+
     #[test]
     fn a_listener_may_subscribe_and_nothing_else() {
         let grant = livekit_grant(RoomId::new(), PermissionSet::VIEW_ROOM);
         assert_eq!(grant["canSubscribe"], true);
         assert_eq!(grant["canPublish"], false);
+        assert!(sources(&grant).is_empty());
     }
 
     #[test]
@@ -261,12 +292,32 @@ mod tests {
         assert_eq!(grant["canPublishData"], false);
     }
 
+    /// The point of `canPublishSources`: speaking must not imply a camera.
+    #[test]
+    fn permission_to_speak_does_not_carry_a_camera_with_it() {
+        let grant = livekit_grant(RoomId::new(), PermissionSet::VIEW_ROOM | PermissionSet::SPEAK);
+        assert_eq!(grant["canPublish"], true);
+        assert_eq!(sources(&grant), vec!["microphone"]);
+    }
+
+    #[test]
+    fn screen_share_carries_its_audio_source_too() {
+        let grant = livekit_grant(
+            RoomId::new(),
+            PermissionSet::VIEW_ROOM | PermissionSet::SCREEN_SHARE,
+        );
+        assert_eq!(sources(&grant), vec!["screen_share", "screen_share_audio"]);
+        // Sharing a screen is not permission to send arbitrary data messages.
+        assert_eq!(grant["canPublishData"], false);
+    }
+
     #[test]
     fn no_permissions_means_no_grants() {
         let grant = livekit_grant(RoomId::new(), PermissionSet::empty());
         assert_eq!(grant["canSubscribe"], false);
         assert_eq!(grant["canPublish"], false);
         assert_eq!(grant["canPublishData"], false);
+        assert!(sources(&grant).is_empty());
     }
 
     #[test]

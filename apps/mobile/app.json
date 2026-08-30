@@ -8,6 +8,15 @@
     "userInterfaceStyle": "automatic",
     "plugins": [
       [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication",
+            "enableScreenShareService": true
+          }
+        }
+      ],
+      [
         "@config-plugins/react-native-webrtc",
         {
           "cameraPermission": "Allow GenZH to access your camera for video calls.",

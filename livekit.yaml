@@ -20,6 +20,25 @@
 #
 # Both failure modes look identical from the client: stuck on "Connecting".
 #
+# ── node_ip must be this machine's LAN address, not 127.0.0.1 ──────────────
+#
+# It was 127.0.0.1, which is correct only while every client is a browser on
+# this same host. A phone on the Wi-Fi resolves that candidate to *itself*,
+# dials into nothing, and shows the identical "connected, no media" symptom —
+# the roster fills in, the mute button works, and nobody can hear anybody.
+#
+# The LAN IP works for both: the browser on this host can reach it just as
+# well as the phone can. It is machine-specific and DHCP-assigned, so it does
+# have to be re-checked when the lease changes:
+#
+#     ipconfig | findstr IPv4
+#
+# The mobile client rewrites the *signalling* URL on its own (see
+# `resolveMediaWsUrl` in apps/mobile/src/api/config.ts — it swaps a loopback
+# LIVEKIT_URL for whichever host the device already reached the API on). It
+# cannot do the same for node_ip, because that address is buried in ICE
+# candidates inside the SDP rather than in anything the client is handed.
+#
 # 20 ports is enough for local development — LiveKit allocates roughly one
 # UDP port per participant connection, not per track (tracks are bundled).
 # Widen it (and the docker-compose.yml port list) if you need to test with
@@ -32,4 +51,4 @@ rtc:
   port_range_start: 50000
   port_range_end: 50019
   use_external_ip: false
-  node_ip: 127.0.0.1
+  node_ip: 192.168.1.215

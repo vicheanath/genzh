@@ -38,7 +38,16 @@ export interface RemoteParticipant {
   screenSharing: boolean
   handRaised: boolean
   stageRole: 'host' | 'speaker' | 'audience'
-  stream: MediaStream | null
+  /**
+   * This participant's microphone, as a LiveKit track rather than a raw
+   * `MediaStream`.
+   *
+   * `GlobalAudioOutputs` calls `attach()` on it. That is the SDK's own path
+   * for wiring a track to an element, and it is what makes
+   * `switchActiveDevice('audiooutput')` reach every playing element — a bare
+   * `srcObject` assignment is invisible to the SDK and cannot be re-routed.
+   */
+  audioTrack: Track | null
   cameraStream: MediaStream | null
   screenStream: MediaStream | null
   cameraTrackId: string | null
@@ -58,10 +67,22 @@ export interface VoiceContextValue {
   stageRole: 'host' | 'speaker' | 'audience'
   status: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
   error: string | null
+  /**
+   * The browser is refusing to play incoming audio until this page gets a
+   * user gesture.
+   *
+   * Joining a call from a click usually satisfies autoplay on its own, but not
+   * always — an auto-rejoin on page load never does, and Safari is stricter
+   * than the rest. When this is true every remote `<audio>` is silently
+   * paused, so the UI has to offer a way to start it; see `enableAudio`.
+   */
+  audioBlocked: boolean
   cameraStream: MediaStream | null
   screenStream: MediaStream | null
   join: (roomId: Uuid, roomName?: string, communityId?: Uuid) => Promise<void>
   leave: () => Promise<void>
+  /** Start blocked audio playback. Must be called from a user gesture. */
+  enableAudio: () => Promise<void>
   setMuted: (muted: boolean) => void
   toggleMute: () => void
   setAudioInput: (deviceId?: string) => void
@@ -138,7 +159,7 @@ function participantToRemote(participant: Participant): RemoteParticipant {
     // reports for other participants.
     handRaised: false,
     stageRole: 'speaker',
-    stream: micTrack?.track?.mediaStream ?? null,
+    audioTrack: micTrack?.track ?? null,
     cameraStream: cameraTrack?.track?.mediaStream ?? null,
     screenStream: screenTrack?.track?.mediaStream ?? null,
     cameraTrackId: cameraTrack?.trackSid ?? null,
@@ -154,6 +175,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const micDeviceId = useAppStore((s) => s.micDeviceId)
   const cameraDeviceId = useAppStore((s) => s.cameraDeviceId)
+  const speakerDeviceId = useAppStore((s) => s.speakerDeviceId)
 
   const [activeSession, setActiveSession] = useState<StoredVoiceSession | null>(() => {
     try {
@@ -176,6 +198,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [participants, setParticipants] = useState<RemoteParticipant[]>([])
   const [speaking, setSpeaking] = useState(false)
+  const [audioBlocked, setAudioBlocked] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null)
 
@@ -229,14 +252,40 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           })
           .on(RoomEvent.Reconnecting, () => setStatus('reconnecting'))
           .on(RoomEvent.Reconnected, () => setStatus('connected'))
+          // Fires whenever the browser starts or stops allowing playback, so
+          // the prompt disappears by itself once audio is running — including
+          // when some unrelated gesture elsewhere on the page unblocks it.
+          .on(RoomEvent.AudioPlaybackStatusChanged, () => {
+            setAudioBlocked(!room.canPlaybackAudio)
+          })
           .on(RoomEvent.Disconnected, () => {
             roomRef.current = null
             setStatus('idle')
             setParticipants([])
+            setAudioBlocked(false)
           })
 
         await room.connect(session.media_url, session.token)
         await room.localParticipant.setMicrophoneEnabled(false)
+
+        // The join click is itself a gesture, so this usually succeeds and the
+        // prompt never appears. It is allowed to fail: `audioBlocked` then
+        // drives the UI, which is the whole point of asking here first.
+        if (!room.canPlaybackAudio) {
+          try {
+            await room.startAudio()
+          } catch {
+            // Handled by the flag below, not by failing the join.
+          }
+        }
+        setAudioBlocked(!room.canPlaybackAudio)
+
+        if (speakerDeviceId) {
+          await room.switchActiveDevice('audiooutput', speakerDeviceId).catch(() => {
+            // A remembered output device can disappear between sessions;
+            // falling back to the system default is the right answer.
+          })
+        }
 
         roomRef.current = room
         refreshParticipants()
@@ -251,7 +300,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         throw err
       }
     },
-    [refreshParticipants],
+    [refreshParticipants, speakerDeviceId],
   )
 
   const leave = useCallback(async () => {
@@ -263,6 +312,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     clearStoredSession()
     setStatus('idle')
     setError(null)
+    setAudioBlocked(false)
     setMutedState(true)
     setCameraOnState(false)
     setScreenSharingState(false)
@@ -270,6 +320,25 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setScreenStream(null)
     setParticipants([])
   }, [clearStoredSession])
+
+  /**
+   * Ask the browser to start playing incoming audio.
+   *
+   * Only meaningful from inside a click handler — that is the gesture the
+   * autoplay policy is waiting for, and calling it from an effect will simply
+   * fail again.
+   */
+  const enableAudio = useCallback(async () => {
+    const room = roomRef.current
+    if (!room) return
+    try {
+      await room.startAudio()
+      setAudioBlocked(!room.canPlaybackAudio)
+    } catch (err) {
+      console.error('Failed to start audio playback:', err)
+      setAudioBlocked(true)
+    }
+  }, [])
 
   const setMuted = useCallback(
     async (next: boolean) => {
@@ -380,6 +449,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     void roomRef.current?.switchActiveDevice('videoinput', cameraDeviceId)
   }, [cameraDeviceId, status, cameraOn])
 
+  // Changing the output device re-routes every element LiveKit has attached,
+  // which is the reason `GlobalAudioOutputs` attaches through the SDK rather
+  // than assigning `srcObject` itself.
+  useEffect(() => {
+    if (!speakerDeviceId || status !== 'connected') return
+    void roomRef.current?.switchActiveDevice('audiooutput', speakerDeviceId).catch(() => {
+      // The chosen device may have been unplugged; the default still plays.
+    })
+  }, [speakerDeviceId, status])
+
   // Auto-rejoin on mount if a session was preserved in localStorage.
   const autoRejoinAttemptedRef = useRef(false)
   useEffect(() => {
@@ -415,10 +494,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     stageRole,
     status,
     error,
+    audioBlocked,
     cameraStream,
     screenStream,
     join,
     leave,
+    enableAudio,
     setMuted,
     toggleMute,
     setAudioInput,

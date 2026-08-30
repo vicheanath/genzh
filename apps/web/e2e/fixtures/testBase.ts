@@ -114,6 +114,15 @@ export async function setupMockApi(page: Page) {
     })
   })
 
+  // Mock Unread Counts
+  await page.route(/\/api\/v1\/me\/unread$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
   // Mock User Profiles lookup
   await page.route(/\/api\/v1\/users\/[^/]+$/, async (route) => {
     const url = route.request().url()
@@ -416,7 +425,23 @@ export async function setupMockApi(page: Page) {
   })
 
   // Mock Room Detail
-  await page.route(/\/api\/v1\/rooms\/[^/]+$/, async (route) => {
+  // The negative lookahead keeps this from shadowing `/rooms/mine` above —
+  // Playwright checks routes most-recently-registered first, so without it
+  // every request for the mine list would match this handler instead and get
+  // back a single room object rather than an array.
+  await page.route(/\/api\/v1\/rooms\/(?!mine$)[^/]+$/, async (route) => {
+    const url = route.request().url()
+    const isVoice = url.includes(mockRooms[1].id)
+    const room = isVoice ? mockRooms[1] : mockRooms[0]
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(room),
+    })
+  })
+
+  // Mock Room Join
+  await page.route(/\/api\/v1\/rooms\/[^/]+\/join$/, async (route) => {
     const url = route.request().url()
     const isVoice = url.includes(mockRooms[1].id)
     const room = isVoice ? mockRooms[1] : mockRooms[0]
@@ -428,7 +453,10 @@ export async function setupMockApi(page: Page) {
   })
 
   // Mock Room Messages
-  await page.route(/\/api\/v1\/rooms\/[^/]+\/messages$/, async (route) => {
+  // The GET history call always carries a `?limit=...` query string, so the
+  // pattern can't anchor `messages$` — that anchor let this handler silently
+  // never match a single GET request in the whole suite.
+  await page.route(/\/api\/v1\/rooms\/[^/]+\/messages(\?.*)?$/, async (route) => {
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON()
       const newMsg = {
@@ -440,7 +468,7 @@ export async function setupMockApi(page: Page) {
         edited_at: null,
         reactions: [],
         pinned: false,
-        reply_to_id: null,
+        reply_to_id: body?.reply_to_id ?? null,
       }
       await route.fulfill({
         status: 201,

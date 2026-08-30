@@ -1,10 +1,10 @@
 /**
  * What a call client is, from the view model's side of the fence.
  *
- * There are two implementations — `apps/web/src/lib/media/VoiceClient` and
- * `apps/mobile/src/lib/webrtc/MobileVoiceClient` — because the media stacks
- * differ, but they speak the same protocol to the same SFU and therefore hold
- * the same state. This is that state, named once.
+ * Both platforms run a LiveKit room; what differs is how they capture and
+ * render, so this is the state `useCallVM` drives and each platform's adapter
+ * fills in. `apps/mobile/src/lib/livekit/LiveKitVoiceClient` is one such
+ * adapter; the web app reads its LiveKit room directly in `useVoiceRoom`.
  *
  * Streams are `unknown` on purpose. A `MediaStream` on the web and a
  * react-native-webrtc stream are different objects with different methods, and

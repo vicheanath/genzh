@@ -13,18 +13,29 @@ one SDK it was compiled for.
 
 # Dev server port: 8090, not 8081
 
-Metro's default port is 8081, and in this repo **the Rust media server already
-owns 8081** (`MEDIA_BIND=0.0.0.0:8081` in the root `.env`). When both run, the
-media server takes the IPv4 socket and Metro is left with IPv6 only — a phone
-on the LAN then reaches the media server, which answers `404`, and the app
-never loads.
+The package scripts pass `--port 8090`; a bare `npx expo start` falls back to
+Metro's default 8081. Start through the scripts so a device that has an 8090
+URL cached keeps working.
 
-Always start through the package scripts (`pnpm start`, `pnpm android`, …),
-which pass `--port 8090`. A bare `npx expo start` falls back to 8081 and will
-fail this way again.
+Repo ports: `5173` web dev · `7880`/`7881` LiveKit · `8080` api · `8082` web
+(docker) · `8090` metro.
 
-Repo ports: `5173` web dev · `8080` api · `8081` media · `8082` web (docker) ·
-`8090` metro.
+# Calls need a development build, not Expo Go
+
+Media is LiveKit: `livekit-client` driving `@livekit/react-native` over
+`@livekit/react-native-webrtc`, with `@livekit/react-native-expo-plugin` and
+`@config-plugins/react-native-webrtc` doing the native config. All of it is
+native, so **Expo Go cannot carry a call** — `isWebRTCAvailable` in
+`src/lib/livekit/runtime.ts` is false there and the UI disables the controls
+rather than pretending.
+
+`registerLiveKitGlobals()` runs from `index.ts` before anything else, because
+`livekit-client` is the same package the web app uses and reaches for browser
+globals Hermes does not have. Adding an import that constructs a `Room` above
+that call breaks every call in the app.
+
+Changing any of these four packages, or the plugin options in `app.json`,
+requires a new dev build — a Metro reload will not pick it up.
 
 # Package manager: pnpm 10
 
