@@ -28,11 +28,10 @@ services:
   seed:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.seed
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: cargo run --release --bin seed
     environment:
       DATABASE_URL: postgres://social:social@postgres:5432/social
       RUST_LOG: info
