@@ -282,11 +282,11 @@ mod tests {
 
     #[test]
     fn a_signed_token_carries_the_expected_claims() {
-        let gen = generator();
+        let generator = generator();
         let room_id = RoomId::new();
         let user_id = UserId::new();
 
-        let token = gen
+        let token = generator
             .issue(room_id, user_id, "Ada", PermissionSet::default_member(), 3600)
             .expect("token signs");
 
@@ -307,8 +307,8 @@ mod tests {
 
     #[test]
     fn a_tampered_secret_fails_verification() {
-        let gen = generator();
-        let token = gen
+        let generator = generator();
+        let token = generator
             .issue(
                 RoomId::new(),
                 UserId::new(),
