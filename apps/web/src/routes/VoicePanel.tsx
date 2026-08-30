@@ -182,7 +182,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
 
           <Button
             size="lg"
-            onClick={() => void voice.join(room.name, room.community_id ?? undefined)}
+            onClick={() => void voice.join(room.id, room.community_id ?? undefined)}
             className={styles.joinBtn}
           >
             <MicIcon size={18} />
