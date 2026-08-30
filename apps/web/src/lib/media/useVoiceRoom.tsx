@@ -8,10 +8,17 @@ import {
   type ReactNode,
 } from 'react'
 
-import { Room } from 'livekit-client'
+import {
+  Room,
+  RoomEvent,
+  Track,
+  type Participant,
+  type TrackPublication,
+} from 'livekit-client'
 
 import { media, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { useAppStore } from '@/lib/store'
 
 const STORAGE_KEY = 'genzh_active_voice_session'
 
@@ -70,35 +77,83 @@ export interface VoiceContextValue {
 
 const VoiceContext = createContext<VoiceContextValue | null>(null)
 
-function participantToRemote(participant: any): RemoteParticipant {
-  const audioTracks = Array.from(participant.audioTrackPublications?.values?.() || [])
-  const videoTracks = Array.from(participant.videoTrackPublications?.values?.() || [])
-  const screenTracks = Array.from(participant.screenShareTrackPublications?.values?.() || [])
+/**
+ * Turn a failed camera/microphone/screen-share attempt into something a user
+ * can act on.
+ *
+ * Two very different things throw here and both were silently swallowed
+ * before: the browser refusing `getUserMedia` (wrong OS/site permission, or
+ * the device is in use elsewhere), and LiveKit refusing to publish because
+ * this participant's token grant does not allow it (e.g. an audience member
+ * in a stage room). Distinguishing them is the difference between "grant
+ * this site camera access" and "ask the host for speaker permission".
+ */
+function mediaErrorMessage(err: unknown, kind: string): string {
+  if (err instanceof DOMException) {
+    switch (err.name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return `${kind[0]!.toUpperCase()}${kind.slice(1)} access was denied. Check your browser's site permissions and try again.`
+      case 'NotFoundError':
+        return `No ${kind} device was found.`
+      case 'NotReadableError':
+        return `The ${kind} is already in use by another application.`
+      case 'OverconstrainedError':
+        return `The selected ${kind} device is not available.`
+    }
+  }
+  const message = err instanceof Error ? err.message : String(err)
+  if (/permission/i.test(message)) {
+    return `You don't have permission to use your ${kind} in this room.`
+  }
+  return `Could not start ${kind}: ${message}`
+}
 
-  const audioTrack: any = audioTracks[0]
-  const videoTrack: any = videoTracks[0]
-  const screenTrack: any = screenTracks[0]
+/** The one publication of `source` a participant holds, if any. */
+function findTrack(
+  tracks: Map<string, TrackPublication>,
+  source: Track.Source,
+): TrackPublication | undefined {
+  for (const publication of tracks.values()) {
+    if (publication.source === source) return publication
+  }
+  return undefined
+}
+
+function participantToRemote(participant: Participant): RemoteParticipant {
+  const micTrack = findTrack(participant.audioTracks, Track.Source.Microphone)
+  const cameraTrack = findTrack(participant.videoTracks, Track.Source.Camera)
+  const screenTrack = findTrack(participant.videoTracks, Track.Source.ScreenShare)
 
   return {
     id: participant.identity,
     userId: participant.identity,
     displayName: participant.name || 'Unknown',
-    muted: !(audioTrack?.isEnabled ?? true),
-    speaking: participant.isSpeaking || false,
-    cameraOn: videoTrack?.isEnabled || false,
-    screenSharing: screenTrack?.isEnabled || false,
+    muted: !micTrack || micTrack.isMuted,
+    speaking: participant.isSpeaking,
+    cameraOn: Boolean(cameraTrack?.isEnabled),
+    screenSharing: Boolean(screenTrack?.isEnabled),
+    // LiveKit carries no notion of a raised hand or a stage role — both are
+    // presentation state this app owns, not something the media plane
+    // reports for other participants.
     handRaised: false,
     stageRole: 'speaker',
-    stream: audioTrack?.track?.mediaStream || null,
-    cameraStream: videoTrack?.track?.mediaStream || null,
-    screenStream: screenTrack?.track?.mediaStream || null,
-    cameraTrackId: videoTrack?.trackSid || null,
-    screenTrackId: screenTrack?.trackSid || null,
+    stream: micTrack?.track?.mediaStream ?? null,
+    cameraStream: cameraTrack?.track?.mediaStream ?? null,
+    screenStream: screenTrack?.track?.mediaStream ?? null,
+    cameraTrackId: cameraTrack?.trackSid ?? null,
+    screenTrackId: screenTrack?.trackSid ?? null,
   }
 }
 
+/**
+ * LiveKit-backed voice room state, shared through context so any component
+ * can join, leave, or read who else is in the room without drilling props.
+ */
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
+  const micDeviceId = useAppStore((s) => s.micDeviceId)
+  const cameraDeviceId = useAppStore((s) => s.cameraDeviceId)
 
   const [activeSession, setActiveSession] = useState<StoredVoiceSession | null>(() => {
     try {
@@ -112,26 +167,36 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     return null
   })
 
-  const [muted, setMuted] = useState(true)
-  const [cameraOn, setCameraOn] = useState(false)
-  const [screenSharing, setScreenSharing] = useState(false)
+  const [muted, setMutedState] = useState(true)
+  const [cameraOn, setCameraOnState] = useState(false)
+  const [screenSharing, setScreenSharingState] = useState(false)
   const [handRaised, setHandRaised] = useState(false)
   const [stageRole, setStageRole] = useState<'host' | 'speaker' | 'audience'>('speaker')
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'>('idle')
+  const [status, setStatus] = useState<VoiceContextValue['status']>('idle')
   const [error, setError] = useState<string | null>(null)
   const [participants, setParticipants] = useState<RemoteParticipant[]>([])
   const [speaking, setSpeaking] = useState(false)
-  const [cameraStream] = useState<MediaStream | null>(null)
-  const [screenStream] = useState<MediaStream | null>(null)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null)
 
   const roomRef = useRef<Room | null>(null)
   const currentRoomIdRef = useRef<Uuid | null>(activeSession?.roomId ?? null)
   currentRoomIdRef.current = activeSession?.roomId ?? null
 
   const refreshParticipants = useCallback(() => {
-    if (!roomRef.current) return
-    const remote = Array.from(roomRef.current.participants.values()).map(participantToRemote)
-    setParticipants(remote)
+    const room = roomRef.current
+    if (!room) return
+    setParticipants(Array.from(room.participants.values()).map(participantToRemote))
+  }, [])
+
+  const clearStoredSession = useCallback(() => {
+    currentRoomIdRef.current = null
+    setActiveSession(null)
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // Ignore
+    }
   }, [])
 
   const join = useCallback(
@@ -142,7 +207,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
         currentRoomIdRef.current = roomId
         setActiveSession({ roomId, roomName, communityId })
-
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify({ roomId, roomName, communityId }))
         } catch {
@@ -152,11 +216,24 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         const session = await media.join(null, roomId)
         const room = new Room()
 
-        room.on('participantConnected', refreshParticipants)
-        room.on('participantDisconnected', refreshParticipants)
-        room.on('trackSubscribed', refreshParticipants)
-        room.on('trackUnsubscribed', refreshParticipants)
-        room.on('participantMetadataChanged', () => setSpeaking(room.localParticipant.isSpeaking))
+        room
+          .on(RoomEvent.ParticipantConnected, refreshParticipants)
+          .on(RoomEvent.ParticipantDisconnected, refreshParticipants)
+          .on(RoomEvent.TrackSubscribed, refreshParticipants)
+          .on(RoomEvent.TrackUnsubscribed, refreshParticipants)
+          .on(RoomEvent.TrackMuted, refreshParticipants)
+          .on(RoomEvent.TrackUnmuted, refreshParticipants)
+          .on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+            refreshParticipants()
+            setSpeaking(speakers.includes(room.localParticipant))
+          })
+          .on(RoomEvent.Reconnecting, () => setStatus('reconnecting'))
+          .on(RoomEvent.Reconnected, () => setStatus('connected'))
+          .on(RoomEvent.Disconnected, () => {
+            roomRef.current = null
+            setStatus('idle')
+            setParticipants([])
+          })
 
         await room.connect(session.media_url, session.token)
         await room.localParticipant.setMicrophoneEnabled(false)
@@ -164,7 +241,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         roomRef.current = room
         refreshParticipants()
         setStatus('connected')
-        setMuted(true)
+        setMutedState(true)
+        setCameraOnState(false)
+        setScreenSharingState(false)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to join room'
         setError(message)
@@ -172,74 +251,154 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         throw err
       }
     },
-    [refreshParticipants]
+    [refreshParticipants],
   )
 
   const leave = useCallback(async () => {
-    try {
-      if (roomRef.current) {
-        await roomRef.current.disconnect()
-        roomRef.current = null
-      }
-      currentRoomIdRef.current = null
-      setActiveSession(null)
-      setStatus('idle')
-      setError(null)
-      setMuted(true)
-      setCameraOn(false)
-      setScreenSharing(false)
-      setParticipants([])
+    const room = roomRef.current
+    roomRef.current = null
+    if (room) {
+      await room.disconnect()
+    }
+    clearStoredSession()
+    setStatus('idle')
+    setError(null)
+    setMutedState(true)
+    setCameraOnState(false)
+    setScreenSharingState(false)
+    setCameraStream(null)
+    setScreenStream(null)
+    setParticipants([])
+  }, [clearStoredSession])
 
-      try {
-        localStorage.removeItem(STORAGE_KEY)
-      } catch {
-        // Ignore
+  const setMuted = useCallback(
+    async (next: boolean) => {
+      const room = roomRef.current
+      if (!room) {
+        setMutedState(next)
+        return
       }
+      try {
+        await room.localParticipant.setMicrophoneEnabled(
+          !next,
+          !next && micDeviceId ? { deviceId: micDeviceId } : undefined,
+        )
+        setMutedState(next)
+        setError(null)
+      } catch (err) {
+        // Leave `muted` exactly as it was — the button must not show
+        // "unmuted" when the browser refused to open the microphone at all.
+        console.error('Failed to change microphone state:', err)
+        setError(mediaErrorMessage(err, 'microphone'))
+      }
+    },
+    [micDeviceId],
+  )
+
+  const toggleMute = useCallback(() => {
+    void setMuted(!muted)
+  }, [muted, setMuted])
+
+  const startCamera = useCallback(
+    async (deviceId?: string) => {
+      const room = roomRef.current
+      if (!room) return
+      const resolved = deviceId || cameraDeviceId || undefined
+      try {
+        const publication = await room.localParticipant.setCameraEnabled(
+          true,
+          resolved ? { deviceId: resolved } : undefined,
+        )
+        setCameraOnState(true)
+        setCameraStream(publication?.track?.mediaStream ?? null)
+        setError(null)
+      } catch (err) {
+        console.error('Failed to start camera:', err)
+        setError(mediaErrorMessage(err, 'camera'))
+      }
+    },
+    [cameraDeviceId],
+  )
+
+  const stopCamera = useCallback(async () => {
+    const room = roomRef.current
+    if (!room) return
+    await room.localParticipant.setCameraEnabled(false)
+    setCameraOnState(false)
+    setCameraStream(null)
+  }, [])
+
+  const toggleCamera = useCallback(
+    () => (cameraOn ? stopCamera() : startCamera()),
+    [cameraOn, startCamera, stopCamera],
+  )
+
+  const startScreenShare = useCallback(async () => {
+    const room = roomRef.current
+    if (!room) return
+    try {
+      const publication = await room.localParticipant.setScreenShareEnabled(true)
+      setScreenSharingState(true)
+      setScreenStream(publication?.track?.mediaStream ?? null)
+      setError(null)
     } catch (err) {
-      console.error('Failed to leave room:', err)
+      console.error('Failed to start screen share:', err)
+      setError(mediaErrorMessage(err, 'screen share'))
     }
   }, [])
 
-  const toggleMute = useCallback(async () => {
-    if (!roomRef.current) return
-    const newMuted = !muted
-    setMuted(newMuted)
-    await roomRef.current.localParticipant.setMicrophoneEnabled(!newMuted)
-  }, [muted])
+  const stopScreenShare = useCallback(async () => {
+    const room = roomRef.current
+    if (!room) return
+    await room.localParticipant.setScreenShareEnabled(false)
+    setScreenSharingState(false)
+    setScreenStream(null)
+  }, [])
 
-  const toggleCamera = useCallback(async () => {
-    if (!roomRef.current) return
-    const newCameraOn = !cameraOn
-    setCameraOn(newCameraOn)
-    await roomRef.current.localParticipant.setCameraEnabled(newCameraOn)
-  }, [cameraOn])
+  const toggleScreenShare = useCallback(
+    () => (screenSharing ? stopScreenShare() : startScreenShare()),
+    [screenSharing, startScreenShare, stopScreenShare],
+  )
 
-  const toggleScreenShare = useCallback(async () => {
-    if (!roomRef.current) return
-    const newScreenSharing = !screenSharing
-    setScreenSharing(newScreenSharing)
-    await roomRef.current.localParticipant.setScreenShareEnabled(newScreenSharing)
-  }, [screenSharing])
+  const setAudioInput = useCallback(
+    (deviceId?: string) => {
+      void roomRef.current?.switchActiveDevice('audioinput', deviceId ?? micDeviceId)
+    },
+    [micDeviceId],
+  )
 
-  // Auto-rejoin on mount
+  // A device changed in Settings applies to a call already in progress —
+  // that is the promise the Settings screen makes, and it needs LiveKit's
+  // own device switch rather than a rejoin.
   useEffect(() => {
-    if (!user || !activeSession?.roomId) return
+    if (!micDeviceId || status !== 'connected') return
+    void roomRef.current?.switchActiveDevice('audioinput', micDeviceId)
+  }, [micDeviceId, status])
 
-    join(activeSession.roomId, activeSession.roomName, activeSession.communityId).catch(() => {
-      currentRoomIdRef.current = null
-      setActiveSession(null)
-      try {
-        localStorage.removeItem(STORAGE_KEY)
-      } catch {
-        // Ignore
-      }
-    })
-  }, [user, activeSession?.roomId, join])
+  useEffect(() => {
+    if (!cameraDeviceId || status !== 'connected' || !cameraOn) return
+    void roomRef.current?.switchActiveDevice('videoinput', cameraDeviceId)
+  }, [cameraDeviceId, status, cameraOn])
 
-  // Cleanup on unmount
+  // Auto-rejoin on mount if a session was preserved in localStorage.
+  const autoRejoinAttemptedRef = useRef(false)
+  useEffect(() => {
+    if (!user || autoRejoinAttemptedRef.current) return
+    autoRejoinAttemptedRef.current = true
+
+    if (activeSession?.roomId) {
+      join(activeSession.roomId, activeSession.roomName, activeSession.communityId).catch(() => {
+        // If auto-rejoin fails (e.g. room expired or deleted), clear storage.
+        clearStoredSession()
+      })
+    }
+  }, [user, activeSession?.roomId, activeSession?.roomName, activeSession?.communityId, join, clearStoredSession])
+
+  // Disconnect if the provider itself unmounts — effectively only on a hard
+  // navigation away from the app, since this sits above the router.
   useEffect(() => {
     return () => {
-      roomRef.current?.disconnect()
+      void roomRef.current?.disconnect()
     }
   }, [])
 
@@ -260,19 +419,14 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     screenStream,
     join,
     leave,
-    setMuted: (m) => {
-      setMuted(m)
-      roomRef.current?.localParticipant.setMicrophoneEnabled(!m)
-    },
+    setMuted,
     toggleMute,
-    setAudioInput: () => {
-      // Device selection handled at browser level
-    },
-    startCamera: () => toggleCamera(),
-    stopCamera: () => roomRef.current?.localParticipant.setCameraEnabled(false),
+    setAudioInput,
+    startCamera,
+    stopCamera,
     toggleCamera,
-    startScreenShare: () => toggleScreenShare(),
-    stopScreenShare: () => roomRef.current?.localParticipant.setScreenShareEnabled(false),
+    startScreenShare,
+    stopScreenShare,
     toggleScreenShare,
     raiseHand: setHandRaised,
     setStageRole,
