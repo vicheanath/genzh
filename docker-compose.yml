@@ -81,28 +81,28 @@ services:
   # LiveKit: the media server. Every voice/video/screen-share connection goes
   # through it; the API never touches RTP.
   #
-  # No mounted config file — LIVEKIT_KEYS is LiveKit's documented env-var
-  # form of the `keys:` config block (`"<api-key>: <api-secret>"`), so the
-  # image needs nothing but environment.
-  #
-  # Note: UDP media ports are disabled below for Windows Docker Desktop,
-  # which refuses to bind a UDP range from inside this tool's sandbox.
-  # LiveKit falls back to TCP/WebSocket relay, which works everywhere but
-  # costs some latency under real load. On Linux or macOS, uncomment the UDP
-  # range for direct media.
+  # LIVEKIT_KEYS is LiveKit's documented env-var form of the `keys:` config
+  # block (`"<api-key>: <api-secret>"`), layered on top of the mounted
+  # livekit.yaml — which exists only to pin the RTC UDP port range to
+  # something small enough for Docker Desktop's Windows port-forwarding to
+  # actually bind. See livekit.yaml for why; the port list below must match
+  # it exactly, or ICE will fail with no visible error — the join and the
+  # token grant both look fine, audio/video just never connects.
   livekit:
     image: livekit/livekit-server:latest
-    command: --bind 0.0.0.0
+    command: --config /etc/livekit.yaml --bind 0.0.0.0
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
       LIVEKIT_LOG_LEVEL: debug
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
     ports:
       # WebRTC signalling, over WebSocket (clients connect here)
       - "7880:7880"
       # HTTP API (room/egress management)
       - "7881:7881"
-      # UDP media ports disabled for Windows Docker Desktop compatibility.
-      # - "50000-60000:50000-60000/udp"
+      # Real RTP media. Must match rtc.port_range_start/end in livekit.yaml.
+      - "50000-50019:50000-50019/udp"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7880/"]
       interval: 10s

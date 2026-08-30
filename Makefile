@@ -1,11 +1,18 @@
 # genzh — development commands.
 #
-# `make dev` is the one to remember: it builds both Rust binaries, then runs the
-# control plane, the media plane and the web client together, with prefixed
-# output and a single Ctrl-C that stops all three.
+# `make dev` is the one to remember: it builds the API, then runs the control
+# plane and the web client together, with prefixed output and a single
+# Ctrl-C that stops both.
 #
-# Everything here talks to your local PostgreSQL via DATABASE_URL in .env. The
-# Docker path is separate and lives under the `docker-*` targets.
+# LiveKit is not something this Makefile runs — it lives in Docker, alongside
+# Postgres:
+#
+#   make docker-infra   # start Postgres + LiveKit, once, in the background
+#   make dev            # run api + web natively, as often as you like
+#
+# Everything here talks to your local PostgreSQL and to that Docker LiveKit
+# via DATABASE_URL / LIVEKIT_URL in .env. Running the whole stack — api, web
+# and LiveKit all in Docker — is the separate `docker-up` target.
 
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -o pipefail -c
@@ -14,16 +21,14 @@ SHELL := /usr/bin/env bash
 # Ports are the Makefile's to decide, so `make dev API_PORT=9080` genuinely
 # moves the server rather than only changing which port gets checked.
 #
-# The binaries read .env for everything else (dotenvy), and dotenvy never
-# overrides a variable already in the environment — so exporting the two BIND
-# addresses here wins over .env, and nothing else in .env is disturbed.
+# The binary reads .env for everything else (dotenvy), and dotenvy never
+# overrides a variable already in the environment — so exporting API_BIND
+# here wins over .env, and nothing else in .env is disturbed.
 API_PORT   ?= 8080
-MEDIA_PORT ?= 8081
 WEB_PORT   ?= 5173
 BIND_HOST  ?= 0.0.0.0
 
-export API_BIND   := $(BIND_HOST):$(API_PORT)
-export MEDIA_BIND := $(BIND_HOST):$(MEDIA_PORT)
+export API_BIND := $(BIND_HOST):$(API_PORT)
 
 WEB_DIR := apps/web
 MOBILE_DIR := apps/mobile
@@ -44,44 +49,38 @@ help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | sort \
 	  | awk -F ':.*?## ' '{ printf "  $(BOLD)%-16s$(RESET) %s\n", $$1, $$2 }'
-	@printf '\n$(DIM)First run:  make setup && make dev$(RESET)\n'
+	@printf '\n$(DIM)First run:  make setup && make docker-infra && make dev$(RESET)\n'
 
 # ── running ─────────────────────────────────────────────────────────────────
 
 .PHONY: dev
-dev: ports-free ## Run api + media + web together (Ctrl-C stops all)
-	@printf '$(DIM)Building both binaries first — two concurrent `cargo run`s\n'
-	@printf 'would otherwise block on the same build lock.$(RESET)\n'
-	@cargo build -p api -p media
-	@printf '\n$(GREEN)api$(RESET) :$(API_PORT)   $(GREEN)media$(RESET) :$(MEDIA_PORT)   $(GREEN)web$(RESET) http://localhost:$(WEB_PORT)\n\n'
-	@# `kill 0` signals the whole process group, so one Ctrl-C takes down all
-	@# three children *and* this shell rather than orphaning servers on ports.
+dev: ports-free ## Run api + web together (Ctrl-C stops both). LiveKit must already be up — see `docker-infra`.
+	@$(MAKE) --no-print-directory check-livekit
+	@cargo build -p api
+	@printf '\n$(GREEN)api$(RESET) :$(API_PORT)   $(GREEN)web$(RESET) http://localhost:$(WEB_PORT)\n\n'
+	@# `kill 0` signals the whole process group, so one Ctrl-C takes down both
+	@# children *and* this shell rather than orphaning servers on ports.
 	@trap 'trap - INT TERM EXIT; kill 0 2>/dev/null; exit 0' INT TERM EXIT; \
-	  ( ./target/debug/api   2>&1 | awk '{ print "\033[35m[api]  \033[0m " $$0; fflush() }' ) & \
-	  ( ./target/debug/media 2>&1 | awk '{ print "\033[36m[media]\033[0m " $$0; fflush() }' ) & \
-	  ( cd $(WEB_DIR) && npm run dev -- --port $(WEB_PORT) --strictPort 2>&1 \
-	      | awk '{ print "\033[32m[web]  \033[0m " $$0; fflush() }' ) & \
+	  ( ./target/debug/api 2>&1 | awk '{ print "\033[35m[api]\033[0m " $$0; fflush() }' ) & \
+	  ( cd $(WEB_DIR) && pnpm run dev -- --port $(WEB_PORT) --strictPort 2>&1 \
+	      | awk '{ print "\033[32m[web]\033[0m " $$0; fflush() }' ) & \
 	  wait
 
 .PHONY: api
 api: ## Run the control plane alone
 	cargo run -p api
 
-.PHONY: media
-media: ## Run the media plane alone
-	cargo run -p media
-
 .PHONY: web
 web: ## Run the web client alone
-	cd $(WEB_DIR) && npm run dev -- --port $(WEB_PORT) --strictPort
+	cd $(WEB_DIR) && pnpm run dev -- --port $(WEB_PORT) --strictPort
 
 .PHONY: mobile
 mobile: ## Run the Expo mobile client alone
-	cd $(MOBILE_DIR) && npm start
+	cd $(MOBILE_DIR) && pnpm start
 
 .PHONY: stop
-stop: ## Kill whatever is listening on the api, media and web ports
-	@for port in $(API_PORT) $(MEDIA_PORT) $(WEB_PORT); do \
+stop: ## Kill whatever is listening on the api and web ports
+	@for port in $(API_PORT) $(WEB_PORT); do \
 	  pids=$$(lsof -ti TCP:$$port -sTCP:LISTEN 2>/dev/null); \
 	  if [[ -n "$$pids" ]]; then \
 	    printf '  stopping :%s (pid %s)\n' "$$port" "$$(echo $$pids | tr '\n' ' ')"; \
@@ -94,7 +93,7 @@ stop: ## Kill whatever is listening on the api, media and web ports
 .PHONY: ports-free
 ports-free: ## Fail if a dev port is already taken
 	@busy=0; \
-	for port in $(API_PORT) $(MEDIA_PORT) $(WEB_PORT); do \
+	for port in $(API_PORT) $(WEB_PORT); do \
 	  owner=$$(lsof -nP -iTCP:$$port -sTCP:LISTEN 2>/dev/null | awk 'NR==2 { print $$1 " (pid " $$2 ")" }'); \
 	  if [[ -n "$$owner" ]]; then \
 	    printf '$(RED)port :%s is taken by %s$(RESET)\n' "$$port" "$$owner"; busy=1; \
@@ -104,35 +103,48 @@ ports-free: ## Fail if a dev port is already taken
 	  printf '$(DIM)run `make stop` to free them$(RESET)\n'; exit 1; \
 	fi
 
+.PHONY: check-livekit
+check-livekit: ## Warn (does not fail) if LiveKit is not reachable at LIVEKIT_URL
+	@$(LOAD_ENV); \
+	url="$${LIVEKIT_URL:-}"; \
+	case "$$url" in \
+	  *127.0.0.1*|*localhost*) \
+	    http_url=$$(printf '%s' "$$url" | sed -E 's#^wss?://#http://#'); \
+	    if ! curl -fsS -m 2 "$$http_url" >/dev/null 2>&1; then \
+	      printf '$(AMBER)LiveKit does not appear to be running at %s$(RESET)\n' "$$url"; \
+	      printf '$(DIM)start it with: make docker-infra$(RESET)\n\n'; \
+	    fi ;; \
+	  *) : ;; \
+	esac
+
 # ── setup ───────────────────────────────────────────────────────────────────
 
 .PHONY: setup
-setup: env install db ## Create .env, install web deps, create the database
+setup: env install db ## Create .env, install workspace deps, create the database
 	@printf '\n$(GREEN)ready$(RESET) — run `make dev`\n'
 
 .PHONY: env
-env: ## Create .env from .env.example and generate any missing secrets
+env: ## Create .env from .env.example and generate JWT_SECRET if missing
 	@if [[ ! -f .env ]]; then \
 	  cp .env.example .env; \
 	  printf 'created .env from .env.example\n'; \
 	fi
-	@# The two secrets must exist and must differ — the API refuses to start
-	@# otherwise, because one key forging the other's tokens defeats the split.
-	@for name in JWT_SECRET MEDIA_TOKEN_SECRET; do \
-	  if ! grep -qE "^$$name=.+" .env; then \
-	    value=$$(openssl rand -base64 48 | tr -d '\n'); \
-	    if grep -qE "^$$name=" .env; then \
-	      sed -i.bak "s|^$$name=.*|$$name=$$value|" .env && rm -f .env.bak; \
-	    else \
-	      printf '%s=%s\n' "$$name" "$$value" >> .env; \
-	    fi; \
-	    printf 'generated $(BOLD)%s$(RESET)\n' "$$name"; \
+	@# .env.example ships working local defaults for LIVEKIT_API_KEY/SECRET
+	@# (devkey/secret) that match docker-infra's LiveKit container, so only
+	@# JWT_SECRET — which has no safe default — needs generating here.
+	@if ! grep -qE '^JWT_SECRET=.+' .env; then \
+	  value=$$(openssl rand -base64 48 | tr -d '\n'); \
+	  if grep -qE '^JWT_SECRET=' .env; then \
+	    sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=$$value|" .env && rm -f .env.bak; \
+	  else \
+	    printf 'JWT_SECRET=%s\n' "$$value" >> .env; \
 	  fi; \
-	done
+	  printf 'generated $(BOLD)JWT_SECRET$(RESET)\n'; \
+	fi
 
 .PHONY: install
-install: ## Install web dependencies
-	cd $(WEB_DIR) && npm install
+install: ## Install workspace dependencies (web, mobile, shared)
+	pnpm install
 
 .PHONY: db
 db: ## Create the database named in DATABASE_URL, if it does not exist
@@ -167,7 +179,7 @@ seed: ## Populate database with users, communities, playground rooms & friendshi
 .PHONY: check
 check: ## Typecheck everything (Rust + TypeScript)
 	cargo check --workspace
-	cd $(WEB_DIR) && npx tsc -b
+	cd $(WEB_DIR) && pnpm exec tsc -b
 
 .PHONY: test
 test: ## Run the Rust test suite
@@ -180,16 +192,16 @@ test-db: ## Run the tests that need a database
 .PHONY: lint
 lint: ## Lint both sides
 	cargo clippy --workspace --all-targets -- -D warnings
-	cd $(WEB_DIR) && npm run lint
+	cd $(WEB_DIR) && pnpm run lint
 
 .PHONY: fmt
 fmt: ## Format Rust code
 	cargo fmt --all
 
 .PHONY: build
-build: ## Release build of both binaries and the web bundle
+build: ## Release build of the API and the web bundle
 	cargo build --workspace --release
-	cd $(WEB_DIR) && npm run build
+	cd $(WEB_DIR) && pnpm run build
 
 .PHONY: ci
 ci: check test lint ## Everything CI would run
@@ -197,27 +209,20 @@ ci: check test lint ## Everything CI would run
 # ── diagnostics ─────────────────────────────────────────────────────────────
 
 .PHONY: fingerprints
-fingerprints: ## Compare the media-token secret across .env and running processes
-	@printf '$(BOLD)MEDIA_TOKEN_SECRET fingerprints$(RESET) $(DIM)(sha256, first 8 hex — same as the servers log at startup)$(RESET)\n\n'
+fingerprints: ## Show the LiveKit key/secret fingerprint .env would sign with
+	@printf '$(BOLD)LIVEKIT_API_KEY/SECRET fingerprint$(RESET) $(DIM)(sha256 of "key:secret", first 8 hex)$(RESET)\n\n'
 	@$(LOAD_ENV); \
-	env_fp=$$(printf '%s' "$${MEDIA_TOKEN_SECRET:-}" | shasum -a 256 | cut -c1-8); \
-	printf '  %-28s %s\n' ".env" "$${env_fp:-<unset>}"; \
-	for name in api media; do \
-	  for pid in $$(pgrep -x $$name 2>/dev/null); do \
-	    secret=$$(ps eww $$pid 2>/dev/null | tr ' ' '\n' | grep '^MEDIA_TOKEN_SECRET=' | cut -d= -f2-); \
-	    fp=$$(printf '%s' "$$secret" | shasum -a 256 | cut -c1-8); \
-	    if [[ "$$fp" == "$$env_fp" ]]; then mark="$(GREEN)matches .env$(RESET)"; \
-	    else mark="$(RED)DIFFERS — restart it$(RESET)"; fi; \
-	    printf '  %-28s %s  %b\n' "running $$name (pid $$pid)" "$$fp" "$$mark"; \
-	  done; \
-	done
-	@printf '\n$(DIM)A process started before you last edited .env keeps the old secret,\n'
-	@printf 'and every voice join then fails with "Your media token is not valid".$(RESET)\n'
+	env_fp=$$(printf '%s:%s' "$${LIVEKIT_API_KEY:-}" "$${LIVEKIT_API_SECRET:-}" | shasum -a 256 | cut -c1-8); \
+	printf '  %-14s %s\n' ".env" "$${env_fp:-<unset>}"
+	@printf '\n$(DIM)The LiveKit container in `docker-infra` is started with the same two\n'
+	@printf 'variables (see docker-compose.yml'"'"'s LIVEKIT_KEYS). If you change either\n'
+	@printf 'in .env, recreate it so the fingerprints still agree:\n'
+	@printf '  docker compose up -d --force-recreate livekit$(RESET)\n'
 
 .PHONY: doctor
-doctor: ## Check tools, secrets, database and ports
+doctor: ## Check tools, secrets, database, LiveKit and ports
 	@printf '$(BOLD)tools$(RESET)\n'
-	@for tool in cargo node npm psql; do \
+	@for tool in cargo node pnpm psql docker; do \
 	  if command -v $$tool >/dev/null 2>&1; then \
 	    printf '  $(GREEN)✓$(RESET) %-6s %s\n' "$$tool" "$$($$tool --version 2>&1 | head -1)"; \
 	  else \
@@ -228,14 +233,17 @@ doctor: ## Check tools, secrets, database and ports
 	@if [[ -f .env ]]; then printf '  $(GREEN)✓$(RESET) .env present\n'; \
 	 else printf '  $(RED)✗$(RESET) .env missing — run `make env`\n'; fi
 	@$(LOAD_ENV); \
-	if [[ -z "$${JWT_SECRET:-}" || -z "$${MEDIA_TOKEN_SECRET:-}" ]]; then \
-	  printf '  $(RED)✗$(RESET) both JWT_SECRET and MEDIA_TOKEN_SECRET must be set\n'; \
-	elif [[ "$$JWT_SECRET" == "$$MEDIA_TOKEN_SECRET" ]]; then \
-	  printf '  $(RED)✗$(RESET) the two secrets are identical — the API refuses to start\n'; \
-	elif [[ $${#MEDIA_TOKEN_SECRET} -lt 32 || $${#JWT_SECRET} -lt 32 ]]; then \
-	  printf '  $(RED)✗$(RESET) secrets must be at least 32 characters\n'; \
+	if [[ -z "$${JWT_SECRET:-}" ]]; then \
+	  printf '  $(RED)✗$(RESET) JWT_SECRET must be set\n'; \
+	elif [[ $${#JWT_SECRET} -lt 32 ]]; then \
+	  printf '  $(RED)✗$(RESET) JWT_SECRET must be at least 32 characters\n'; \
 	else \
-	  printf '  $(GREEN)✓$(RESET) secrets set, distinct, long enough\n'; \
+	  printf '  $(GREEN)✓$(RESET) JWT_SECRET set and long enough\n'; \
+	fi; \
+	if [[ -z "$${LIVEKIT_API_KEY:-}" || -z "$${LIVEKIT_API_SECRET:-}" || -z "$${LIVEKIT_URL:-}" ]]; then \
+	  printf '  $(RED)✗$(RESET) LIVEKIT_API_KEY, LIVEKIT_API_SECRET and LIVEKIT_URL must all be set\n'; \
+	else \
+	  printf '  $(GREEN)✓$(RESET) LiveKit config set  $(DIM)%s$(RESET)\n' "$$LIVEKIT_URL"; \
 	fi
 	@printf '\n$(BOLD)database$(RESET)\n'
 	@$(LOAD_ENV); \
@@ -245,8 +253,17 @@ doctor: ## Check tools, secrets, database and ports
 	else \
 	  printf '  $(RED)✗$(RESET) cannot connect  $(DIM)%s$(RESET)\n' "$${DATABASE_URL%%\?*}"; \
 	fi
+	@printf '\n$(BOLD)livekit$(RESET)\n'
+	@$(LOAD_ENV); \
+	http_url=$$(printf '%s' "$${LIVEKIT_URL:-}" | sed -E 's#^wss?://#http://#'); \
+	if [[ -z "$$http_url" ]]; then printf '  $(RED)✗$(RESET) LIVEKIT_URL not set\n'; \
+	elif curl -fsS -m 2 "$$http_url" >/dev/null 2>&1; then \
+	  printf '  $(GREEN)✓$(RESET) reachable  $(DIM)%s$(RESET)\n' "$$LIVEKIT_URL"; \
+	else \
+	  printf '  $(AMBER)○$(RESET) unreachable  $(DIM)%s — try `make docker-infra`$(RESET)\n' "$$LIVEKIT_URL"; \
+	fi
 	@printf '\n$(BOLD)ports$(RESET)\n'
-	@for port in $(API_PORT) $(MEDIA_PORT) $(WEB_PORT); do \
+	@for port in $(API_PORT) $(WEB_PORT); do \
 	  owner=$$(lsof -nP -iTCP:$$port -sTCP:LISTEN 2>/dev/null | awk 'NR==2 { print $$1 " (pid " $$2 ")" }'); \
 	  if [[ -n "$$owner" ]]; then printf '  $(AMBER)●$(RESET) :%-5s in use by %s\n' "$$port" "$$owner"; \
 	  else printf '  $(GREEN)○$(RESET) :%-5s free\n' "$$port"; fi; \
@@ -255,14 +272,29 @@ doctor: ## Check tools, secrets, database and ports
 	@$(MAKE) --no-print-directory fingerprints
 
 .PHONY: health
-health: ## Curl both readiness endpoints
-	@printf 'api   : '; curl -fsS -m 3 localhost:$(API_PORT)/ready   || printf '$(RED)unreachable$(RESET)'; printf '\n'
-	@printf 'media : '; curl -fsS -m 3 localhost:$(MEDIA_PORT)/ready || printf '$(RED)unreachable$(RESET)'; printf '\n'
+health: ## Curl the API's readiness endpoint
+	@printf 'api: '; curl -fsS -m 3 localhost:$(API_PORT)/ready || printf '$(RED)unreachable$(RESET)'; printf '\n'
 
 # ── docker ──────────────────────────────────────────────────────────────────
+#
+# `docker-infra` is the one `make dev` expects: Postgres + LiveKit, in the
+# background, nothing built. `docker-up` is the other workflow entirely — the
+# whole stack (api, web, seed too) built and run in Docker, no local Rust or
+# Node toolchain required at all. Pick one; running both against the same
+# ports will just fight over them.
+
+.PHONY: docker-infra
+docker-infra: ## Start Postgres + LiveKit in Docker — what `make dev` needs
+	docker compose up -d postgres livekit
+	@printf '\n$(GREEN)postgres$(RESET) :5432   $(GREEN)livekit$(RESET) :7880 (ws) :7881 (http)\n'
+	@printf '$(DIM)now: make dev$(RESET)\n'
+
+.PHONY: docker-infra-down
+docker-infra-down: ## Stop Postgres + LiveKit
+	docker compose stop postgres livekit
 
 .PHONY: docker-up
-docker-up: ## Start the full stack in Docker
+docker-up: ## Start the full stack in Docker (api, web, postgres, livekit)
 	docker compose up --build
 
 .PHONY: docker-down

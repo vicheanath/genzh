@@ -1,0 +1,24 @@
+# Local-dev LiveKit config, mounted read-only into the livekit service in
+# docker-compose.yml.
+#
+# The only thing this exists for: pinning the RTC UDP port range to something
+# small. Docker Desktop's WSL2 port-forwarding proxy chokes on the default
+# 50000-60000 range (10,001 ports) — publishing that many UDP ports fails
+# outright on Windows. This range must match the ports published in
+# docker-compose.yml exactly, or LiveKit will hand out candidates on ports
+# Docker never forwarded, and ICE will fail silently: the join and the token
+# grant both look correct, but no audio or video ever actually connects.
+#
+# 20 ports is enough for local development — LiveKit allocates roughly one
+# UDP port per participant connection, not per track (tracks are bundled).
+# Widen it (and the docker-compose.yml port list) if you need to test with
+# more concurrent participants than that.
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50019
+  # Irrelevant for local dev: the browser and LiveKit are on the same host,
+  # so there is no internet-facing address to detect. Leave this false; a
+  # real internet-facing deployment is a separate, unrelated decision.
+  use_external_ip: false
