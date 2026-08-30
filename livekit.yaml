@@ -1,24 +1,35 @@
 # Local-dev LiveKit config, mounted read-only into the livekit service in
-# docker-compose.yml.
+# docker-compose.yml. Two unrelated problems, both specific to "LiveKit in
+# Docker, browser on the same Windows host":
 #
-# The only thing this exists for: pinning the RTC UDP port range to something
-# small. Docker Desktop's WSL2 port-forwarding proxy chokes on the default
-# 50000-60000 range (10,001 ports) — publishing that many UDP ports fails
-# outright on Windows. This range must match the ports published in
-# docker-compose.yml exactly, or LiveKit will hand out candidates on ports
-# Docker never forwarded, and ICE will fail silently: the join and the token
-# grant both look correct, but no audio or video ever actually connects.
+# 1. The RTC UDP port range is pinned small. Docker Desktop's WSL2
+#    port-forwarding proxy chokes on the default 50000-60000 range (10,001
+#    ports) — publishing that many UDP ports fails outright on Windows. This
+#    range must match the ports published in docker-compose.yml exactly, or
+#    LiveKit hands out candidates on ports Docker never forwarded.
+#
+# 2. node_ip pins the address LiveKit advertises in its own ICE candidates.
+#    Without it, LiveKit advertises its Docker-internal bridge IP (unreachable
+#    from outside the container) and a STUN-discovered public WAN IP (which
+#    requires round-tripping out through the router and back in — unreliable,
+#    and pointless when both sides are the same machine). Neither is
+#    something the browser can actually dial, so every ICE candidate pair
+#    fails, silently: the join and the token grant both look correct, audio
+#    and video just never connect ("could not establish pc connection" in the
+#    browser console, every candidate pair "failed" in these logs).
+#
+# Both failure modes look identical from the client: stuck on "Connecting".
 #
 # 20 ports is enough for local development — LiveKit allocates roughly one
 # UDP port per participant connection, not per track (tracks are bundled).
 # Widen it (and the docker-compose.yml port list) if you need to test with
-# more concurrent participants than that.
+# more concurrent participants than that. node_ip is specific to this
+# same-machine setup and has no meaning for an actual internet deployment —
+# that is a separate, unrelated decision for a real production config.
 port: 7880
 rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50019
-  # Irrelevant for local dev: the browser and LiveKit are on the same host,
-  # so there is no internet-facing address to detect. Leave this false; a
-  # real internet-facing deployment is a separate, unrelated decision.
   use_external_ip: false
+  node_ip: 127.0.0.1
