@@ -25,6 +25,20 @@ services:
       timeout: 3s
       retries: 10
 
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: cargo run --release --bin seed
+    environment:
+      DATABASE_URL: postgres://social:social@postgres:5432/social
+      RUST_LOG: info
+    profiles:
+      - init
+
   api:
     build:
       context: .
