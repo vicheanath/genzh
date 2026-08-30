@@ -1,31 +1,13 @@
-# ─────────────────────────────── builder ───────────────────────────────
+# Same as API builder stage but runs the seed binary
 ARG RUST_VERSION=1.94
-FROM rust:${RUST_VERSION}-bookworm AS builder
+FROM rust:${RUST_VERSION}-bookworm
 
 WORKDIR /build
 
-# Copy manifests first so a source-only change does not re-resolve the
-# dependency graph. The dummy sources exist purely to make `cargo fetch` happy
-# before the real code lands.
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY apps/ apps/
 COPY migrations/ migrations/
 
-# Build the seed binary
-RUN cargo build --release --locked --bin seed
-
-# ─────────────────────────────── runtime ───────────────────────────────
-FROM debian:bookworm-slim AS runtime
-
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
- && rm -rf /var/lib/apt/lists/*
-
-RUN useradd --system --create-home --uid 10003 social
-USER social
-WORKDIR /home/social
-
-COPY --from=builder /build/target/release/seed /usr/local/bin/seed
-
-ENTRYPOINT ["/usr/local/bin/seed"]
+# Run seed with same environment as `make seed`
+ENTRYPOINT ["cargo", "run", "--release", "--locked", "--bin", "seed"]
