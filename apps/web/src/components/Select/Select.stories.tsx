@@ -21,6 +21,7 @@ const languages = [
 ] as const;
 
 export const Default: Story = {
+  args: {} as any,
   render: () => {
     const [value, setValue] = useState<string>("en");
     return (
@@ -35,6 +36,7 @@ export const Default: Story = {
 };
 
 export const WithPlaceholder: Story = {
+  args: {} as any,
   render: () => {
     const [value, setValue] = useState<string>("");
     return (
@@ -50,6 +52,7 @@ export const WithPlaceholder: Story = {
 };
 
 export const Disabled: Story = {
+  args: {} as any,
   render: () => (
     <Select
       aria-label="Language"

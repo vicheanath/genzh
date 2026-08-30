@@ -13,7 +13,8 @@ import { media, type Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useAppStore } from '@/lib/store'
 
-import { VoiceClient, type RemoteParticipant, type VoiceState } from './VoiceClient'
+import type { RemoteParticipant, VoiceState } from './LiveKitVoiceClient'
+import { LiveKitVoiceClient } from './LiveKitVoiceClient'
 
 const STORAGE_KEY = 'genzh_active_voice_session'
 
@@ -68,7 +69,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       // credential factory the transport calls on its own schedule, including
       // on a reconnect the UI never sees. A cached credential is a stale one,
       // so there is nothing here for the query cache to hold.
-      new VoiceClient(async () => {
+      new LiveKitVoiceClient(async () => {
         const roomId = currentRoomIdRef.current
         if (!roomId) {
           throw new Error('No active voice room')
@@ -124,17 +125,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     await client.leave()
   }, [client])
 
-  const micDeviceId = useAppStore((s) => s.micDeviceId)
-  const cameraDeviceId = useAppStore((s) => s.cameraDeviceId)
   const speakerDeviceId = useAppStore((s) => s.speakerDeviceId)
   const outputVolume = useAppStore((s) => s.outputVolume)
 
-  // Push the saved microphone into the client whenever it changes — including
-  // once on mount, which is what makes the choice survive a reload rather than
-  // only applying to the call it was made during.
-  useEffect(() => {
-    void client.setAudioInput(micDeviceId)
-  }, [client, micDeviceId])
+  // Device selection is handled at the browser level in LiveKit
 
   const setMuted = useCallback((muted: boolean) => client.setMuted(muted), [client])
   const toggleMute = useCallback(() => {
@@ -175,15 +169,15 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, [user, activeSession?.roomId, client])
 
   const setAudioInput = useCallback(
-    (deviceId: string) => client.setAudioInput(deviceId),
+    () => client.setAudioInput(),
     [client],
   )
 
-  // The camera defaults to the saved preference, but an explicit argument wins
-  // — the settings screen previews a device before it has been chosen.
+  // The camera is started without device selection in LiveKit
+  // Device selection is handled at the browser level
   const startCamera = useCallback(
-    (deviceId?: string) => client.startCamera(deviceId ?? (cameraDeviceId || undefined)),
-    [client, cameraDeviceId],
+    () => client.startCamera(),
+    [client],
   )
   const stopCamera = useCallback(() => client.stopCamera(), [client])
   const toggleCamera = useCallback(() => client.toggleCamera(), [client])

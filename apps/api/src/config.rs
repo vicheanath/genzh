@@ -45,6 +45,13 @@ pub struct Config {
     /// Comma-separated media server WebSocket URLs.
     pub media_server_urls: String,
 
+    /// LiveKit API key (optional, for LiveKit integration).
+    pub livekit_api_key: String,
+    /// LiveKit API secret (optional, for LiveKit integration).
+    pub livekit_api_secret: String,
+    /// LiveKit server URL (optional, for LiveKit integration).
+    pub livekit_url: String,
+
     /// ICE servers handed to clients.
     pub ice: IceConfig,
 
@@ -222,6 +229,10 @@ impl Config {
             media_token_ttl_seconds: number("MEDIA_TOKEN_TTL_SECONDS", DEFAULT_TOKEN_TTL_SECONDS)?,
             media_server_urls: optional("MEDIA_SERVER_URL")
                 .unwrap_or_else(|| "ws://127.0.0.1:8081/ws/media".to_owned()),
+
+            livekit_api_key: optional("LIVEKIT_API_KEY").unwrap_or_default(),
+            livekit_api_secret: optional("LIVEKIT_API_SECRET").unwrap_or_default(),
+            livekit_url: optional("LIVEKIT_URL").unwrap_or_default(),
 
             ice,
 

@@ -1,8 +1,6 @@
 # ─────────────────────────────── builder ───────────────────────────────
-# Matches `rust-version = "1.90"` in the workspace manifest, so the image is
-# also the MSRV check: if this stage stops compiling, the declared MSRV has
-# quietly drifted. Bump both together — never just this one.
-ARG RUST_VERSION=1.90
+# Updated to 1.94 to match sqlx v0.9.0 requirements
+ARG RUST_VERSION=1.94
 FROM rust:${RUST_VERSION}-bookworm AS builder
 
 WORKDIR /build

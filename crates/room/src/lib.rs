@@ -18,7 +18,10 @@ pub mod service;
 pub use authorization::RoomAccess;
 pub use directory::RoomDirectory;
 pub use directs::DirectRooms;
-pub use media::{MediaJoinResponse, MediaServerSelector, MediaSessionService, StaticMediaServers};
+pub use media::{
+    LiveKitToken, LiveKitTokenGenerator, MediaJoinResponse, MediaServerSelector,
+    MediaSessionService, StaticMediaServers,
+};
 pub use repository::{PruneOutcome, RoomRepository, UpdateRoom};
 pub use service::{CreateRoom, RoomService};
 pub use read_state::{ReadStateService, RoomUnread};

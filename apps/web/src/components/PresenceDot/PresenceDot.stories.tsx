@@ -20,6 +20,7 @@ export const Busy: Story = { args: { presence: "busy" } };
 export const Offline: Story = { args: { presence: "offline" } };
 
 export const AllPresences: Story = {
+  args: {} as any,
   render: () => (
     <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
       <PresenceDot presence="online" />

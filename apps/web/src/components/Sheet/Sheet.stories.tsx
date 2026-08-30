@@ -17,6 +17,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const FromStart: Story = {
+  args: {} as any,
   render: () => {
     const [open, setOpen] = useState(false);
     return (
@@ -35,6 +36,7 @@ export const FromStart: Story = {
 };
 
 export const FromBottom: Story = {
+  args: {} as any,
   render: () => {
     const [open, setOpen] = useState(false);
     return (

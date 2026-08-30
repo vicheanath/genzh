@@ -13,7 +13,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const longList = Array.from({ length: 30 }, (_, i) => Item );
+const longList = Array.from({ length: 30 }, (_, i) => `Item ${i + 1}`);
 
 export const Default: Story = {
   render: () => (

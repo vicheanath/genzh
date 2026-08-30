@@ -32,6 +32,7 @@ export const Right: Story = {
 };
 
 export const AllSides: Story = {
+  args: {} as any,
   render: () => (
     <TooltipProvider>
       <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>

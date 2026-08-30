@@ -1,9 +1,9 @@
-# Local development stack: PostgreSQL, the API, and one media server.
+# Local development stack: PostgreSQL, the API, LiveKit (media), and the web frontend.
 #
-# Deliberately three services. No Redis, no message broker, no service mesh —
-# none of them would be carrying anything yet, and each one is a component that
-# has to be understood, operated and debugged. They can be added when there is
-# a workload that needs them; the architecture leaves room (see README).
+# LiveKit handles WebRTC media routing. No custom SFU, no Redis, no message broker,
+# no service mesh — each service is a component that has to be understood, operated
+# and debugged. They can be added when there is a workload that needs them; the
+# architecture leaves room (see README).
 
 services:
   postgres:
@@ -42,38 +42,19 @@ services:
 
       # How clients reach the media server. This is the address a *browser*
       # dials, not a compose-internal hostname.
-      MEDIA_SERVER_URL: ${MEDIA_SERVER_URL:-ws://127.0.0.1:8081/ws/media}
-
       STUN_URL: ${STUN_URL:-stun:stun.l.google.com:19302}
       TURN_URL: ${TURN_URL:-}
       TURN_USERNAME: ${TURN_USERNAME:-}
       TURN_PASSWORD: ${TURN_PASSWORD:-}
+
+      # LiveKit configuration
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
 
       RUST_LOG: ${RUST_LOG:-info,api=debug}
     ports:
       - "8080:8080"
-
-  media:
-    build:
-      context: .
-      dockerfile: Dockerfile.media
-    environment:
-      # The *only* secret this process gets. No database, no user JWT key.
-      MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
-      MEDIA_BIND: 0.0.0.0:8081
-
-      STUN_URL: ${STUN_URL:-stun:stun.l.google.com:19302}
-      TURN_URL: ${TURN_URL:-}
-      TURN_USERNAME: ${TURN_USERNAME:-}
-      TURN_PASSWORD: ${TURN_PASSWORD:-}
-
-      RUST_LOG: ${RUST_LOG:-info,media=debug}
-    ports:
-      - "8081:8081"
-      # Pinning the UDP range makes bridge networking workable. On Linux,
-      # `network_mode: host` is simpler and faster; on Docker Desktop it is not
-      # available, so this is the portable option.
-      - "40000-40100:40000-40100/udp"
 
   web:
     build:
@@ -87,5 +68,30 @@ services:
     ports:
       - "8082:8082"
 
+  # LiveKit: WebRTC media server (handles peer connections, media routing, etc.)
+  # All voice/video connections go through LiveKit
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.conf.yaml
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      LIVEKIT_LOG_LEVEL: debug
+    ports:
+      # WebRTC over WebSocket (clients connect here)
+      - "7880:7880"
+      # HTTP API
+      - "7881:7881"
+      # WebRTC media (UDP)
+      - "50000-60000:50000-60000/udp"
+    volumes:
+      - livekit-data:/livekit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7881/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   postgres-data:
+  livekit-data:

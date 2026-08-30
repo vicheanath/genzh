@@ -22,7 +22,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.94"
 license = "MIT OR Apache-2.0"
 publish = false
 
@@ -86,6 +86,7 @@ jsonwebtoken = { version = "11", default-features = false, features = ["rust_cry
 # ---- media ----
 webrtc = { version = "0.20.3", default-features = false, features = ["runtime-tokio"] }
 rtc = { version = "0.20.3", default-features = false, features = ["ring"] }
+# LiveKit token generation uses standard JWT; no SDK dependency needed
 
 # ---- misc ----
 uuid = { version = "1", features = ["v4", "serde"] }

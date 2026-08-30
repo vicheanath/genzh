@@ -275,6 +275,110 @@ impl MediaSessionService {
     }
 }
 
+/// LiveKit token generator.
+///
+/// Generates access tokens for LiveKit rooms. This allows clients to connect
+/// directly to a LiveKit server instead of the custom media server.
+///
+/// LiveKit tokens are JWTs with a specific claims structure. This implementation
+/// generates them using the same JWT mechanism as media tokens.
+pub struct LiveKitTokenGenerator {
+    api_key: String,
+    api_secret: String,
+}
+
+impl LiveKitTokenGenerator {
+    /// Create a new LiveKit token generator.
+    pub fn new(api_key: impl Into<String>, api_secret: impl Into<String>) -> Self {
+        Self {
+            api_key: api_key.into(),
+            api_secret: api_secret.into(),
+        }
+    }
+
+    /// Generate a LiveKit access token for a participant.
+    pub fn generate_token(
+        &self,
+        room_id: &RoomId,
+        user_id: &UserId,
+        display_name: &str,
+        permissions: MediaPermissions,
+    ) -> ServiceResult<LiveKitToken> {
+        use serde::{Deserialize, Serialize};
+        use serde_json::json;
+
+        // LiveKit token structure
+        #[derive(Serialize, Deserialize)]
+        struct LiveKitClaims {
+            iss: String,
+            sub: String,
+            aud: String,
+            exp: i64,
+            iat: i64,
+            nbf: i64,
+            name: String,
+            metadata: String,
+            grants: serde_json::Value,
+        }
+
+        let now = chrono::Utc::now();
+        let expires_at = now + chrono::Duration::hours(24);
+
+        // Build the video grant permissions
+        let grants = json!({
+            "video": {
+                "canPublish": permissions.may_publish(genzh_media_core::track::TrackKind::Audio)
+                    || permissions.may_publish(genzh_media_core::track::TrackKind::Camera)
+                    || permissions.may_publish(genzh_media_core::track::TrackKind::ScreenShare),
+                "canSubscribe": permissions.may_subscribe(),
+                "canPublishData": permissions.may_publish(genzh_media_core::track::TrackKind::ScreenShare),
+            },
+            "room": room_id.as_uuid().to_string(),
+        });
+
+        let claims = LiveKitClaims {
+            iss: self.api_key.clone(),
+            sub: user_id.as_uuid().to_string(),
+            aud: room_id.as_uuid().to_string(),
+            exp: expires_at.timestamp(),
+            iat: now.timestamp(),
+            nbf: now.timestamp(),
+            name: display_name.to_string(),
+            metadata: format!("{{\"room_id\": \"{}\"}}", room_id.as_uuid()),
+            grants,
+        };
+
+        // Use jsonwebtoken to sign the token
+        let key = jsonwebtoken::EncodingKey::from_secret(self.api_secret.as_bytes());
+        let token = jsonwebtoken::encode(
+            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
+            &claims,
+            &key,
+        )
+        .map_err(|e| {
+            tracing::error!("failed to encode LiveKit token: {}", e);
+            ServiceError::Domain(genzh_domain::DomainError::invalid(
+                "livekit",
+                "could not generate access token",
+            ))
+        })?;
+
+        tracing::debug!(%user_id, %room_id, "LiveKit token generated");
+
+        Ok(LiveKitToken {
+            token,
+            expires_at,
+        })
+    }
+}
+
+/// A LiveKit access token response.
+#[derive(Debug, Clone)]
+pub struct LiveKitToken {
+    pub token: String,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

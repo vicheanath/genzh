@@ -96,6 +96,8 @@ pub struct AppState {
     pub read_state: ReadStateService,
     /// Media join authorization and token minting.
     pub media: Arc<MediaSessionService>,
+    /// LiveKit token generator (optional, for LiveKit integration).
+    pub livekit_generator: Option<Arc<genzh_room::LiveKitTokenGenerator>>,
     /// The configuration this process started with.
     pub config: Arc<Config>,
     /// General per-address request budget.
@@ -235,6 +237,19 @@ impl AppState {
         let scheduler = Arc::new(CronScheduler::new().await?);
         let pool_for_recommend = pool.clone();
 
+        // Initialize LiveKit token generator if credentials are configured
+        let livekit_generator = if !config.livekit_api_key.is_empty()
+            && !config.livekit_api_secret.is_empty() {
+            tracing::info!("LiveKit token generator enabled");
+            Some(Arc::new(genzh_room::LiveKitTokenGenerator::new(
+                &config.livekit_api_key,
+                &config.livekit_api_secret,
+            )))
+        } else {
+            tracing::debug!("LiveKit token generator disabled (credentials not configured)");
+            None
+        };
+
         // ── volatile state ──────────────────────────────────────────────────
         // The only place in the process that names a concrete implementation of
         // these ports. Running more than one API instance means swapping these
@@ -266,6 +281,7 @@ impl AppState {
             invites,
             read_state,
             media,
+            livekit_generator,
             flood,
             events: InMemoryEventBus::new(EVENT_BUFFER),
             presence: InMemoryPresenceStore::new(),

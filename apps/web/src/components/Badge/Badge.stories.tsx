@@ -66,6 +66,7 @@ export const WithDot: Story = {
 
 /** All tones side-by-side. */
 export const AllTones: Story = {
+  args: {} as any,
   render: () => (
     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
       <Badge tone="neutral">Neutral</Badge>

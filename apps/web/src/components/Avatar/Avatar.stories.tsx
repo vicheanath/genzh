@@ -50,6 +50,7 @@ export const Speaking: Story = {
 };
 
 export const AllSizes: Story = {
+  args: {} as any,
   render: () => (
     <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
       <Avatar name="XS" size="xs" />
@@ -62,6 +63,7 @@ export const AllSizes: Story = {
 };
 
 export const AllPresences: Story = {
+  args: {} as any,
   render: () => (
     <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
       <Avatar name="On" presence="online" />

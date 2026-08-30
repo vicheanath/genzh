@@ -13,7 +13,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function ToastDemo({ type }: { type?: "error" }) {
+function ToastDemo() {
   const { add } = Toast.useToastManager();
   return (
     <div style={{ padding: "2rem", display: "flex", gap: "0.75rem" }}>
@@ -34,6 +34,7 @@ function ToastDemo({ type }: { type?: "error" }) {
 }
 
 export const Default: Story = {
+  args: {} as any,
   render: () => (
     <ToastProvider>
       <Toast.Provider>
