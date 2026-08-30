@@ -169,14 +169,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, [user, activeSession?.roomId, client])
 
   const setAudioInput = useCallback(
-    () => client.setAudioInput(),
+    (deviceId?: string) => client.setAudioInput(deviceId),
     [client],
   )
 
-  // The camera is started without device selection in LiveKit
-  // Device selection is handled at the browser level
   const startCamera = useCallback(
-    () => client.startCamera(),
+    (deviceId?: string) => client.startCamera(deviceId),
     [client],
   )
   const stopCamera = useCallback(() => client.stopCamera(), [client])

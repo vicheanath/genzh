@@ -153,7 +153,7 @@ export class LiveKitVoiceClient {
   /**
    * Set audio input device.
    */
-  async setAudioInput(): Promise<void> {
+  async setAudioInput(_deviceId?: string): Promise<void> {
     // Device selection is handled at the browser level in LiveKit
     // This is a no-op for compatibility with the interface
   }
@@ -161,7 +161,7 @@ export class LiveKitVoiceClient {
   /**
    * Start camera and return the media stream.
    */
-  async startCamera(): Promise<MediaStream | null> {
+  async startCamera(_deviceId?: string): Promise<MediaStream | null> {
     if (!this.room) return null
 
     try {

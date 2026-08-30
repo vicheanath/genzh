@@ -70,6 +70,7 @@ services:
 
   # LiveKit: WebRTC media server (handles peer connections, media routing, etc.)
   # All voice/video connections go through LiveKit
+  # Note: UDP ports disabled on Windows Docker Desktop; WebSocket fallback used instead
   livekit:
     image: livekit/livekit-server:latest
     command: --config /etc/livekit.conf.yaml
@@ -82,8 +83,8 @@ services:
       - "7880:7880"
       # HTTP API
       - "7881:7881"
-      # WebRTC media (UDP)
-      - "50000-60000:50000-60000/udp"
+      # UDP media ports disabled for Windows compatibility
+      # On Linux or Mac, uncomment to enable: - "50000-60000:50000-60000/udp"
     volumes:
       - livekit-data:/livekit
     healthcheck:
