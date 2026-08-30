@@ -21,7 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppMode } from '../../context/AppModeContext';
 import { isExperienceRoom } from '../../lib/roomTypes';
 import { useTabBarHeight } from '../../theme/layout';
-import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { Feed, Radius, Spacing, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { CreateRoomSheet } from '../home/CreateRoomSheet';
@@ -251,7 +251,7 @@ export function PlaygroundFeedScreen({ navigation }: any) {
         refreshControl={
           <RefreshControl
             refreshing={feed.isRefetching && !feed.isFetchingNextPage}
-            tintColor="#fff"
+            tintColor={Feed.ink}
             onRefresh={() => {
               void feed.refetch();
             }}
@@ -271,7 +271,7 @@ export function PlaygroundFeedScreen({ navigation }: any) {
           onPress={() => setCreateOpen(true)}
           style={styles.create}
         >
-          <Plus size={20} color="#fff" />
+          <Plus size={20} color={Feed.ink} />
         </Pressable>
       </View>
 
@@ -293,7 +293,7 @@ const makeStyles = (c: Palette) =>
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor: '#0d0d0b',
+      backgroundColor: Feed.ground,
     },
     centre: {
       flex: 1,
@@ -301,10 +301,10 @@ const makeStyles = (c: Palette) =>
       justifyContent: 'center',
       gap: Spacing.md,
       padding: Spacing.xl,
-      backgroundColor: '#0d0d0b',
+      backgroundColor: Feed.ground,
     },
     centreText: {
-      color: 'rgba(255,255,255,0.7)',
+      color: Feed.inkDim,
       fontSize: 14,
       fontWeight: '600',
     },
@@ -314,13 +314,13 @@ const makeStyles = (c: Palette) =>
       left: Spacing.lg,
     },
     emptyTitle: {
-      color: '#fff',
+      color: Feed.ink,
       fontSize: 24,
       fontWeight: '800',
       textAlign: 'center',
     },
     emptyBody: {
-      color: 'rgba(255,255,255,0.72)',
+      color: Feed.inkSubtle,
       fontSize: 15,
       lineHeight: 21,
       textAlign: 'center',
@@ -345,21 +345,30 @@ const makeStyles = (c: Palette) =>
       paddingHorizontal: Spacing.md,
       paddingVertical: 6,
       borderRadius: Radius.full,
-      backgroundColor: 'rgba(12, 12, 10, 0.5)',
+      backgroundColor: Feed.scrim,
       borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.18)',
+      borderColor: Feed.scrimBorder,
     },
     filterSelected: {
       backgroundColor: c.accent,
       borderColor: c.accent,
     },
     filterText: {
-      color: 'rgba(255,255,255,0.86)',
+      color: Feed.inkMuted,
       fontSize: 13,
       fontWeight: '700',
     },
     filterTextSelected: {
-      color: c.accentText,
+      /*
+       * `accentContrast`, not `accentText`.
+       *
+       * The two are not interchangeable and this is the case that proves it:
+       * `accentText` is accent-*coloured text on a page*, which in dark mode is
+       * the same lime as the fill behind it — so the selected chip's label was
+       * lime on lime and simply could not be read. `accentContrast` is the ink
+       * that goes *on* an accent fill, which is what this is. Rule 1.
+       */
+      color: c.accentContrast,
     },
     chrome: {
       position: 'absolute',
@@ -375,8 +384,8 @@ const makeStyles = (c: Palette) =>
       borderRadius: Radius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(12, 12, 10, 0.55)',
+      backgroundColor: Feed.scrim,
       borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.22)',
+      borderColor: Feed.scrimBorder,
     },
   });

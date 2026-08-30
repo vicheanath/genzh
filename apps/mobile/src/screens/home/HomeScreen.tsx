@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Lock, Plus, Sparkles, Users } from 'lucide-react-native';
+import { Plus, Sparkles } from 'lucide-react-native';
 import {
   rooms as roomsApi,
+  useRecommendedRoomsQuery,
   useRoomsVM,
   type Room,
+  type RoomRecommendation,
   type RoomType,
 } from '@genzh/shared';
 
@@ -19,11 +21,12 @@ import { SkeletonRows } from '../../components/Skeleton';
 import { ToggleGroup } from '../../components/ToggleGroup';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../context/AuthContext';
-import { isExperienceRoom, roomTypeIcon, roomTypeLabel } from '../../lib/roomTypes';
+import { isExperienceRoom } from '../../lib/roomTypes';
 import { Radius, Spacing, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { CreateRoomSheet } from './CreateRoomSheet';
+import { RoomCard } from './RoomCard';
 
 /** Stands in for "no filter" — a toggle group needs a value for every option. */
 const ALL_CATEGORIES = 'all';
@@ -68,6 +71,19 @@ export function HomeScreen({ navigation }: any) {
     discovery: { enabled: true, category: category || undefined },
   });
 
+  /*
+   * The ranked list, alongside the popular one.
+   *
+   * Two lists rather than one sorted differently: discovery answers "what is
+   * busy", recommendations answer "what is busy *and* looks like you". The
+   * server ranks the second and says why, and the reason is the whole reason it
+   * is worth a separate section — a card you cannot explain is just a card.
+   */
+  const suggested = useRecommendedRoomsQuery(token, {
+    category: category || undefined,
+    limit: 6,
+  });
+
   function openRoom(roomId: string, name: string, roomType: RoomType) {
     navigation.navigate(isExperienceRoom(roomType) ? 'ExperienceRoom' : 'RoomChat', {
       roomId,
@@ -98,6 +114,7 @@ export function HomeScreen({ navigation }: any) {
 
   function refreshAll() {
     void roomsVM.refreshDiscovery();
+    void suggested.refetch();
   }
 
   return (
@@ -160,6 +177,16 @@ export function HomeScreen({ navigation }: any) {
           }))}
         />
 
+        {/* Ranked first, popular second. Somebody who has been here before is
+            better served by six rooms picked for them than by the same wall of
+            trending cards they scrolled past yesterday. */}
+        <ForYouSection
+          rooms={suggested.data?.items ?? []}
+          personalized={suggested.data?.personalized ?? false}
+          loading={suggested.isLoading}
+          onOpen={openRoom}
+        />
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>🔥 Trending moments</Text>
           {roomsVM.discovery.length > 0 ? <Badge text={roomsVM.discovery.length} /> : null}
@@ -177,58 +204,20 @@ export function HomeScreen({ navigation }: any) {
           />
         ) : null}
 
-        {roomsVM.discovery.map((room: Room, index: number) => {
-          const Icon = roomTypeIcon(room.room_type);
-          return (
-            // Cards land one after another rather than all at once — the feed
-            // reads as filling in, which is what it is doing.
-            //
-            // The animation sits on a wrapper rather than on the Pressable
-            // itself: `Pressable` takes its style as a callback of the press
-            // state, and an animated component has no way to evaluate that.
-            <Animated.View
-              key={room.id}
-              entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(280)}
-            >
-            <Pressable
-              onPress={() => openRoom(room.id, room.name, room.room_type)}
-              style={({ pressed }) => [styles.roomCard, pressed && styles.pressed]}
-            >
-              <View style={styles.roomHead}>
-                <View style={styles.roomTypeTag}>
-                  <Icon size={13} color={c.accent} />
-                  <Text style={styles.roomTypeText}>{roomTypeLabel(room.room_type)}</Text>
-                </View>
-                <View style={styles.participants}>
-                  <Users size={12} color={c.textDim} />
-                  <Text style={styles.participantsText}>{room.current_participants || 1}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.roomName} numberOfLines={1}>
-                {room.name}
-              </Text>
-              <Text style={styles.roomTopic} numberOfLines={2}>
-                {room.topic || `Join this ${room.category} session and chat anonymously.`}
-              </Text>
-
-              <View style={styles.roomFooter}>
-                {room.is_anonymous ? (
-                  <View style={styles.anonPill}>
-                    <Lock size={11} color={c.textMuted} />
-                    <Text style={styles.anonText}>Anonymous</Text>
-                  </View>
-                ) : (
-                  <View style={styles.anonPill}>
-                    <Text style={styles.anonText}>Public</Text>
-                  </View>
-                )}
-                <Text style={styles.enter}>Enter →</Text>
-              </View>
-            </Pressable>
-            </Animated.View>
-          );
-        })}
+        {roomsVM.discovery.map((room: Room, index: number) => (
+          // Cards land one after another rather than all at once — the list
+          // reads as filling in, which is what it is doing.
+          //
+          // The animation sits on a wrapper rather than on the card itself:
+          // `Pressable` takes its style as a callback of the press state, and
+          // an animated component has no way to evaluate that.
+          <Animated.View
+            key={room.id}
+            entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(280)}
+          >
+            <RoomCard room={room} onPress={openRoom} />
+          </Animated.View>
+        ))}
 
       </ScrollView>
 
@@ -241,6 +230,60 @@ export function HomeScreen({ navigation }: any) {
         onOpenRoom={openRoom}
       />
     </SafeAreaView>
+  );
+}
+
+/**
+ * The ranked rail.
+ *
+ * Draws nothing while it is loading and nothing when it comes back empty,
+ * rather than a skeleton. A placeholder here would push Trending down the page
+ * on every visit only to collapse again a moment later, which is the layout
+ * shift readers notice most — and this section is a bonus, not the content.
+ *
+ * The heading is honest about which list this is. Calling a popularity ranking
+ * "for you" is the single thing that makes a recommender feel broken: the
+ * reader can tell, and then stops believing the label on the day it is earned.
+ */
+function ForYouSection({
+  rooms,
+  personalized,
+  loading,
+  onOpen,
+}: {
+  rooms: RoomRecommendation[];
+  personalized: boolean;
+  loading: boolean;
+  onOpen: (id: string, name: string, roomType: RoomType) => void;
+}) {
+  const styles = useThemedStyles(makeStyles);
+
+  if (loading || rooms.length === 0) return null;
+
+  return (
+    <>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          {personalized ? '✨ For you' : '✨ Popular right now'}
+        </Text>
+        <Badge text={rooms.length} tone="accent" />
+      </View>
+
+      {!personalized ? (
+        <Text style={styles.sectionNote}>
+          Join a moment or two and this starts matching what you actually like.
+        </Text>
+      ) : null}
+
+      {rooms.map((room, index) => (
+        <Animated.View
+          key={room.id}
+          entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(280)}
+        >
+          <RoomCard room={room} onPress={onOpen} reasons={room.reasons} highlighted />
+        </Animated.View>
+      ))}
+    </>
   );
 }
 
@@ -310,78 +353,10 @@ const makeStyles = (c: Palette) =>
     fontSize: 15,
     fontWeight: '800',
   },
-  roomCard: {
-    backgroundColor: c.surface,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: Spacing.lg,
-    gap: Spacing.xs,
-  },
-  pressed: {
-    backgroundColor: c.surfaceHover,
-  },
-  roomHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  roomTypeTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  roomTypeText: {
-    color: c.accentText,
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  participants: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  participantsText: {
-    color: c.textDim,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  roomName: {
-    color: c.text,
-    fontSize: 16,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  roomTopic: {
+  sectionNote: {
     color: c.textSubtle,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  roomFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Spacing.sm,
-  },
-  anonPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: c.surfaceMuted,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
-  },
-  anonText: {
-    color: c.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  enter: {
-    color: c.accentText,
     fontSize: 12,
-    fontWeight: '800',
+    lineHeight: 17,
+    marginBottom: Spacing.xs,
   },
 });

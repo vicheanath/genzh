@@ -1,99 +1,129 @@
-import React, { useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { useInventoryQuery, useEquippedQuery } from '@genzh/shared';
+import React, { useMemo, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Check, ShoppingBag } from 'lucide-react-native';
+import { useInventoryQuery, type ItemType } from '@genzh/shared';
 
-import { ToggleGroup } from '../../../components/ToggleGroup';
+import { EmptyState } from '../../../components/EmptyState';
+import { SkeletonRows } from '../../../components/Skeleton';
+import { Tabs } from '../../../components/Tabs';
 import { useAuth } from '../../../context/AuthContext';
-import { Spacing, type Palette } from '../../../theme/tokens';
+import { ItemPreview } from '../../../features/rewards/ItemPreview';
+import { SLOTS, rarityTone, slotLabel } from '../../../features/rewards/cosmetics';
+import { Radius, Spacing, type Palette } from '../../../theme/tokens';
 import { useThemedStyles, useColors } from '../../../theme/ThemeContext';
 
-const COSMETIC_TYPES = [
-  { value: null, label: 'All' },
-  { value: 'frame', label: 'Frame' },
-  { value: 'badge', label: 'Badge' },
-  { value: 'banner', label: 'Banner' },
-  { value: 'name_color', label: 'Name Color' },
-  { value: 'name_font', label: 'Name Font' },
-  { value: 'title', label: 'Title' },
-  { value: 'avatar_effect', label: 'Avatar Effect' },
-  { value: 'chat_bubble', label: 'Chat Bubble' },
+type Filter = ItemType | 'all';
+
+const FILTERS: ReadonlyArray<{ value: Filter; label: string }> = [
+  { value: 'all', label: 'All' },
+  ...SLOTS.map((slot) => ({ value: slot.id as Filter, label: slot.short })),
 ];
 
+/**
+ * Everything this account owns.
+ *
+ * An `InventoryItem` is a *receipt* rather than an item — it wraps the item it
+ * was bought from and adds what was paid, where it came from and whether it is
+ * currently worn. So the name and the slot come from `entry.item`, and the
+ * worn flag comes from the entry itself: the server has already resolved it,
+ * and asking a second endpoint what is equipped only creates two answers that
+ * can disagree.
+ */
 export function InventoryView() {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { token } = useAuth();
 
-  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const inventoryQuery = useInventoryQuery(token);
-  const equippedQuery = useEquippedQuery(token);
 
-  const inventory = inventoryQuery.data || [];
-  const equipped = equippedQuery.data || [];
-  const equippedIds = new Set(equipped.map((e) => e.item_id));
+  const entries = useMemo(() => {
+    const all = inventoryQuery.data ?? [];
+    const scoped = filter === 'all' ? all : all.filter((e) => e.item.item_type === filter);
+    // Worn things first, then newest. What you are wearing is what you came
+    // here to look at; the rest is a shelf.
+    return [...scoped].sort((a, b) => {
+      if (a.equipped !== b.equipped) return a.equipped ? -1 : 1;
+      return b.acquired_at.localeCompare(a.acquired_at);
+    });
+  }, [inventoryQuery.data, filter]);
 
-  const filteredItems = selectedType
-    ? inventory.filter((item) => item.cosmetic_type === selectedType)
-    : inventory;
+  if (inventoryQuery.isLoading) {
+    return (
+      <View style={styles.loading}>
+        <SkeletonRows rows={4} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <ToggleGroup
-          mode="single"
-          value={[selectedType ?? 'all']}
-          onValueChange={(next) => {
-            const val = next[0];
-            setSelectedType(val === 'all' ? null : (val as string));
-          }}
-          items={COSMETIC_TYPES.map((t) => ({
-            value: t.value ?? 'all',
-            label: t.label,
-          }))}
-        />
+      <View style={styles.filters}>
+        <Tabs value={filter} onValueChange={setFilter} scrollable items={FILTERS} />
       </View>
 
-      {/* Inventory Grid */}
       <FlatList
-        data={filteredItems}
-        keyExtractor={(item) => item.id}
+        data={entries}
+        keyExtractor={(entry) => entry.id}
         numColumns={2}
-        columnWrapperStyle={styles.grid}
-        renderItem={({ item }) => {
-          const isEquipped = equippedIds.has(item.id);
+        columnWrapperStyle={styles.row}
+        contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={inventoryQuery.isFetching && !inventoryQuery.isLoading}
+            onRefresh={() => void inventoryQuery.refetch()}
+            tintColor={c.accent}
+          />
+        }
+        ListEmptyComponent={
+          <EmptyState
+            icon={<ShoppingBag size={26} color={c.textSubtle} />}
+            title={filter === 'all' ? 'Nothing owned yet' : 'Nothing in this slot'}
+            description={
+              filter === 'all'
+                ? 'Points earned from daily check-ins and activity buy cosmetics in the Store tab.'
+                : 'You own nothing for this slot yet.'
+            }
+          />
+        }
+        renderItem={({ item: entry }) => {
+          const rarity = rarityTone(entry.item.rarity, c);
 
           return (
-            <View style={styles.itemWrapper}>
-              <View
-                style={[
-                  styles.itemCard,
-                  isEquipped && styles.itemEquipped,
-                ]}
-              >
-                <View style={styles.itemPreview}>
-                  <Text style={styles.itemIcon}>✨</Text>
+            <View style={styles.cell}>
+              <View style={[styles.card, entry.equipped && { borderColor: c.accent }]}>
+                <ItemPreview item={entry.item} size={104} />
+
+                <View style={styles.meta}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {entry.item.name}
+                  </Text>
+                  <Text style={[styles.rarity, { color: rarity.ink }]}>
+                    {entry.item.rarity} · {slotLabel(entry.item.item_type)}
+                  </Text>
                 </View>
 
-                <Text style={styles.itemName} numberOfLines={2}>
-                  {item.name}
-                </Text>
-
-                <Text style={styles.itemType}>
-                  {item.cosmetic_type}
-                </Text>
-
-                {isEquipped && (
-                  <View style={styles.equippedBadge}>
-                    <Text style={styles.equippedText}>Equipped</Text>
+                {entry.equipped ? (
+                  <View style={styles.worn}>
+                    <Check size={12} color={c.accentText} />
+                    <Text style={styles.wornText}>Worn</Text>
                   </View>
+                ) : (
+                  // How it was got, which is the only thing separating two
+                  // copies of the same item: one bought, one given.
+                  <Text style={styles.source} numberOfLines={1}>
+                    {entry.source === 'purchase'
+                      ? `Bought for ${entry.paid_points}`
+                      : entry.source === 'grant'
+                        ? 'Granted by staff'
+                        : 'Earned'}
+                  </Text>
                 )}
               </View>
             </View>
           );
         }}
-        contentContainerStyle={styles.list}
       />
     </View>
   );
@@ -105,64 +135,66 @@ const makeStyles = (c: Palette) =>
       flex: 1,
       backgroundColor: c.bg,
     },
-    filtersContainer: {
+    filters: {
       paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.sm,
+      paddingBottom: Spacing.sm,
+    },
+    loading: {
+      padding: Spacing.lg,
     },
     list: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.md,
-    },
-    grid: {
+      padding: Spacing.md,
+      paddingBottom: Spacing.xxl * 2,
       gap: Spacing.md,
-      marginBottom: Spacing.md,
     },
-    itemWrapper: {
-      flex: 0.5,
+    row: {
+      gap: Spacing.md,
     },
-    itemCard: {
-      borderRadius: Radius.lg,
+    cell: {
+      flex: 1 / 2,
+    },
+    card: {
+      flex: 1,
+      borderRadius: Radius.xl,
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
       padding: Spacing.md,
+      gap: Spacing.sm,
     },
-    itemEquipped: {
-      borderColor: c.live,
-      backgroundColor: c.liveSubtle,
+    meta: {
+      gap: 1,
     },
-    itemPreview: {
-      height: 100,
-      borderRadius: Radius.md,
-      backgroundColor: c.bg,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: Spacing.md,
-    },
-    itemIcon: {
-      fontSize: 40,
-    },
-    itemName: {
+    name: {
       color: c.text,
       fontSize: 13,
-      fontWeight: '600',
-      marginBottom: Spacing.xs,
+      fontWeight: '800',
+      letterSpacing: -0.1,
     },
-    itemType: {
-      color: c.textMuted,
+    rarity: {
       fontSize: 11,
-      marginBottom: Spacing.md,
+      fontWeight: '700',
+      textTransform: 'capitalize',
     },
-    equippedBadge: {
-      paddingHorizontal: Spacing.sm,
-      paddingVertical: Spacing.xs,
-      borderRadius: Radius.md,
-      backgroundColor: c.live,
+    worn: {
+      flexDirection: 'row',
+      alignItems: 'center',
       alignSelf: 'flex-start',
+      gap: 3,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 4,
+      borderRadius: Radius.full,
+      backgroundColor: c.accentSubtle,
+      marginTop: 'auto',
     },
-    equippedText: {
-      color: 'white',
+    wornText: {
+      color: c.accentText,
       fontSize: 11,
-      fontWeight: '600',
+      fontWeight: '800',
+    },
+    source: {
+      color: c.textDim,
+      fontSize: 11,
+      marginTop: 'auto',
     },
   });

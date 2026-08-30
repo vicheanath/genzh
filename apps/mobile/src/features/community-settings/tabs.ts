@@ -1,7 +1,7 @@
-import { Hash, Lock, Shield, Users } from 'lucide-react-native';
+import { Hash, Link2, Lock, Shield, Users } from 'lucide-react-native';
 import { can, type CommunityWithPermissions, type Uuid } from '@genzh/shared';
 
-export type CommunityTab = 'overview' | 'roles' | 'members' | 'channels';
+export type CommunityTab = 'overview' | 'roles' | 'members' | 'channels' | 'invites';
 
 export interface CommunityTabInfo {
   id: CommunityTab;
@@ -20,6 +20,7 @@ export const COMMUNITY_TABS: ReadonlyArray<CommunityTabInfo> = [
   { id: 'roles', label: 'Roles & permissions', short: 'Roles', icon: Lock },
   { id: 'members', label: 'Members', short: 'Members', icon: Users },
   { id: 'channels', label: 'Channels', short: 'Channels', icon: Hash },
+  { id: 'invites', label: 'Invite links', short: 'Invites', icon: Link2 },
 ];
 
 /**

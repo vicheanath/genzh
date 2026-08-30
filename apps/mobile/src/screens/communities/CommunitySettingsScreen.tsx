@@ -9,6 +9,7 @@ import { LoadingPanel } from '../../components/Spinner';
 import { Tabs } from '../../components/Tabs';
 import { useAuth } from '../../context/AuthContext';
 import { ChannelsTab } from '../../features/community-settings/ChannelsTab';
+import { InvitesTab } from '../../features/community-settings/InvitesTab';
 import { MembersTab } from '../../features/community-settings/MembersTab';
 import { OverviewTab } from '../../features/community-settings/OverviewTab';
 import { RolesTab } from '../../features/community-settings/RolesTab';
@@ -25,7 +26,7 @@ import { useThemedStyles, useColors } from '../../theme/ThemeContext';
  * Server settings.
  *
  * The web app opens this as a dialog on a desktop and a screen on a phone; here
- * it is only ever a screen. The four panels and the permission gate are the
+ * it is only ever a screen. The panels and the permission gate are the
  * shared `community-settings` feature, so the two platforms cannot drift on who
  * is allowed to change what.
  */
@@ -110,6 +111,7 @@ export function CommunitySettingsScreen({ route, navigation }: any) {
         {tab === 'roles' && <RolesTab community={vm.community} abilities={abilities} />}
         {tab === 'members' && <MembersTab community={vm.community} abilities={abilities} />}
         {tab === 'channels' && <ChannelsTab community={vm.community} abilities={abilities} />}
+        {tab === 'invites' && <InvitesTab community={vm.community} abilities={abilities} />}
       </View>
     </SafeAreaView>
   );

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cosmetics, economy, store } from '../api/endpoints'
+import { economy, inventory, store } from '../api/endpoints'
 import type { EquipInput } from '../api/types'
 import { queryKeys } from './keys'
 
@@ -34,7 +34,7 @@ export function useStoreItemsQuery(token: string | null) {
 export function useInventoryQuery(token: string | null) {
   return useQuery({
     queryKey: queryKeys.store.inventory(),
-    queryFn: () => store.inventory(token),
+    queryFn: () => inventory.mine(token),
     enabled: !!token,
     staleTime: 30_000,
   })
@@ -53,8 +53,8 @@ export function usePurchaseMutation(token: string | null) {
 
 export function useEquippedQuery(token: string | null) {
   return useQuery({
-    queryKey: queryKeys.store.all.concat(['equipped']),
-    queryFn: () => cosmetics.equipped(token),
+    queryKey: queryKeys.store.equipped(),
+    queryFn: () => inventory.equipped(token),
     enabled: !!token,
     staleTime: 30_000,
   })
@@ -63,9 +63,11 @@ export function useEquippedQuery(token: string | null) {
 export function useEquipMutation(token: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: EquipInput) => cosmetics.equip(token, input),
+    mutationFn: (input: EquipInput) => inventory.equip(token, input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.store.all.concat(['equipped']) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.store.equipped() })
+      // Wearing something is also how the catalog knows to mark it as worn.
+      queryClient.invalidateQueries({ queryKey: queryKeys.store.items() })
     },
   })
 }

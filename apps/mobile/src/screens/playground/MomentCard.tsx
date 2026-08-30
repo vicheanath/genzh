@@ -8,7 +8,7 @@ import { hueFor, type FeedRoom } from '@genzh/shared';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { roomTypeIcon, roomTypeLabel } from '../../lib/roomTypes';
-import { Radius, Spacing, type Palette } from '../../theme/tokens';
+import { Feed, Radius, Spacing, type Palette } from '../../theme/tokens';
 import { useThemedStyles } from '../../theme/ThemeContext';
 
 /** How many faces fit on a card before the rest become a "+n". */
@@ -113,7 +113,7 @@ export function MomentCard({
           <LinearGradient id={gradientId} x1="0" y1="0" x2="0.4" y2="1">
             <Stop offset="0" stopColor={`hsl(${hue}, 62%, 26%)`} />
             <Stop offset="0.55" stopColor={`hsl(${(hue + 28) % 360}, 55%, 15%)`} />
-            <Stop offset="1" stopColor="#0d0d0b" />
+            <Stop offset="1" stopColor={Feed.ground} />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${gradientId})`} />
@@ -132,13 +132,13 @@ export function MomentCard({
           <View style={styles.chips}>
             {live > 0 && (
               <View style={[styles.chip, styles.liveChip]}>
-                <Radio size={12} color="#0f1202" />
+                <Radio size={12} color={Feed.liveInk} />
                 <Text style={styles.liveChipText}>{live} live</Text>
               </View>
             )}
             {countdown && (
               <View style={styles.chip}>
-                <Clock size={12} color="rgba(255,255,255,0.9)" />
+                <Clock size={12} color={Feed.inkMuted} />
                 <Text style={styles.chipText}>{countdown}</Text>
               </View>
             )}
@@ -151,7 +151,7 @@ export function MomentCard({
           style={styles.middle}
         >
           <View style={styles.typeRow}>
-            <Glyph size={16} color="rgba(255,255,255,0.92)" />
+            <Glyph size={16} color={Feed.inkStrong} />
             <Text style={styles.typeText}>{roomTypeLabel(room.room_type)}</Text>
             {room.is_anonymous && <Text style={styles.typeText}>· anonymous</Text>}
           </View>
@@ -198,7 +198,7 @@ export function MomentCard({
                       url={person.avatar_url}
                       accent={person.accent_color}
                       size={30}
-                      ringColor="#0d0d0b"
+                      ringColor={Feed.ground}
                     />
                   </View>
                 ))}
@@ -209,8 +209,19 @@ export function MomentCard({
             </View>
           ) : (
             <View style={styles.faces}>
-              <Users size={15} color="rgba(255,255,255,0.72)" />
-              <Text style={styles.facesText}>Empty — be the first one in</Text>
+              <Users size={15} color={Feed.inkSubtle} />
+              {/* No faces does not mean nobody is in there.
+                  An anonymous room deliberately sends none — hiding who is
+                  inside is the whole promise — so a busy one used to read
+                  "3 live" next to "Empty — be the first one in", which is
+                  both wrong and exactly the wrong thing to say about the
+                  rooms most likely to be full. The head count is the fact;
+                  the faces are only how it is usually illustrated. */}
+              <Text style={styles.facesText}>
+                {live > 0
+                  ? `${live} inside, anonymously`
+                  : 'Empty — be the first one in'}
+              </Text>
             </View>
           )}
 
@@ -224,7 +235,7 @@ export function MomentCard({
                 onPress={onNext}
                 style={styles.nextHint}
               >
-                <ChevronUp size={14} color="rgba(255,255,255,0.66)" />
+                <ChevronUp size={14} color={Feed.inkDim} />
                 <Text style={styles.nextHintText}>Swipe up for the next moment</Text>
               </Pressable>
             </Animated.View>
@@ -268,22 +279,22 @@ const makeStyles = (_c: Palette) =>
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: Radius.full,
-      backgroundColor: 'rgba(12, 12, 10, 0.5)',
+      backgroundColor: Feed.scrim,
       borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.18)',
+      borderColor: Feed.scrimBorder,
     },
     chipText: {
-      color: 'rgba(255,255,255,0.9)',
+      color: Feed.inkMuted,
       fontSize: 12,
       fontWeight: '700',
     },
     // The one thing on the card allowed to shout: whether anybody is in there.
     liveChip: {
-      backgroundColor: '#bae310',
-      borderColor: '#bae310',
+      backgroundColor: Feed.live,
+      borderColor: Feed.live,
     },
     liveChipText: {
-      color: '#0f1202',
+      color: Feed.liveInk,
       fontSize: 12,
       fontWeight: '800',
     },
@@ -297,21 +308,21 @@ const makeStyles = (_c: Palette) =>
       gap: 6,
     },
     typeText: {
-      color: 'rgba(255,255,255,0.86)',
+      color: Feed.inkMuted,
       fontSize: 13,
       fontWeight: '700',
       letterSpacing: 0.3,
       textTransform: 'lowercase',
     },
     name: {
-      color: '#fff',
+      color: Feed.ink,
       fontSize: 38,
       lineHeight: 42,
       fontWeight: '800',
       letterSpacing: -0.8,
     },
     topic: {
-      color: 'rgba(255,255,255,0.78)',
+      color: Feed.inkSubtle,
       fontSize: 16,
       lineHeight: 22,
     },
@@ -322,7 +333,7 @@ const makeStyles = (_c: Palette) =>
       marginTop: Spacing.xs,
     },
     hostText: {
-      color: 'rgba(255,255,255,0.74)',
+      color: Feed.inkSubtle,
       fontSize: 13,
       fontWeight: '600',
       flexShrink: 1,
@@ -346,7 +357,7 @@ const makeStyles = (_c: Palette) =>
       marginLeft: -10,
     },
     facesText: {
-      color: 'rgba(255,255,255,0.74)',
+      color: Feed.inkSubtle,
       fontSize: 13,
       fontWeight: '600',
       flexShrink: 1,
@@ -359,7 +370,7 @@ const makeStyles = (_c: Palette) =>
       paddingTop: Spacing.xs,
     },
     nextHintText: {
-      color: 'rgba(255,255,255,0.66)',
+      color: Feed.inkDim,
       fontSize: 12,
       fontWeight: '600',
     },

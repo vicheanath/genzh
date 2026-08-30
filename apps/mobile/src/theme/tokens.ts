@@ -340,3 +340,40 @@ export const Stage = {
   auroraAccent: 'rgba(186, 227, 16, 0.13)',
   auroraLive: 'rgba(0, 210, 229, 0.14)',
 } as const;
+
+/**
+ * The feed — the full-screen playground card.
+ *
+ * The second surface in the app that does not use the page palette, and a
+ * sibling of `Stage` above rather than a copy of it. Both are grounds the theme
+ * does not reach: a call keeps its own dark room, and a moment card paints a
+ * gradient generated from the room's id. Text sits on that gradient, so it is
+ * light in both themes and nothing here has a light variant.
+ *
+ * They are separate sets because they sit on different grounds. `Stage` is ink
+ * on a flat near-black; this is ink on a *coloured* one, which is why the
+ * scrims below are darker than the stage's washes — a translucent white chip
+ * that reads fine on charcoal disappears over a saturated blue.
+ *
+ * The same rule as `Stage` applies, and this group exists because it was being
+ * broken: the card inlined nine different whites and its own copy of the lime.
+ * A colour the card needs goes here, not in a style sheet.
+ */
+export const Feed = {
+  /** The bottom stop of every card gradient, and the ring behind a face. */
+  ground: '#0d0d0b',
+
+  ink: '#ffffff',
+  inkStrong: 'rgba(255, 255, 255, 0.92)',
+  inkMuted: 'rgba(255, 255, 255, 0.86)',
+  inkSubtle: 'rgba(255, 255, 255, 0.78)',
+  inkDim: 'rgba(255, 255, 255, 0.66)',
+
+  /** A chip over the gradient: dark enough to read on any hue behind it. */
+  scrim: 'rgba(12, 12, 10, 0.5)',
+  scrimBorder: 'rgba(255, 255, 255, 0.18)',
+
+  /** The one thing on a card allowed to shout — that people are in there. */
+  live: DEFAULT_ACCENT,
+  liveInk: '#0f1202',
+} as const;

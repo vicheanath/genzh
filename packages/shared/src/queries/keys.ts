@@ -64,10 +64,39 @@ export const queryKeys = {
     all: ['economy'] as const,
     balance: () => [...queryKeys.economy.all, 'balance'] as const,
   },
+  /**
+   * Ranked suggestions, keyed by surface rather than by the resource they
+   * return.
+   *
+   * A recommended room is not the same cache entry as the same room in
+   * discovery: the ranking is viewer-scoped and carries `reasons` the plain
+   * room has no field for, so invalidating rooms must not silently drop it.
+   */
+  recommendations: {
+    all: ['recommendations'] as const,
+    rooms: (category?: string) =>
+      [...queryKeys.recommendations.all, 'rooms', category ?? 'all'] as const,
+    people: () => [...queryKeys.recommendations.all, 'people'] as const,
+    communities: () => [...queryKeys.recommendations.all, 'communities'] as const,
+  },
+  /** Platform-wide announcements every signed-in client polls for. */
+  broadcasts: {
+    all: ['broadcasts'] as const,
+    active: () => [...queryKeys.broadcasts.all, 'active'] as const,
+  },
+
   store: {
     all: ['store'] as const,
     items: () => [...queryKeys.store.all, 'items'] as const,
     inventory: () => [...queryKeys.store.all, 'inventory'] as const,
+    /**
+     * What the account is *wearing*, which is not a subset of what it owns.
+     *
+     * Equipping changes this without changing the inventory, and buying
+     * changes the inventory without changing this, so the two invalidate
+     * independently.
+     */
+    equipped: () => [...queryKeys.store.all, 'equipped'] as const,
   },
   /**
    * The composite views.

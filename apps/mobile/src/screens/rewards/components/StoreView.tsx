@@ -1,154 +1,182 @@
-import React, { useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { Zap } from 'lucide-react-native';
-import { useBalanceQuery, useStoreItemsQuery, useInventoryQuery, usePurchaseMutation } from '@genzh/shared';
+import React, { useMemo, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Check, Sparkles, Zap } from 'lucide-react-native';
+import {
+  useBalanceQuery,
+  usePurchaseMutation,
+  useStoreItemsQuery,
+  type ItemType,
+  type StoreListing,
+} from '@genzh/shared';
 
-import { ToggleGroup } from '../../../components/ToggleGroup';
+import { Badge } from '../../../components/Badge';
+import { Button } from '../../../components/Button';
+import { EmptyState } from '../../../components/EmptyState';
+import { SkeletonRows } from '../../../components/Skeleton';
+import { Tabs } from '../../../components/Tabs';
 import { useToast } from '../../../components/Toast';
+import { useConfirm } from '../../../components/useConfirm';
 import { useAuth } from '../../../context/AuthContext';
+import { ItemPreview } from '../../../features/rewards/ItemPreview';
+import { SLOTS, rarityTone, slotLabel } from '../../../features/rewards/cosmetics';
 import { Radius, Spacing, type Palette } from '../../../theme/tokens';
 import { useThemedStyles, useColors } from '../../../theme/ThemeContext';
 
-const COSMETIC_TYPES = [
-  { value: null, label: 'All' },
-  { value: 'frame', label: 'Frame' },
-  { value: 'badge', label: 'Badge' },
-  { value: 'banner', label: 'Banner' },
-  { value: 'name_color', label: 'Name Color' },
-  { value: 'name_font', label: 'Name Font' },
-  { value: 'title', label: 'Title' },
-  { value: 'avatar_effect', label: 'Avatar Effect' },
-  { value: 'chat_bubble', label: 'Chat Bubble' },
+type Filter = ItemType | 'all';
+
+const FILTERS: ReadonlyArray<{ value: Filter; label: string }> = [
+  { value: 'all', label: 'All' },
+  ...SLOTS.map((slot) => ({ value: slot.id as Filter, label: slot.short })),
 ];
 
+/**
+ * The catalog.
+ *
+ * Every tile answers the same three questions in the same order — what is it,
+ * what does it cost, can you have it — and the third is the one the server has
+ * already decided: a `StoreListing` carries `owned`, `equipped` and `in_stock`
+ * alongside the item. Cross-referencing the inventory to work that out (which
+ * is what this screen used to do, against a field that did not exist) is both
+ * slower and capable of disagreeing with the server.
+ */
 export function StoreView() {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
   const { token } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
 
-  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const balanceQuery = useBalanceQuery(token);
   const storeQuery = useStoreItemsQuery(token);
-  const inventoryQuery = useInventoryQuery(token);
-  const purchaseMutation = usePurchaseMutation(token);
+  const purchase = usePurchaseMutation(token);
 
-  const balance = balanceQuery.data;
-  const allItems = storeQuery.data || [];
-  const ownedIds = new Set((inventoryQuery.data || []).map((item) => item.id));
+  const balance = balanceQuery.data?.balance ?? 0;
 
-  const filteredItems = selectedType
-    ? allItems.filter((item) => item.cosmetic_type === selectedType)
-    : allItems;
+  /*
+   * Filtered here rather than refetched per tab.
+   *
+   * The endpoint takes an `item_type`, but the catalog is small and staff-sized
+   * — asking the server again for a subset it already sent means a spinner on
+   * every chip press, for a filter that should feel like nothing at all.
+   */
+  const items = useMemo(() => {
+    const all = storeQuery.data ?? [];
+    return filter === 'all' ? all : all.filter((item) => item.item_type === filter);
+  }, [storeQuery.data, filter]);
 
-  async function handlePurchase(itemId: string, price: number) {
-    if (ownedIds.has(itemId)) {
-      toast.info('You already own this item');
+  async function buy(item: StoreListing) {
+    if (item.owned) return;
+
+    if (balance < item.price_points) {
+      toast.error(
+        'Not enough points',
+        `${item.name} costs ${item.price_points}; you have ${balance}.`,
+      );
       return;
     }
-    if (!balance || balance.balance < price) {
-      toast.error('Not enough points');
-      return;
-    }
+
+    // Points are spent for good, and a mis-tap on a grid of tiles is easy —
+    // the web asks too.
+    const ok = await confirm({
+      title: `Buy ${item.name}?`,
+      description: `This costs ${item.price_points} points. You will have ${balance - item.price_points} left.`,
+      confirmLabel: 'Buy',
+    });
+    if (!ok) return;
 
     try {
-      await purchaseMutation.mutateAsync(itemId);
-      toast.success('Item purchased!');
-      await inventoryQuery.refetch();
-      await balanceQuery.refetch();
-    } catch (err) {
-      toast.error('Could not purchase item');
+      await purchase.mutateAsync(item.id);
+      toast.success(`${item.name} is yours`, 'Wear it from the Studio tab.');
+    } catch {
+      toast.error('Could not complete the purchase');
     }
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.filtersContainer}>
-        <ToggleGroup
-          mode="single"
-          value={[selectedType ?? 'all']}
-          onValueChange={(next) => {
-            const val = next[0];
-            setSelectedType(val === 'all' ? null : (val as string));
-          }}
-          items={COSMETIC_TYPES.map((t) => ({
-            value: t.value ?? 'all',
-            label: t.label,
-          }))}
-        />
+      <View style={styles.filters}>
+        <Tabs value={filter} onValueChange={setFilter} scrollable items={FILTERS} />
       </View>
 
-      <FlatList
-        data={filteredItems}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.grid}
-        refreshControl={
-          <RefreshControl
-            refreshing={storeQuery.isLoading}
-            onRefresh={() => void storeQuery.refetch()}
-            tintColor={c.accent}
-          />
-        }
-        renderItem={({ item }) => {
-          const owned = ownedIds.has(item.id);
-          const canAfford = balance && balance.balance >= item.price;
+      {storeQuery.isLoading ? (
+        <View style={styles.loading}>
+          <SkeletonRows rows={4} />
+        </View>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={storeQuery.isFetching && !storeQuery.isLoading}
+              onRefresh={() => void storeQuery.refetch()}
+              tintColor={c.accent}
+            />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon={<Sparkles size={26} color={c.textSubtle} />}
+              title={filter === 'all' ? 'The store is empty' : `No ${slotLabel(filter as ItemType).toLowerCase()} yet`}
+              description={
+                filter === 'all'
+                  ? 'There is no seeded catalog — items appear here once staff add them in the console.'
+                  : 'Try another slot, or check back later.'
+              }
+            />
+          }
+          renderItem={({ item }) => {
+            const rarity = rarityTone(item.rarity, c);
+            const affordable = balance >= item.price_points;
 
-          return (
-            <View style={styles.itemWrapper}>
-              <View
-                style={[
-                  styles.itemCard,
-                  owned && styles.itemOwned,
-                ]}
-              >
-                <View style={styles.itemPreview}>
-                  <Text style={styles.icon}>✨</Text>
-                </View>
+            return (
+              <View style={styles.cell}>
+                <View style={[styles.card, item.owned && { borderColor: c.accent }]}>
+                  <ItemPreview item={item} size={104} />
 
-                <Text style={styles.itemName} numberOfLines={2}>
-                  {item.name}
-                </Text>
-
-                <Text style={styles.itemType}>
-                  {item.cosmetic_type}
-                </Text>
-
-                <View style={styles.itemFooter}>
-                  <View style={styles.priceTag}>
-                    <Zap size={12} color={c.live} />
-                    <Text style={styles.price}>{item.price}</Text>
+                  <View style={styles.meta}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={[styles.rarity, { color: rarity.ink }]}>
+                      {item.rarity} · {slotLabel(item.item_type)}
+                    </Text>
                   </View>
 
-                  {!owned && (
-                    <Pressable
-                      onPress={() => handlePurchase(item.id, item.price)}
-                      disabled={!canAfford || purchaseMutation.isPending}
-                      style={({ pressed }) => [
-                        styles.buyButton,
-                        !canAfford && styles.disabled,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={styles.buyText}>
-                        {purchaseMutation.isPending ? '...' : 'Buy'}
-                      </Text>
-                    </Pressable>
-                  )}
-
-                  {owned && (
-                    <View style={styles.ownedBadge}>
-                      <Text style={styles.ownedText}>Owned</Text>
+                  <View style={styles.footer}>
+                    <View style={styles.price}>
+                      <Zap size={12} color={c.accentText} />
+                      <Text style={styles.priceText}>{item.price_points}</Text>
                     </View>
-                  )}
+
+                    {item.owned ? (
+                      <View style={styles.owned}>
+                        <Check size={12} color={c.accentText} />
+                        <Text style={styles.ownedText}>Owned</Text>
+                      </View>
+                    ) : !item.in_stock ? (
+                      <Badge text="Sold out" tone="danger" />
+                    ) : (
+                      <Button
+                        title="Buy"
+                        size="sm"
+                        variant={affordable ? 'primary' : 'subtle'}
+                        disabled={!affordable}
+                        loading={purchase.isPending && purchase.variables === item.id}
+                        onPress={() => void buy(item)}
+                      />
+                    )}
+                  </View>
                 </View>
               </View>
-            </View>
-          );
-        }}
-        contentContainerStyle={styles.list}
-      />
+            );
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -159,100 +187,80 @@ const makeStyles = (c: Palette) =>
       flex: 1,
       backgroundColor: c.bg,
     },
-    filtersContainer: {
+    filters: {
       paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.sm,
+      paddingBottom: Spacing.sm,
+    },
+    loading: {
+      padding: Spacing.lg,
     },
     list: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.md,
-    },
-    grid: {
+      padding: Spacing.md,
+      paddingBottom: Spacing.xxl * 2,
       gap: Spacing.md,
-      marginBottom: Spacing.md,
     },
-    itemWrapper: {
-      flex: 0.5,
+    row: {
+      gap: Spacing.md,
     },
-    itemCard: {
-      borderRadius: Radius.lg,
+    cell: {
+      flex: 1 / 2,
+    },
+    card: {
+      flex: 1,
+      borderRadius: Radius.xl,
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
       padding: Spacing.md,
-      justifyContent: 'space-between',
+      gap: Spacing.sm,
     },
-    itemOwned: {
-      borderColor: c.accent,
-      backgroundColor: c.accentSubtle,
+    meta: {
+      gap: 1,
     },
-    itemPreview: {
-      height: 100,
-      borderRadius: Radius.md,
-      backgroundColor: c.bg,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: Spacing.md,
-    },
-    icon: {
-      fontSize: 40,
-    },
-    itemName: {
+    name: {
       color: c.text,
       fontSize: 13,
-      fontWeight: '600',
-      marginBottom: Spacing.xs,
+      fontWeight: '800',
+      letterSpacing: -0.1,
     },
-    itemType: {
-      color: c.textMuted,
+    rarity: {
       fontSize: 11,
-      marginBottom: Spacing.md,
+      fontWeight: '700',
+      textTransform: 'capitalize',
     },
-    itemFooter: {
+    footer: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      gap: Spacing.sm,
+      marginTop: 'auto',
     },
-    priceTag: {
+    price: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: 3,
       paddingHorizontal: Spacing.sm,
-      paddingVertical: Spacing.xs,
+      paddingVertical: 4,
       borderRadius: Radius.full,
       backgroundColor: c.accentSubtle,
     },
-    price: {
+    priceText: {
       color: c.accentText,
       fontSize: 12,
-      fontWeight: '600',
+      fontWeight: '800',
     },
-    buyButton: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.sm,
-      borderRadius: Radius.md,
-      backgroundColor: c.accent,
-    },
-    disabled: {
-      opacity: 0.5,
-    },
-    pressed: {
-      opacity: 0.8,
-    },
-    buyText: {
-      color: c.accentText,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    ownedBadge: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.sm,
-      borderRadius: Radius.md,
+    owned: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 4,
+      borderRadius: Radius.full,
       backgroundColor: c.accentSubtle,
     },
     ownedText: {
       color: c.accentText,
-      fontSize: 12,
-      fontWeight: '600',
+      fontSize: 11,
+      fontWeight: '800',
     },
   });

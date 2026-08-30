@@ -159,3 +159,46 @@ export function resolveMediaWsUrl(mediaUrl: string): string {
     return mediaUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
   }
 }
+
+/**
+ * The deployed web app, which is where an invite link has to point.
+ *
+ * A link is shared with people who may not have the app, so it cannot be a
+ * `genzh://` URL: it has to open something in a browser for them and the app
+ * for everyone else. That is the web origin, and this phone only ever learns
+ * an *API* origin — so the two are related here rather than guessed at each
+ * call site.
+ *
+ * In production they are the same host: the Rust API and the web bundle are
+ * served from one origin. In development they are not — the API is on 8080 and
+ * Vite is on 5173 — so the dev port is translated rather than passed through,
+ * which is the only case where the two genuinely differ.
+ *
+ * `EXPO_PUBLIC_WEB_URL` overrides all of it for a deployment that splits them.
+ */
+const CONFIGURED_WEB_URL = process.env.EXPO_PUBLIC_WEB_URL?.trim().replace(/\/$/, '') || null;
+
+/** The port `apps/web` runs on under `vite dev` — see the repo's port table. */
+const WEB_DEV_PORT = 5173;
+
+export function getWebUrl(): string {
+  if (CONFIGURED_WEB_URL) return CONFIGURED_WEB_URL;
+
+  try {
+    const api = new URL(currentBaseUrl);
+    if (api.port === String(API_PORT)) {
+      api.port = String(WEB_DEV_PORT);
+      // `URL.toString()` on an origin-only URL leaves a trailing slash, which
+      // would double up against the path every caller appends.
+      return api.toString().replace(/\/$/, '');
+    }
+    return `${api.protocol}//${api.host}`;
+  } catch {
+    return PRODUCTION_API_URL;
+  }
+}
+
+/** The shareable form of an invite code: a real link, not a bare code. */
+export function inviteUrl(code: string): string {
+  return `${getWebUrl()}/invite/${code}`;
+}

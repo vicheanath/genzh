@@ -2,6 +2,7 @@
   "expo": {
     "name": "GenZH",
     "slug": "mobile",
+    "scheme": "genzh",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -35,7 +36,10 @@
           "voip"
         ]
       },
-      "bitcode": false
+      "bitcode": false,
+      "associatedDomains": [
+        "applinks:genzh.pdfpaperkit.com"
+      ]
     },
     "android": {
       "package": "com.genzh.mobile",
@@ -59,7 +63,29 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "genzh.pdfpaperkit.com",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "genzh.pdfpaperkit.com",
+              "pathPrefix": "/invites"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

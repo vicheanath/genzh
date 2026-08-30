@@ -1,349 +1,298 @@
-import React, { useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Palette as PaletteIcon, Plus, X } from 'lucide-react-native';
-import { useInventoryQuery, useEquippedQuery, useEquipMutation } from '@genzh/shared';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Check, ShoppingBag, X } from 'lucide-react-native';
+import {
+  useEquipMutation,
+  useEquippedQuery,
+  useInventoryQuery,
+  type ItemType,
+} from '@genzh/shared';
 
+import { Avatar } from '../../../components/Avatar';
+import { Button } from '../../../components/Button';
+import { EmptyState } from '../../../components/EmptyState';
+import { SkeletonRows } from '../../../components/Skeleton';
 import { useToast } from '../../../components/Toast';
 import { useAuth } from '../../../context/AuthContext';
+import { ItemPreview } from '../../../features/rewards/ItemPreview';
+import { SLOTS, equipPayload, equippedIn, slotInfo } from '../../../features/rewards/cosmetics';
 import { Radius, Spacing, type Palette } from '../../../theme/tokens';
 import { useThemedStyles, useColors } from '../../../theme/ThemeContext';
 
-const COSMETIC_SLOTS = [
-  { id: 'frame', label: 'Frame', icon: '🖼️' },
-  { id: 'badge', label: 'Badge', icon: '🎖️' },
-  { id: 'banner', label: 'Banner', icon: '📜' },
-  { id: 'name_color', label: 'Name Color', icon: '🎨' },
-  { id: 'name_font', label: 'Name Font', icon: '✏️' },
-  { id: 'title', label: 'Title', icon: '👑' },
-  { id: 'avatar_effect', label: 'Avatar Effect', icon: '✨' },
-  { id: 'chat_bubble', label: 'Chat Bubble', icon: '💬' },
-];
-
+/**
+ * The dressing room: one slot at a time, everything you own for it.
+ *
+ * The equip endpoint takes one key per slot rather than a `{ slot, item }`
+ * pair, which is the detail this screen used to get wrong — it sent a shape the
+ * server has never accepted, so nothing here has ever equipped anything. The
+ * mapping now lives once, in `features/rewards/cosmetics`, and both the read
+ * and the write go through it.
+ *
+ * Sending exactly one key matters beyond correctness: an omitted key leaves its
+ * slot alone, so putting on a frame cannot quietly take off a badge.
+ */
 export function StudioView() {
   const styles = useThemedStyles(makeStyles);
   const c = useColors();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const toast = useToast();
 
-  const [selectedSlot, setSelectedSlot] = useState<string>('frame');
-  const [showPicker, setShowPicker] = useState(false);
+  const [slot, setSlot] = useState<ItemType>('frame');
 
   const inventoryQuery = useInventoryQuery(token);
   const equippedQuery = useEquippedQuery(token);
-  const equipMutation = useEquipMutation(token);
+  const equip = useEquipMutation(token);
 
-  const inventory = inventoryQuery.data || [];
-  const equipped = equippedQuery.data || [];
-  const equippedMap = new Map(equipped.map((e) => [e.slot, e.item_id]));
+  const equipped = equippedQuery.data;
+  const wornHere = equippedIn(equipped, slot);
+  const current = slotInfo(slot);
 
-  const slotItems = inventory.filter((item) => item.cosmetic_type === selectedSlot);
-  const equippedId = equippedMap.get(selectedSlot);
-  const equippedItem = inventory.find((item) => item.id === equippedId);
+  const owned = useMemo(
+    () => (inventoryQuery.data ?? []).filter((entry) => entry.item.item_type === slot),
+    [inventoryQuery.data, slot],
+  );
 
-  async function handleEquip(itemId: string, slot: string) {
+  async function wear(itemId: string | null, name: string) {
     try {
-      await equipMutation.mutateAsync({
-        item_id: itemId,
-        slot: slot as any,
-      });
-      await equippedQuery.refetch();
-      toast.success('Equipped!');
-      setShowPicker(false);
-    } catch (err) {
-      toast.error('Could not equip item');
+      await equip.mutateAsync(equipPayload(slot, itemId));
+      toast.success(itemId ? `Wearing ${name}` : `${current?.label ?? 'Slot'} cleared`);
+    } catch {
+      toast.error(itemId ? 'Could not equip that' : 'Could not clear the slot');
     }
   }
 
-  async function handleUnequip(slot: string) {
-    try {
-      await equipMutation.mutateAsync({
-        item_id: null,
-        slot: slot as any,
-      });
-      await equippedQuery.refetch();
-      toast.success('Unequipped');
-    } catch (err) {
-      toast.error('Could not unequip item');
-    }
+  if (inventoryQuery.isLoading || equippedQuery.isLoading) {
+    return (
+      <View style={styles.loading}>
+        <SkeletonRows rows={4} />
+      </View>
+    );
   }
-
-  const currentSlot = COSMETIC_SLOTS.find((s) => s.id === selectedSlot);
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Avatar Preview */}
-        <View style={styles.previewSection}>
-          <View style={styles.avatarPreview}>
-            <Text style={styles.avatarText}>👤</Text>
-          </View>
-          <Text style={styles.previewHint}>Your avatar preview</Text>
-        </View>
+    <ScrollView contentContainerStyle={styles.content}>
+      {/* What the rest of the app sees. A real avatar rather than an emoji
+          placeholder, because the whole point of the screen is how this looks
+          to somebody else. */}
+      <View style={styles.preview}>
+        <Avatar
+          name={user?.profile.display_name || user?.handle || 'You'}
+          url={user?.profile.avatar_url}
+          accent={user?.profile.accent_color}
+          size={104}
+        />
+        <Text style={styles.previewName}>{user?.profile.display_name || user?.handle}</Text>
+        <Text style={styles.previewHint}>
+          {equipped
+            ? `${SLOTS.filter((s) => equippedIn(equipped, s.id)).length} of ${SLOTS.length} slots filled`
+            : 'Nothing equipped yet'}
+        </Text>
+      </View>
 
-        {/* Slots Grid */}
-        <Text style={styles.sectionTitle}>Cosmetic Slots</Text>
-        <View style={styles.slotsGrid}>
-          {COSMETIC_SLOTS.map((slot) => {
-            const equipped = equippedMap.get(slot.id);
+      {/* Every slot at once, so what is empty is as visible as what is not. */}
+      <View style={styles.slots}>
+        {SLOTS.map((info) => {
+          const worn = equippedIn(equipped, info.id);
+          const active = slot === info.id;
+          return (
+            <Pressable
+              key={info.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`${info.label}${worn ? `, wearing ${worn.name}` : ', empty'}`}
+              onPress={() => setSlot(info.id)}
+              style={({ pressed }) => [
+                styles.slot,
+                active && { borderColor: c.accent, backgroundColor: c.accentSubtle },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.slotGlyph}>{info.glyph}</Text>
+              <Text style={styles.slotLabel} numberOfLines={1}>
+                {info.short}
+              </Text>
+              {worn ? <View style={[styles.dot, { backgroundColor: c.accent }]} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.header}>
+        <Text style={styles.heading}>{current?.label}</Text>
+        {wornHere ? (
+          <Button
+            title="Take off"
+            size="sm"
+            variant="ghost"
+            icon={<X size={14} color={c.danger} />}
+            onPress={() => void wear(null, wornHere.name)}
+            loading={equip.isPending}
+          />
+        ) : null}
+      </View>
+
+      {owned.length === 0 ? (
+        <EmptyState
+          icon={<ShoppingBag size={24} color={c.textSubtle} />}
+          title={`No ${current?.label.toLowerCase()} owned`}
+          description="Buy one in the Store tab and it will show up here."
+        />
+      ) : (
+        <View style={styles.list}>
+          {owned.map((entry) => {
+            const isWorn = wornHere?.id === entry.item.id;
             return (
               <Pressable
-                key={slot.id}
-                onPress={() => setSelectedSlot(slot.id)}
+                key={entry.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isWorn }}
+                disabled={isWorn || equip.isPending}
+                onPress={() => void wear(entry.item.id, entry.item.name)}
                 style={({ pressed }) => [
-                  styles.slotButton,
-                  selectedSlot === slot.id && styles.slotActive,
+                  styles.row,
+                  isWorn && { borderColor: c.accent, backgroundColor: c.accentSubtle },
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.slotIcon}>{slot.icon}</Text>
-                <Text style={styles.slotLabel}>{slot.label}</Text>
-                {equipped && <View style={styles.equippedDot} />}
+                <ItemPreview item={entry.item} size={52} style={styles.rowArt} />
+
+                <View style={styles.rowText}>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {entry.item.name}
+                  </Text>
+                  <Text style={styles.rowRarity} numberOfLines={1}>
+                    {entry.item.rarity}
+                  </Text>
+                </View>
+
+                {isWorn ? (
+                  <Check size={18} color={c.accentText} />
+                ) : (
+                  <Text style={styles.wearHint}>Wear</Text>
+                )}
               </Pressable>
             );
           })}
         </View>
-
-        {/* Current Slot */}
-        {currentSlot && (
-          <>
-            <View style={styles.slotHeader}>
-              <Text style={styles.slotTitle}>{currentSlot.label}</Text>
-              {equippedItem && (
-                <Pressable
-                  onPress={() => void handleUnequip(selectedSlot)}
-                  style={({ pressed }) => [styles.unequipButton, pressed && styles.pressed]}
-                >
-                  <X size={16} color={c.danger} />
-                  <Text style={styles.unequipText}>Unequip</Text>
-                </Pressable>
-              )}
-            </View>
-
-            {equippedItem && (
-              <View style={styles.equippedCard}>
-                <View style={styles.equippedPreview}>
-                  <Text style={styles.itemIcon}>✨</Text>
-                </View>
-                <View style={styles.equippedInfo}>
-                  <Text style={styles.equippedName}>{equippedItem.name}</Text>
-                  <Text style={styles.equippedType}>(Currently equipped)</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Available Items */}
-            <Text style={styles.availableTitle}>
-              {slotItems.length} available for this slot
-            </Text>
-            <FlatList
-              scrollEnabled={false}
-              data={slotItems.filter((item) => item.id !== equippedId)}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => void handleEquip(item.id, selectedSlot)}
-                  style={({ pressed }) => [styles.itemRow, pressed && styles.pressed]}
-                >
-                  <View style={styles.itemRowPreview}>
-                    <Text style={styles.itemIcon}>✨</Text>
-                  </View>
-                  <View style={styles.itemRowInfo}>
-                    <Text style={styles.itemRowName}>{item.name}</Text>
-                  </View>
-                  <View style={styles.equipArrow}>
-                    <Plus size={16} color={c.accent} />
-                  </View>
-                </Pressable>
-              )}
-              contentContainerStyle={styles.itemList}
-            />
-          </>
-        )}
-      </ScrollView>
-    </View>
+      )}
+    </ScrollView>
   );
 }
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: c.bg,
+    loading: {
+      padding: Spacing.lg,
     },
     content: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.md,
+      padding: Spacing.md,
+      paddingBottom: Spacing.xxl * 2,
+      gap: Spacing.lg,
     },
-    previewSection: {
+    preview: {
       alignItems: 'center',
-      marginBottom: Spacing.lg,
-    },
-    avatarPreview: {
-      width: 120,
-      height: 120,
-      borderRadius: Radius.full,
+      gap: Spacing.xs,
+      paddingVertical: Spacing.lg,
       backgroundColor: c.surface,
-      borderWidth: 2,
-      borderColor: c.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: Spacing.md,
+      borderRadius: Radius.xxl,
+      borderWidth: 1,
+      borderColor: c.border,
     },
-    avatarText: {
-      fontSize: 60,
-    },
-    previewHint: {
-      color: c.textMuted,
-      fontSize: 13,
-    },
-    sectionTitle: {
+    previewName: {
       color: c.text,
       fontSize: 16,
-      fontWeight: '700',
-      marginBottom: Spacing.md,
+      fontWeight: '800',
+      letterSpacing: -0.2,
+      marginTop: Spacing.sm,
     },
-    slotsGrid: {
+    previewHint: {
+      color: c.textSubtle,
+      fontSize: 12,
+    },
+    slots: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: Spacing.md,
-      marginBottom: Spacing.lg,
+      gap: Spacing.sm,
     },
-    slotButton: {
-      width: '30%',
+    slot: {
+      width: '23%',
+      flexGrow: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 2,
       paddingVertical: Spacing.md,
-      paddingHorizontal: Spacing.sm,
+      paddingHorizontal: Spacing.xs,
       borderRadius: Radius.lg,
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
-    slotActive: {
-      borderColor: c.accent,
-      backgroundColor: c.accentSubtle,
-    },
-    pressed: {
-      opacity: 0.7,
-    },
-    slotIcon: {
-      fontSize: 24,
-      marginBottom: Spacing.xs,
+    slotGlyph: {
+      fontSize: 20,
     },
     slotLabel: {
-      color: c.text,
-      fontSize: 11,
-      fontWeight: '600',
-      textAlign: 'center',
+      color: c.textMuted,
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.1,
     },
-    equippedDot: {
+    dot: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
       width: 6,
       height: 6,
       borderRadius: Radius.full,
-      backgroundColor: c.live,
-      position: 'absolute',
-      top: Spacing.xs,
-      right: Spacing.xs,
     },
-    slotHeader: {
+    header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: Spacing.md,
+      minHeight: 32,
     },
-    slotTitle: {
+    heading: {
       color: c.text,
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: '800',
+      letterSpacing: -0.2,
     },
-    unequipButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.xs,
-      paddingHorizontal: Spacing.sm,
-      paddingVertical: Spacing.xs,
-      borderRadius: Radius.md,
-      backgroundColor: c.dangerSubtle,
-    },
-    unequipText: {
-      color: c.danger,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    equippedCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.md,
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.md,
-      borderRadius: Radius.lg,
-      backgroundColor: c.accentSubtle,
-      borderWidth: 1,
-      borderColor: c.accent,
-      marginBottom: Spacing.lg,
-    },
-    equippedPreview: {
-      width: 60,
-      height: 60,
-      borderRadius: Radius.md,
-      backgroundColor: c.bg,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    equippedInfo: {
-      flex: 1,
-    },
-    equippedName: {
-      color: c.accentText,
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    equippedType: {
-      color: c.accentText,
-      fontSize: 12,
-      opacity: 0.7,
-      marginTop: 2,
-    },
-    availableTitle: {
-      color: c.text,
-      fontSize: 14,
-      fontWeight: '600',
-      marginBottom: Spacing.md,
-    },
-    itemList: {
+    list: {
       gap: Spacing.sm,
     },
-    itemRow: {
+    row: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: Spacing.md,
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.md,
+      padding: Spacing.md,
       borderRadius: Radius.lg,
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
     },
-    itemRowPreview: {
-      width: 50,
-      height: 50,
-      borderRadius: Radius.md,
-      backgroundColor: c.bg,
-      alignItems: 'center',
-      justifyContent: 'center',
+    rowArt: {
+      width: 52,
     },
-    itemIcon: {
-      fontSize: 28,
-    },
-    itemRowInfo: {
+    rowText: {
       flex: 1,
+      gap: 1,
     },
-    itemRowName: {
+    rowName: {
       color: c.text,
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight: '700',
     },
-    equipArrow: {
-      padding: Spacing.sm,
+    rowRarity: {
+      color: c.textSubtle,
+      fontSize: 11,
+      fontWeight: '700',
+      textTransform: 'capitalize',
+    },
+    wearHint: {
+      color: c.accentText,
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    pressed: {
+      opacity: 0.75,
     },
   });

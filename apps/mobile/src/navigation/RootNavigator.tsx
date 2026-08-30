@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking, View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -10,6 +10,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Bell, Compass, Gift, Home, MessageSquare, Settings, Users } from 'lucide-react-native';
 
+import { GlobalBroadcastBanner } from '../components/GlobalBroadcastBanner';
 import { LoadingPanel } from '../components/Spinner';
 import { useAppMode } from '../context/AppModeContext';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +27,7 @@ import { MemberListScreen } from '../screens/communities/MemberListScreen';
 import { ExperienceRoomScreen } from '../screens/experiences/ExperienceRoomScreen';
 import { FriendsScreen } from '../screens/friends/FriendsScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
+import { InviteScreen } from '../screens/invite/InviteScreen';
 import { PlaygroundFeedScreen } from '../screens/playground/PlaygroundFeedScreen';
 import { InfoScreen } from '../screens/info/InfoScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
@@ -34,6 +36,7 @@ import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { VoiceOverlay } from '../components/VoiceOverlay';
 import { useColors, useTheme } from '../theme/ThemeContext';
 
+import { buildLinking, inviteCodeFromUrl } from './linking';
 import { TabBar } from './TabBar';
 
 const Stack = createNativeStackNavigator();
@@ -171,6 +174,55 @@ function MainTabs() {
   return mode === 'playground' ? <PlaygroundTabs /> : <ServersTabs />;
 }
 
+/**
+ * Holds an invite link that arrived before there was anybody to accept it.
+ *
+ * React Navigation's linking resolves a URL against the navigator that is
+ * mounted *now*, and the signed-out stack has no `Invite` screen in it — so a
+ * link tapped by somebody who is not logged in resolves to nothing and is
+ * silently dropped. That is the single most common way an invite arrives:
+ * somebody is sent a link precisely because they are not in the community, and
+ * often not in the app.
+ *
+ * So the URL is caught here while signed out, kept, and replayed the moment a
+ * session exists. While signed *in* this hook does nothing at all — the
+ * navigator's own linking handles those, and handling them twice would push the
+ * screen on top of itself.
+ */
+function usePendingInvite(
+  status: 'loading' | 'authenticated' | 'unauthenticated',
+  navigate: (code: string) => void,
+) {
+  const [pending, setPending] = useState<string | null>(null);
+  const signedIn = status === 'authenticated';
+
+  // Read in the effect below rather than depended on, so that arriving at a
+  // session does not re-subscribe to `Linking` on every render.
+  const signedInRef = useRef(signedIn);
+  signedInRef.current = signedIn;
+
+  useEffect(() => {
+    function capture(url: string | null) {
+      if (!url || signedInRef.current) return;
+      const code = inviteCodeFromUrl(url);
+      if (code) setPending(code);
+    }
+
+    // A cold start from a link, and a link that arrives while the app is open.
+    void Linking.getInitialURL().then(capture);
+    const subscription = Linking.addEventListener('url', ({ url }) => capture(url));
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!signedIn || !pending) return;
+    // Cleared before navigating, not after: signing out and back in should not
+    // walk the reader through the same invite a second time.
+    setPending(null);
+    navigate(pending);
+  }, [signedIn, pending, navigate]);
+}
+
 export function RootNavigator() {
   const c = useColors();
   const { scheme } = useTheme();
@@ -198,6 +250,21 @@ export function RootNavigator() {
     setRouteName(navigationRef.getCurrentRoute()?.name);
   }, [navigationRef]);
 
+  /*
+   * An invite tapped while signed out, replayed once there is a session.
+   *
+   * `navigate` rather than `replace`: the reader is standing on whatever the
+   * app opened them onto after sign-in, and declining the invite should put
+   * them back there rather than nowhere.
+   */
+  const openInvite = useCallback(
+    (code: string) => {
+      if (navigationRef.isReady()) navigationRef.navigate('Invite', { code });
+    },
+    [navigationRef],
+  );
+  usePendingInvite(status, openInvite);
+
   if (status === 'loading' || !modeReady) return <LoadingPanel />;
 
   // The base has to switch too, not just the colours: react-navigation reads
@@ -220,6 +287,10 @@ export function RootNavigator() {
     <NavigationContainer
       ref={navigationRef}
       theme={navTheme}
+      linking={buildLinking()}
+      // A deep link is resolved before the first frame, so there is a beat with
+      // no UI at all. Without this the app shows a blank ground for it.
+      fallback={<LoadingPanel />}
       onReady={readRoute}
       onStateChange={readRoute}
     >
@@ -243,6 +314,9 @@ export function RootNavigator() {
               <Stack.Screen name="ExperienceRoom" component={ExperienceRoomScreen} />
               <Stack.Screen name="Explore" component={ExploreScreen} />
               <Stack.Screen name="Info" component={InfoScreen} />
+              {/* Usually arrived at from outside the app entirely — see
+                  `linking.ts` and `usePendingInvite` above. */}
+              <Stack.Screen name="Invite" component={InviteScreen} />
               <Stack.Screen
                 name="Call"
                 component={CallScreen}
@@ -262,6 +336,12 @@ export function RootNavigator() {
             <ProfileSheet />
           </>
         )}
+
+        {/* Outside the auth gate: an outage notice is most useful to somebody
+            who cannot sign in, which is exactly when they cannot see anything
+            mounted behind it. Suppressed on the call screen alone, which owns
+            its whole surface and is not a place to read an announcement. */}
+        {routeName !== 'Call' && <GlobalBroadcastBanner />}
       </View>
     </NavigationContainer>
   );
