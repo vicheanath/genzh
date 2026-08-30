@@ -47,7 +47,7 @@ interface Presentation {
   key: string
   name: string
   isSelf: boolean
-  /** Null while the flag has arrived but the SFU is still wiring up the track. */
+  /** Null while the flag has arrived but LiveKit is still wiring up the track. */
   stream: MediaStream | null
 }
 
@@ -120,7 +120,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
   }
 
   // Everyone presenting right now, this user included. More than one person can
-  // share at once — the SFU has no notion of "the" presenter — so the panel
+  // share at once — LiveKit has no notion of "the" presenter — so the panel
   // shows one and offers the rest as a switcher rather than picking silently.
   const presentations = useMemo<Presentation[]>(() => {
     const list: Presentation[] = []
@@ -679,8 +679,9 @@ function ScreenVideo({ stream }: { stream: MediaStream }) {
       ref={videoRef}
       autoPlay
       playsInline
-      // A shared screen carries no audio on this SFU, and an unmuted video
-      // element would block autoplay for no benefit.
+      // Screen share is published without audio (see startScreenShare in
+      // useVoiceRoom), so an unmuted video element would block autoplay for
+      // no benefit.
       muted
       className={styles.screenVideoElement}
     />

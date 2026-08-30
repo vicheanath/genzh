@@ -4,15 +4,17 @@
 # plane and the web client together, with prefixed output and a single
 # Ctrl-C that stops both.
 #
-# LiveKit is not something this Makefile runs — it lives in Docker, alongside
-# Postgres:
+# LiveKit is not something this Makefile runs — it lives in Docker:
 #
-#   make docker-infra   # start Postgres + LiveKit, once, in the background
+#   make docker-infra   # start LiveKit, once, in the background
 #   make dev            # run api + web natively, as often as you like
 #
-# Everything here talks to your local PostgreSQL and to that Docker LiveKit
-# via DATABASE_URL / LIVEKIT_URL in .env. Running the whole stack — api, web
-# and LiveKit all in Docker — is the separate `docker-up` target.
+# PostgreSQL is a local install, not Docker — `db`/`migrate`/`seed` all
+# expect `psql`/`createdb` on PATH and a server already listening wherever
+# DATABASE_URL in .env points. Everything here talks to it and to Docker
+# LiveKit via DATABASE_URL / LIVEKIT_URL. Running the whole stack — api, web,
+# LiveKit *and* Postgres, all in Docker — is the separate `docker-up` target;
+# do not run both workflows at once, they will fight over port 5432.
 
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -o pipefail -c
@@ -277,21 +279,27 @@ health: ## Curl the API's readiness endpoint
 
 # ── docker ──────────────────────────────────────────────────────────────────
 #
-# `docker-infra` is the one `make dev` expects: Postgres + LiveKit, in the
-# background, nothing built. `docker-up` is the other workflow entirely — the
-# whole stack (api, web, seed too) built and run in Docker, no local Rust or
-# Node toolchain required at all. Pick one; running both against the same
-# ports will just fight over them.
+# `docker-infra` is the one `make dev` expects: just LiveKit, in the
+# background, nothing built. PostgreSQL is your local install — `docker-infra`
+# deliberately does not touch it, and does not start the compose `postgres`
+# service, because a local Postgres and a Dockerized one both binding 5432 is
+# exactly the kind of silent conflict that looks like a wrong password
+# instead of a port fight.
+#
+# `docker-up` is the other workflow entirely — the whole stack (postgres, api,
+# web, seed too) built and run in Docker, no local Rust, Node or PostgreSQL
+# install required at all. Pick one; running both against the same ports will
+# fight over them.
 
 .PHONY: docker-infra
-docker-infra: ## Start Postgres + LiveKit in Docker — what `make dev` needs
-	docker compose up -d postgres livekit
-	@printf '\n$(GREEN)postgres$(RESET) :5432   $(GREEN)livekit$(RESET) :7880 (ws) :7881 (http)\n'
+docker-infra: ## Start LiveKit in Docker — what `make dev` needs (Postgres stays local)
+	docker compose up -d livekit
+	@printf '\n$(GREEN)livekit$(RESET) :7880 (ws) :7881 (http)\n'
 	@printf '$(DIM)now: make dev$(RESET)\n'
 
 .PHONY: docker-infra-down
-docker-infra-down: ## Stop Postgres + LiveKit
-	docker compose stop postgres livekit
+docker-infra-down: ## Stop LiveKit
+	docker compose stop livekit
 
 .PHONY: docker-up
 docker-up: ## Start the full stack in Docker (api, web, postgres, livekit)

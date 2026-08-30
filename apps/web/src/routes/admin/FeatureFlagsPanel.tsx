@@ -37,8 +37,8 @@ const FEATURE_FLAGS: FeatureFlagDef[] = [
   },
   {
     key: 'voice_calls_enabled',
-    title: 'Voice & Video Calls (SFU)',
-    description: 'Enable live WebRTC voice and video media sessions across all rooms.',
+    title: 'Voice & Video Calls',
+    description: 'Enable live voice and video media sessions, via LiveKit, across all rooms.',
     defaultValue: true,
   },
   {

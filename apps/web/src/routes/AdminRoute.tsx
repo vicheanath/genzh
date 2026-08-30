@@ -166,7 +166,7 @@ export function AdminRoute() {
               `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
             }
           >
-            <RadioIcon size={15} /> Live SFU
+            <RadioIcon size={15} /> Live Media
           </NavLink>
           <NavLink
             to="/admin/broadcasts"

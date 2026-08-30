@@ -16,7 +16,12 @@ import { formatFull } from '@/lib/time'
 import styles from './panels.module.css'
 
 /**
- * Real-time active SFU media rooms, voice calls, and telemetry.
+ * Real-time active voice/video rooms and participant telemetry.
+ *
+ * Reads and writes room state in the database only — it has no channel to
+ * LiveKit itself, so "terminate" below clears this app's record of who is in
+ * the room rather than reaching into the media server to drop anyone's
+ * connection.
  */
 export function LiveMediaPanel() {
   const isAdmin = useIsPlatformAdmin()
@@ -28,7 +33,7 @@ export function LiveMediaPanel() {
       <div className={styles.filterBar}>
         <div style={{ flex: 1 }}>
           <p className={styles.rowMeta} style={{ margin: 0 }}>
-            Live SFU Telemetry · Auto-refreshes every 5 seconds
+            Live Media Telemetry · Auto-refreshes every 5 seconds
           </p>
         </div>
         <Button
@@ -72,7 +77,7 @@ function LiveMediaCard({
     const ok = await confirm({
       title: `Terminate Live Session in "${session.room_name}"?`,
       description:
-        'This will forcefully disconnect all active WebRTC publishers and subscribers and reset the room state.',
+        "This ends the room and clears its participant list. Anyone still connected through LiveKit stays connected until their client reacts to the room ending — this does not reach into LiveKit to drop them directly.",
       confirmLabel: 'Force Terminate',
       tone: 'danger',
     })

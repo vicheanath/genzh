@@ -36,7 +36,12 @@ function formatDuration(seconds: number): string {
 }
 
 /**
- * System health, PostgreSQL pool metrics, SFU status, and process telemetry.
+ * System health, PostgreSQL pool metrics, voice/video room activity, and
+ * process telemetry.
+ *
+ * The voice/video numbers are database counts (rooms with `status = 'active'`
+ * and their `room_participants`), not telemetry from LiveKit itself — this
+ * process has no channel into LiveKit to ask it directly.
  */
 export function SystemHealthPanel() {
   const telemetry = useSystemTelemetry()
@@ -68,7 +73,7 @@ export function SystemHealthPanel() {
             )}
           </div>
           <p className={styles.rowMeta} style={{ margin: 0 }}>
-            Live status of PostgreSQL pool, WebRTC SFU media bridge, and API daemon (auto-polled 5s).
+            Live status of the PostgreSQL pool, voice/video room activity, and API daemon (auto-polled 5s).
           </p>
         </div>
 
@@ -131,11 +136,11 @@ export function SystemHealthPanel() {
 
             <div className={styles.statCard}>
               <div className={styles.cardHeader}>
-                <span className={styles.statLabel}>Live SFU Streams</span>
+                <span className={styles.statLabel}>Live Voice/Video Rooms</span>
                 <RadioIcon size={16} />
               </div>
               <span className={styles.statValue}>{mediaCount}</span>
-              <span className={styles.statDesc}>{totalPeers} WebRTC peer connections</span>
+              <span className={styles.statDesc}>{totalPeers} connected participants</span>
             </div>
           </section>
 
@@ -173,27 +178,27 @@ export function SystemHealthPanel() {
               </div>
             </article>
 
-            {/* Media & SFU Server Subsystem */}
+            {/* Voice & video activity, as recorded in the database */}
             <article className={styles.subsystemCard}>
               <div className={styles.cardHeader}>
-                <strong>Live SFU Voice & Video Bridge</strong>
+                <strong>Live Voice & Video Activity</strong>
                 <Badge tone={mediaCount > 0 ? 'success' : 'neutral'}>
-                  {mediaCount > 0 ? 'streaming' : 'idle'}
+                  {mediaCount > 0 ? 'active' : 'idle'}
                 </Badge>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                 <div className={styles.metricRow}>
-                  <span className={styles.metricLabel}>Active call channels</span>
+                  <span className={styles.metricLabel}>Active rooms</span>
                   <span className={styles.metricValue}>{mediaCount}</span>
                 </div>
                 <div className={styles.metricRow}>
-                  <span className={styles.metricLabel}>Connected voice peers</span>
+                  <span className={styles.metricLabel}>Connected participants</span>
                   <span className={styles.metricValue}>{totalPeers}</span>
                 </div>
                 <div className={styles.metricRow}>
-                  <span className={styles.metricLabel}>Protocol</span>
-                  <span className={styles.metricValue}>WebRTC / SFU</span>
+                  <span className={styles.metricLabel}>Media server</span>
+                  <span className={styles.metricValue}>LiveKit</span>
                 </div>
               </div>
             </article>
