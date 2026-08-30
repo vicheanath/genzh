@@ -381,7 +381,6 @@ export interface MediaJoinResponse {
   media_url: string
   token: string
   expires_at: Timestamp
-  ice_servers: Array<{ urls: string | string[]; username?: string; credential?: string }>
 }
 
 /**

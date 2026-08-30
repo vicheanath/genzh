@@ -33,9 +33,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # The seed binary signs its own JWTs with a fixed development secret
+      # and never touches LiveKit config — it only needs a database.
       DATABASE_URL: postgres://social:social@postgres:5432/social
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
       RUST_LOG: info
     profiles:
       - init
@@ -53,19 +53,14 @@ services:
       API_BIND: 0.0.0.0:8080
 
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
 
-      # How clients reach the media server. This is the address a *browser*
-      # dials, not a compose-internal hostname.
-      STUN_URL: ${STUN_URL:-stun:stun.l.google.com:19302}
-      TURN_URL: ${TURN_URL:-}
-      TURN_USERNAME: ${TURN_USERNAME:-}
-      TURN_PASSWORD: ${TURN_PASSWORD:-}
-
-      # LiveKit configuration
+      # LiveKit: this process signs access tokens with the same key/secret
+      # LiveKit verifies with. LIVEKIT_URL is the address a *browser* dials —
+      # a compose-internal hostname would not resolve outside the network, so
+      # this must be reachable from wherever the web client runs.
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
-      LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://127.0.0.1:7880}
 
       RUST_LOG: ${RUST_LOG:-info,api=debug}
     ports:
@@ -83,31 +78,36 @@ services:
     ports:
       - "8082:8082"
 
-  # LiveKit: WebRTC media server (handles peer connections, media routing, etc.)
-  # All voice/video connections go through LiveKit
-  # Note: UDP ports disabled on Windows Docker Desktop; WebSocket fallback used instead
+  # LiveKit: the media server. Every voice/video/screen-share connection goes
+  # through it; the API never touches RTP.
+  #
+  # No mounted config file — LIVEKIT_KEYS is LiveKit's documented env-var
+  # form of the `keys:` config block (`"<api-key>: <api-secret>"`), so the
+  # image needs nothing but environment.
+  #
+  # Note: UDP media ports are disabled below for Windows Docker Desktop,
+  # which refuses to bind a UDP range from inside this tool's sandbox.
+  # LiveKit falls back to TCP/WebSocket relay, which works everywhere but
+  # costs some latency under real load. On Linux or macOS, uncomment the UDP
+  # range for direct media.
   livekit:
     image: livekit/livekit-server:latest
-    command: --config /etc/livekit.conf.yaml
+    command: --bind 0.0.0.0
     environment:
-      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
-      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
       LIVEKIT_LOG_LEVEL: debug
     ports:
-      # WebRTC over WebSocket (clients connect here)
+      # WebRTC signalling, over WebSocket (clients connect here)
       - "7880:7880"
-      # HTTP API
+      # HTTP API (room/egress management)
       - "7881:7881"
-      # UDP media ports disabled for Windows compatibility
-      # On Linux or Mac, uncomment to enable: - "50000-60000:50000-60000/udp"
-    volumes:
-      - livekit-data:/livekit
+      # UDP media ports disabled for Windows Docker Desktop compatibility.
+      # - "50000-60000:50000-60000/udp"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7881/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:7880/"]
       interval: 10s
       timeout: 5s
       retries: 3
 
 volumes:
   postgres-data:
-  livekit-data:

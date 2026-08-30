@@ -9,11 +9,12 @@
 //!
 //! ## Boundary note
 //!
-//! The media plane (`genzh-core`, `genzh-room`, `apps/media`)
-//! deliberately does **not** depend on this crate. The media server learns
-//! about users and rooms exclusively through a short-lived signed token minted
-//! by the API — see [`genzh_media_core::token`]. That keeps database concerns
-//! out of the RTP path and lets the two planes be deployed and scaled apart.
+//! LiveKit, the media plane, deliberately does **not** depend on this crate —
+//! it is a separate service entirely. It learns about users and rooms
+//! exclusively through a short-lived signed access token minted by the API —
+//! see `genzh_room::media::LiveKitTokenGenerator`. That keeps database
+//! concerns out of the RTP path and lets the two planes be deployed and
+//! scaled apart.
 
 pub mod audit;
 pub mod community;

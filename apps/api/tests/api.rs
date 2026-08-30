@@ -2,8 +2,8 @@
 //!
 //! The centrepiece is [`the_first_vertical_slice`], which walks the exact path
 //! the project's first milestone describes: register, create a community,
-//! create a voice room, and obtain a media token that the media server would
-//! accept.
+//! create a voice room, and obtain a LiveKit access token that LiveKit itself
+//! would accept.
 //!
 //! These tests skip when no database is configured — see `harness`.
 
@@ -11,8 +11,6 @@ mod harness;
 
 use axum::http::StatusCode;
 use genzh_domain::Permission;
-use genzh_media_core::permissions::MediaPermissions;
-use genzh_media_core::track::TrackKind;
 use harness::{boot, boot_with, media_verifier, skip};
 
 /// The migration seeding `permissions` and `Permission::ALL` must agree.
@@ -214,11 +212,11 @@ async fn requests_without_a_token_are_rejected() {
         .expect_status(StatusCode::UNAUTHORIZED);
 }
 
-/// Register → community → voice room → media token.
+/// Register → community → voice room → LiveKit access token.
 ///
 /// This is the project's first milestone, minus the parts that need two real
-/// WebRTC clients. It asserts the token the media server will be handed is one
-/// it would actually accept, with the right room and the right capabilities.
+/// WebRTC clients. It asserts the token LiveKit will be handed is one it
+/// would actually accept, with the right room and the right capabilities.
 #[tokio::test]
 async fn the_first_vertical_slice() {
     let Some(api) = boot().await else {
@@ -265,35 +263,25 @@ async fn the_first_vertical_slice() {
             .as_str()
             .is_some_and(|url| url.starts_with("ws"))
     );
-    assert!(
-        join.json["ice_servers"]
-            .as_array()
-            .is_some_and(|servers| !servers.is_empty())
-    );
 
-    // 5. The media server would accept it — same verification, same secret.
+    // 5. LiveKit would accept it — same verification, same secret.
     let token = join.json["token"].as_str().expect("a media token");
     let claims = media_verifier()
         .verify(token)
-        .expect("the media server accepts this token");
+        .expect("LiveKit accepts this token");
 
-    assert_eq!(claims.room.to_string(), room_id);
-    assert_eq!(claims.sub.to_string(), alice.user_id);
+    assert_eq!(claims.room, room_id);
+    assert_eq!(claims.sub, alice.user_id);
     assert_eq!(
-        claims.pid.to_string(),
+        claims.sub,
         join.json["participant_id"].as_str().unwrap_or_default()
     );
     assert_eq!(claims.name, "alice");
 
-    // 6. …and the capabilities are the owner's: publish everything.
-    assert!(claims.perms.may_subscribe());
-    for kind in TrackKind::ALL {
-        assert!(
-            claims.perms.may_publish(kind),
-            "owner should be able to publish {kind}"
-        );
-    }
-    assert!(claims.perms.contains(MediaPermissions::MODERATE_MUTE));
+    // 6. …and the capabilities are the owner's: publish and subscribe.
+    assert!(claims.can_subscribe);
+    assert!(claims.can_publish);
+    assert!(claims.can_publish_data);
 }
 
 #[tokio::test]
@@ -334,15 +322,14 @@ async fn a_second_member_gets_a_narrower_media_token() {
         .verify(join.json["token"].as_str().expect("token"))
         .expect("valid token");
 
-    // The default role speaks and uses video, but does not moderate or share.
-    assert!(claims.perms.may_publish(TrackKind::Audio));
-    assert!(claims.perms.may_publish(TrackKind::Camera));
-    assert!(!claims.perms.may_publish(TrackKind::ScreenShare));
-    assert!(!claims.perms.contains(MediaPermissions::MODERATE_MUTE));
+    // The default role speaks and uses video, but does not share a screen.
+    assert!(claims.can_subscribe);
+    assert!(claims.can_publish);
+    assert!(!claims.can_publish_data);
 
     // Alice and Bob are two different participants in the same room.
-    assert_eq!(claims.room.to_string(), room_id);
-    assert_eq!(claims.sub.to_string(), bob.user_id);
+    assert_eq!(claims.room, room_id);
+    assert_eq!(claims.sub, bob.user_id);
 }
 
 #[tokio::test]
@@ -613,8 +600,7 @@ async fn roles_gate_screen_sharing_and_cannot_be_used_to_escalate() {
     let claims = media_verifier()
         .verify(join.json["token"].as_str().expect("token"))
         .expect("valid token");
-    assert!(claims.perms.may_publish(TrackKind::ScreenShare));
-    assert!(!claims.perms.contains(MediaPermissions::MODERATE_MUTE));
+    assert!(claims.can_publish_data);
 
     // But Bob cannot create roles at all, let alone an administrator one.
     let escalation = api

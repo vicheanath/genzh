@@ -26,21 +26,20 @@
 #![allow(dead_code)]
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use genzh_media_core::ice::IceConfig;
 use http_body_util::BodyExt;
 use serde_json::Value;
 use tower::ServiceExt;
 
-/// The media secret the harness signs with, so tests can verify tokens exactly
-/// the way the media server does.
-pub const TEST_MEDIA_SECRET: &str = "integration-test-media-secret-value-32b";
+/// The LiveKit API key and secret the harness signs with, so tests can verify
+/// tokens exactly the way LiveKit would.
+pub const TEST_LIVEKIT_API_KEY: &str = "integration-test-key";
+pub const TEST_LIVEKIT_API_SECRET: &str = "integration-test-livekit-secret-value-32b";
 
 /// A running API, wired to a real database.
 #[derive(Clone)]
@@ -231,12 +230,10 @@ fn api_config(database_url: String) -> api::Config {
         access_ttl_seconds: 900,
         refresh_ttl_seconds: 3600,
 
-        media_token_secret: TEST_MEDIA_SECRET.to_owned(),
-        media_token_ttl_seconds: 120,
-        media_server_urls: "ws://media.test:8081/ws/media".to_owned(),
-
-        ice: IceConfig::from_parts(Some("stun:stun.test:3478"), None, None, None, false)
-            .expect("valid ice config"),
+        livekit_api_key: TEST_LIVEKIT_API_KEY.to_owned(),
+        livekit_api_secret: TEST_LIVEKIT_API_SECRET.to_owned(),
+        livekit_url: "ws://livekit.test:7880".to_owned(),
+        livekit_token_ttl_seconds: 120,
 
         max_body_bytes: 256 * 1024,
         request_timeout_seconds: 10,
@@ -490,11 +487,47 @@ pub struct Account {
     pub refresh_token: String,
 }
 
-/// Verify a media token exactly as the media server would.
-pub fn media_verifier() -> Arc<genzh_media_core::token::MediaTokenSigner> {
-    Arc::new(genzh_media_core::token::MediaTokenSigner::new(
-        TEST_MEDIA_SECRET.as_bytes(),
-        "social.api",
-        120,
-    ))
+/// The claims a decoded LiveKit access token carries, narrowed to what the
+/// tests assert against.
+pub struct LiveKitClaims {
+    pub iss: String,
+    pub sub: String,
+    pub name: String,
+    pub room: String,
+    pub can_publish: bool,
+    pub can_subscribe: bool,
+    pub can_publish_data: bool,
+}
+
+/// Verifies a LiveKit access token exactly as LiveKit itself would: same
+/// algorithm, same shared secret.
+pub struct LiveKitVerifier {
+    key: jsonwebtoken::DecodingKey,
+}
+
+impl LiveKitVerifier {
+    pub fn verify(&self, token: &str) -> Result<LiveKitClaims, jsonwebtoken::errors::Error> {
+        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+        validation.set_required_spec_claims(&["exp", "sub", "iss"]);
+        let decoded = jsonwebtoken::decode::<Value>(token, &self.key, &validation)?;
+        let claims = decoded.claims;
+        let video = &claims["video"];
+
+        Ok(LiveKitClaims {
+            iss: claims["iss"].as_str().unwrap_or_default().to_owned(),
+            sub: claims["sub"].as_str().unwrap_or_default().to_owned(),
+            name: claims["name"].as_str().unwrap_or_default().to_owned(),
+            room: video["room"].as_str().unwrap_or_default().to_owned(),
+            can_publish: video["canPublish"].as_bool().unwrap_or(false),
+            can_subscribe: video["canSubscribe"].as_bool().unwrap_or(false),
+            can_publish_data: video["canPublishData"].as_bool().unwrap_or(false),
+        })
+    }
+}
+
+/// Verify a LiveKit access token exactly as LiveKit itself would.
+pub fn media_verifier() -> LiveKitVerifier {
+    LiveKitVerifier {
+        key: jsonwebtoken::DecodingKey::from_secret(TEST_LIVEKIT_API_SECRET.as_bytes()),
+    }
 }

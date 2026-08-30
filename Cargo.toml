@@ -2,7 +2,6 @@
 resolver = "3"
 members = [
     "apps/api",
-    "apps/media",
     "crates/domain",
     "crates/auth",
     "crates/community",
@@ -11,9 +10,6 @@ members = [
     "crates/messaging",
     "crates/notification",
     "crates/admin",
-    "crates/media-core",
-    "crates/media-room",
-    "crates/media-signaling",
     "crates/infrastructure",
     "crates/cron",
     "crates/recommend",
@@ -36,9 +32,6 @@ genzh-notification = { path = "crates/notification" }
 genzh-admin = { path = "crates/admin" }
 genzh-room = { path = "crates/room" }
 genzh-messaging = { path = "crates/messaging" }
-genzh-media-core = { path = "crates/media-core" }
-genzh-media-room = { path = "crates/media-room" }
-genzh-media-signaling = { path = "crates/media-signaling" }
 genzh-infrastructure = { path = "crates/infrastructure" }
 genzh-cron = { path = "crates/cron" }
 genzh-recommend = { path = "crates/recommend" }
@@ -84,8 +77,6 @@ sha2 = "0.11"
 jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
 
 # ---- media ----
-webrtc = { version = "0.20.3", default-features = false, features = ["runtime-tokio"] }
-rtc = { version = "0.20.3", default-features = false, features = ["ring"] }
 # LiveKit token generation uses standard JWT; no SDK dependency needed
 
 # ---- misc ----

@@ -1,9 +1,9 @@
 //! Media session handover.
 //!
 //! Two endpoints, and only the first one matters. `join` performs the whole
-//! authorization chain and returns a signed token; from that point the client
-//! talks to the media server directly and the API is out of the media path
-//! entirely — no RTP, no SDP, no ICE ever traverses this process.
+//! authorization chain and returns a signed LiveKit access token; from that
+//! point the client talks to LiveKit directly and the API is out of the media
+//! path entirely — no RTP, no SDP, no ICE ever traverses this process.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -25,10 +25,9 @@ use crate::state::AppState;
 /// {
 ///   "room_id": "…",
 ///   "participant_id": "…",
-///   "media_url": "wss://media.example.com/ws/media",
+///   "media_url": "wss://livekit.example.com",
 ///   "token": "eyJhbGciOiJIUzI1NiJ9…",
-///   "expires_at": "2026-08-19T10:32:00Z",
-///   "ice_servers": [ { "urls": ["stun:…"] } ]
+///   "expires_at": "2026-08-19T10:32:00Z"
 /// }
 /// ```
 pub async fn join(
@@ -36,8 +35,8 @@ pub async fn join(
     caller: CurrentUser,
     Path(room_id): Path<RoomId>,
 ) -> ApiResult<Json<MediaJoinResponse>> {
-    // The display name goes into the token so the media server can build
-    // participant lists without ever reading the database.
+    // The display name goes into the token so LiveKit can build participant
+    // lists without ever reading the database.
     let user = state.auth.current_user(caller.user_id).await?;
 
     let response = state
@@ -59,7 +58,7 @@ pub async fn join(
 
 /// `POST /api/v1/rooms/{id}/media/leave`
 ///
-/// Advisory. The media server treats a closed WebSocket as the authoritative
+/// Advisory. LiveKit treats a closed connection as the authoritative
 /// departure signal, which is what makes a crashed client behave correctly.
 pub async fn leave(
     State(state): State<AppState>,

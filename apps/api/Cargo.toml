@@ -19,7 +19,6 @@ genzh-room.workspace = true
 genzh-messaging.workspace = true
 genzh-notification.workspace = true
 genzh-admin.workspace = true
-genzh-media-core.workspace = true
 
 axum.workspace = true
 tower.workspace = true
@@ -44,3 +43,4 @@ urlencoding.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync"] }
 tower = { workspace = true, features = ["util"] }
 http-body-util = "0.1"
+jsonwebtoken.workspace = true

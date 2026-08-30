@@ -1,7 +1,7 @@
-//! Issuing media sessions.
+//! Issuing LiveKit sessions.
 //!
-//! This is the handover from the control plane to the media plane, and it is
-//! the only place the two touch.
+//! This is the handover from the control plane to LiveKit, and it is the only
+//! place the two touch.
 //!
 //! ```text
 //!   POST /api/v1/rooms/:id/media/join
@@ -11,22 +11,18 @@
 //!         ├─ 3. member of the community?   │  one call to RoomService::access
 //!         ├─ 4. can view the room?        ─┘
 //!         ├─ 5. is it even a media room?
-//!         ├─ 6. fold speak / video / screen-share into media permissions
-//!         ├─ 7. pick the media server that hosts this room
-//!         └─ 8. sign a two-minute token
+//!         ├─ 6. fold speak / video / screen-share into LiveKit grants
+//!         └─ 7. sign a LiveKit access token
 //!         ▼
-//!   { media_url, token, participant_id, ice_servers }
+//!   { media_url, token, participant_id, expires_at }
 //! ```
 //!
 //! Steps 2–6 are database work that happens **once per join**, not once per
-//! packet. After this, the media server needs no database at all.
+//! packet. After this, LiveKit needs no database at all — it verifies the
+//! token's signature locally, the same HS256 secret this process signed with.
 
 use genzh_domain::{Permission, PermissionSet, RoomId, UserId};
 use genzh_infrastructure::{ServiceError, ServiceResult};
-use genzh_media_core::ice::{IceConfig, IceServer};
-use genzh_media_core::permissions::MediaPermissions;
-use genzh_media_core::token::{MediaGrant, MediaTokenSigner};
-use genzh_media_core::track::ParticipantId;
 
 use crate::service::RoomService;
 
@@ -35,136 +31,131 @@ use crate::service::RoomService;
 pub struct MediaJoinResponse {
     /// The room joined.
     pub room_id: RoomId,
-    /// Server-assigned participant id for this session.
-    pub participant_id: ParticipantId,
-    /// WebSocket URL of the media server hosting this room.
+    /// The LiveKit participant identity for this session — the joining
+    /// user's id, so a reconnect from the same account replaces rather than
+    /// duplicates.
+    pub participant_id: String,
+    /// WebSocket URL of the LiveKit server.
     pub media_url: String,
-    /// The signed media token.
+    /// The signed LiveKit access token.
     pub token: String,
     /// When the token stops being accepted.
     pub expires_at: chrono::DateTime<chrono::Utc>,
-    /// ICE servers for both peer connections.
-    pub ice_servers: Vec<IceServer>,
 }
 
-/// Chooses which media server hosts a room.
+/// Translate control-plane permissions into a LiveKit video grant.
 ///
-/// Every participant in a room **must** land on the same server — an SFU
-/// forwards between peer connections it owns, so a room split across two
-/// processes is two separate calls. That constraint, not load, is what drives
-/// the selection strategy.
-pub trait MediaServerSelector: Send + Sync {
-    /// The WebSocket URL for `room_id`, or `None` if no server is configured.
-    fn select(&self, room_id: RoomId) -> Option<String>;
+/// One function, one place to audit. Everything LiveKit is allowed to believe
+/// about a participant comes from here.
+fn livekit_grant(room_id: RoomId, permissions: PermissionSet) -> serde_json::Value {
+    let can_publish_audio = permissions.allows(Permission::Speak);
+    let can_publish_video = permissions.allows(Permission::UseVideo);
+    let can_publish_data = permissions.allows(Permission::ScreenShare);
+    let can_publish = can_publish_audio || can_publish_video || can_publish_data;
+    let can_subscribe = permissions.allows(Permission::ViewRoom);
 
-    /// How many servers are configured, for the readiness endpoint.
-    fn len(&self) -> usize;
-
-    /// Are there no servers configured at all?
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
+    serde_json::json!({
+        "room": room_id.as_uuid().to_string(),
+        "roomJoin": true,
+        "canPublish": can_publish,
+        "canSubscribe": can_subscribe,
+        "canPublishData": can_publish_data,
+    })
 }
 
-/// A fixed list of media servers, addressed by hashing the room id.
+/// Signs LiveKit access tokens.
 ///
-/// Hashing rather than round-robin is what guarantees every participant of a
-/// room reaches the same process. It is also stable: the same room maps to the
-/// same server across API restarts, so a reconnecting client rejoins the
-/// session it left.
-///
-/// The obvious limitation is that changing the list reshuffles rooms. That is
-/// the point at which this should be replaced by a registry the media servers
-/// register into — the trait boundary is here so that replacement touches one
-/// implementation.
-#[derive(Debug, Clone)]
-pub struct StaticMediaServers {
-    urls: Vec<String>,
+/// LiveKit tokens are HS256 JWTs signed with the project's API secret — no
+/// SDK dependency is needed, only `jsonwebtoken`.
+#[derive(Debug)]
+pub struct LiveKitTokenGenerator {
+    api_key: String,
+    api_secret: String,
 }
 
-impl StaticMediaServers {
-    /// Build from a comma-separated list of WebSocket URLs.
-    pub fn new(urls: impl IntoIterator<Item = String>) -> Self {
+impl LiveKitTokenGenerator {
+    /// Build a generator from a LiveKit project's API key and secret.
+    pub fn new(api_key: impl Into<String>, api_secret: impl Into<String>) -> Self {
         Self {
-            urls: urls
-                .into_iter()
-                .map(|url| url.trim().to_owned())
-                .filter(|url| !url.is_empty())
-                .collect(),
+            api_key: api_key.into(),
+            api_secret: api_secret.into(),
         }
     }
 
-    /// Parse from an environment value like `ws://a:8081/ws/media,ws://b:8081/ws/media`.
-    pub fn from_env_value(value: &str) -> Self {
-        Self::new(value.split(',').map(str::to_owned))
-    }
-}
-
-impl MediaServerSelector for StaticMediaServers {
-    fn select(&self, room_id: RoomId) -> Option<String> {
-        if self.urls.is_empty() {
-            return None;
+    /// Sign an access token for `user_id` to join `room_id` with `permissions`.
+    fn issue(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+        display_name: &str,
+        permissions: PermissionSet,
+        ttl_seconds: i64,
+    ) -> ServiceResult<LiveKitToken> {
+        #[derive(serde::Serialize)]
+        struct Claims {
+            iss: String,
+            sub: String,
+            exp: i64,
+            iat: i64,
+            nbf: i64,
+            name: String,
+            video: serde_json::Value,
         }
-        // The low 64 bits of a v4 UUID are uniformly random, which is all this
-        // needs; a cryptographic hash would buy nothing.
-        let bytes = room_id.as_uuid().into_bytes();
-        let key = u64::from_be_bytes(bytes[8..16].try_into().unwrap_or([0; 8]));
-        let index = (key % self.urls.len() as u64) as usize;
-        self.urls.get(index).cloned()
-    }
 
-    fn len(&self) -> usize {
-        self.urls.len()
+        let now = chrono::Utc::now();
+        let expires_at = now + chrono::Duration::seconds(ttl_seconds);
+
+        let claims = Claims {
+            iss: self.api_key.clone(),
+            sub: user_id.as_uuid().to_string(),
+            exp: expires_at.timestamp(),
+            iat: now.timestamp(),
+            nbf: now.timestamp(),
+            name: display_name.to_owned(),
+            video: livekit_grant(room_id, permissions),
+        };
+
+        let key = jsonwebtoken::EncodingKey::from_secret(self.api_secret.as_bytes());
+        let token = jsonwebtoken::encode(
+            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
+            &claims,
+            &key,
+        )
+        .map_err(|error| {
+            tracing::error!(%error, "failed to sign LiveKit token");
+            ServiceError::Domain(genzh_domain::DomainError::invalid(
+                "media",
+                "could not issue a media token",
+            ))
+        })?;
+
+        Ok(LiveKitToken { token, expires_at })
     }
 }
 
-/// Translate control-plane permissions into the media plane's narrower set.
-///
-/// One function, one place to audit. Everything the media server is allowed to
-/// believe about a participant comes from here.
-pub fn media_permissions_from(permissions: PermissionSet) -> MediaPermissions {
-    let mut media = MediaPermissions::empty();
-
-    // The mapping is intentionally explicit rather than clever: a table like
-    // this is readable in a security review, a bit-shuffling loop is not.
-    if permissions.allows(Permission::ViewRoom) {
-        media |= MediaPermissions::SUBSCRIBE;
-    }
-    if permissions.allows(Permission::Speak) {
-        media |= MediaPermissions::PUBLISH_AUDIO;
-    }
-    if permissions.allows(Permission::UseVideo) {
-        media |= MediaPermissions::PUBLISH_VIDEO;
-    }
-    if permissions.allows(Permission::ScreenShare) {
-        media |= MediaPermissions::PUBLISH_SCREEN;
-    }
-    if permissions.allows(Permission::Stream) {
-        media |= MediaPermissions::PUBLISH_STREAM;
-    }
-    if permissions.allows(Permission::MuteMembers) {
-        media |= MediaPermissions::MODERATE_MUTE;
-    }
-    if permissions.allows(Permission::MoveMembers) {
-        media |= MediaPermissions::MODERATE_MOVE;
-    }
-
-    media
+/// A signed LiveKit access token and when it stops being valid.
+#[derive(Debug, Clone)]
+pub struct LiveKitToken {
+    /// The signed JWT.
+    pub token: String,
+    /// When the token stops being accepted.
+    pub expires_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Authorises media joins and mints tokens.
+/// Authorises media joins and mints LiveKit tokens.
 pub struct MediaSessionService {
     rooms: RoomService,
-    signer: std::sync::Arc<MediaTokenSigner>,
-    servers: std::sync::Arc<dyn MediaServerSelector>,
-    ice: IceConfig,
+    generator: std::sync::Arc<LiveKitTokenGenerator>,
+    /// The WebSocket URL a *browser* dials — not necessarily the same address
+    /// this process reaches LiveKit's admin API on.
+    media_url: String,
+    token_ttl_seconds: i64,
 }
 
 impl std::fmt::Debug for MediaSessionService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MediaSessionService")
-            .field("media_servers", &self.servers.len())
-            .field("ice_servers", &self.ice.ice_servers.len())
+            .field("media_url", &self.media_url)
             .finish_non_exhaustive()
     }
 }
@@ -173,15 +164,15 @@ impl MediaSessionService {
     /// Assemble the service.
     pub fn new(
         rooms: RoomService,
-        signer: std::sync::Arc<MediaTokenSigner>,
-        servers: std::sync::Arc<dyn MediaServerSelector>,
-        ice: IceConfig,
+        generator: std::sync::Arc<LiveKitTokenGenerator>,
+        media_url: String,
+        token_ttl_seconds: i64,
     ) -> Self {
         Self {
             rooms,
-            signer,
-            servers,
-            ice,
+            generator,
+            media_url,
+            token_ttl_seconds,
         }
     }
 
@@ -199,64 +190,41 @@ impl MediaSessionService {
         let access = self.rooms.visible_access(room_id, user_id).await?;
         access.room.require_media()?;
 
-        let permissions = media_permissions_from(access.permissions);
-        if !permissions.may_subscribe() {
-            // Belt and braces: `require_visible` already covers this, but the
-            // media token must never be issued without SUBSCRIBE.
+        if !access.permissions.allows(Permission::ViewRoom) {
+            // Belt and braces: `require_visible` already covers this, but a
+            // token must never be issued without at least subscribe access.
             return Err(ServiceError::denied("view_room"));
         }
 
-        let media_url = self
-            .servers
-            .select(room_id)
-            .ok_or_else(|| ServiceError::not_found("media server"))?;
-
-        let participant_id = ParticipantId::new();
-        let grant = MediaGrant {
-            user_id: user_id.as_uuid(),
-            room_id: room_id.as_uuid(),
-            community_id: access
-                .room
-                .community_id
-                .map(|c| c.as_uuid())
-                .unwrap_or(uuid::Uuid::nil()),
-            participant_id,
-            permissions,
-            display_name,
-        };
-
-        let token = self.signer.issue(&grant).map_err(|error| {
-            tracing::error!(%error, %room_id, "failed to sign media token");
-            ServiceError::Domain(genzh_domain::DomainError::invalid(
-                "media",
-                "could not issue a media token",
-            ))
-        })?;
+        let token = self.generator.issue(
+            room_id,
+            user_id,
+            &display_name,
+            access.permissions,
+            self.token_ttl_seconds,
+        )?;
 
         tracing::info!(
             %room_id,
             %user_id,
-            %participant_id,
-            permissions = permissions.bits(),
             "media session authorised"
         );
 
         Ok(MediaJoinResponse {
             room_id,
-            participant_id,
-            media_url,
+            participant_id: user_id.as_uuid().to_string(),
+            media_url: self.media_url.clone(),
             token: token.token,
             expires_at: token.expires_at,
-            ice_servers: self.ice.ice_servers.clone(),
         })
     }
 
     /// Note that a client is leaving.
     ///
-    /// The media server is the authority on who is connected — it owns the
-    /// sockets — so this is bookkeeping and a place to hang future presence
-    /// updates, not a teardown. Closing the WebSocket is what actually ends a
-    /// session, and it works even when the client crashes.
+    /// LiveKit is the authority on who is connected — it owns the peer
+    /// connections — so this is bookkeeping and a place to hang future
+    /// presence updates, not a teardown. Closing the WebSocket is what
+    /// actually ends a session, and it works even when the client crashes.
     pub async fn leave(&self, room_id: RoomId, user_id: UserId) -> ServiceResult<()> {
         let access = self.rooms.visible_access(room_id, user_id).await?;
         access.room.require_media()?;
@@ -264,216 +232,94 @@ impl MediaSessionService {
         Ok(())
     }
 
-    /// ICE configuration, exposed so clients can pre-warm.
-    pub fn ice_servers(&self) -> &[IceServer] {
-        &self.ice.ice_servers
+    /// Is LiveKit configured? Used by `GET /ready`.
+    pub fn is_configured(&self) -> bool {
+        !self.media_url.is_empty()
     }
-
-    /// Are any media servers configured? Used by `GET /ready`.
-    pub fn has_media_servers(&self) -> bool {
-        !self.servers.is_empty()
-    }
-}
-
-/// LiveKit token generator.
-///
-/// Generates access tokens for LiveKit rooms. This allows clients to connect
-/// directly to a LiveKit server instead of the custom media server.
-///
-/// LiveKit tokens are JWTs with a specific claims structure. This implementation
-/// generates them using the same JWT mechanism as media tokens.
-pub struct LiveKitTokenGenerator {
-    api_key: String,
-    api_secret: String,
-}
-
-impl LiveKitTokenGenerator {
-    /// Create a new LiveKit token generator.
-    pub fn new(api_key: impl Into<String>, api_secret: impl Into<String>) -> Self {
-        Self {
-            api_key: api_key.into(),
-            api_secret: api_secret.into(),
-        }
-    }
-
-    /// Generate a LiveKit access token for a participant.
-    pub fn generate_token(
-        &self,
-        room_id: &RoomId,
-        user_id: &UserId,
-        display_name: &str,
-        permissions: MediaPermissions,
-    ) -> ServiceResult<LiveKitToken> {
-        use serde::{Deserialize, Serialize};
-        use serde_json::json;
-
-        // LiveKit token structure
-        #[derive(Serialize, Deserialize)]
-        struct LiveKitClaims {
-            iss: String,
-            sub: String,
-            aud: String,
-            exp: i64,
-            iat: i64,
-            nbf: i64,
-            name: String,
-            metadata: String,
-            grants: serde_json::Value,
-        }
-
-        let now = chrono::Utc::now();
-        let expires_at = now + chrono::Duration::hours(24);
-
-        // Build the video grant permissions
-        let grants = json!({
-            "video": {
-                "canPublish": permissions.may_publish(genzh_media_core::track::TrackKind::Audio)
-                    || permissions.may_publish(genzh_media_core::track::TrackKind::Camera)
-                    || permissions.may_publish(genzh_media_core::track::TrackKind::ScreenShare),
-                "canSubscribe": permissions.may_subscribe(),
-                "canPublishData": permissions.may_publish(genzh_media_core::track::TrackKind::ScreenShare),
-            },
-            "room": room_id.as_uuid().to_string(),
-        });
-
-        let claims = LiveKitClaims {
-            iss: self.api_key.clone(),
-            sub: user_id.as_uuid().to_string(),
-            aud: room_id.as_uuid().to_string(),
-            exp: expires_at.timestamp(),
-            iat: now.timestamp(),
-            nbf: now.timestamp(),
-            name: display_name.to_string(),
-            metadata: format!("{{\"room_id\": \"{}\"}}", room_id.as_uuid()),
-            grants,
-        };
-
-        // Use jsonwebtoken to sign the token
-        let key = jsonwebtoken::EncodingKey::from_secret(self.api_secret.as_bytes());
-        let token = jsonwebtoken::encode(
-            &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
-            &claims,
-            &key,
-        )
-        .map_err(|e| {
-            tracing::error!("failed to encode LiveKit token: {}", e);
-            ServiceError::Domain(genzh_domain::DomainError::invalid(
-                "livekit",
-                "could not generate access token",
-            ))
-        })?;
-
-        tracing::debug!(%user_id, %room_id, "LiveKit token generated");
-
-        Ok(LiveKitToken {
-            token,
-            expires_at,
-        })
-    }
-}
-
-/// A LiveKit access token response.
-#[derive(Debug, Clone)]
-pub struct LiveKitToken {
-    pub token: String,
-    pub expires_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn generator() -> LiveKitTokenGenerator {
+        LiveKitTokenGenerator::new("test-key", "test-secret-at-least-32-bytes-long")
+    }
+
     #[test]
     fn a_listener_may_subscribe_and_nothing_else() {
-        let media = media_permissions_from(PermissionSet::VIEW_ROOM);
-        assert!(media.may_subscribe());
-        assert!(!media.may_publish(genzh_media_core::track::TrackKind::Audio));
-        assert!(!media.may_publish(genzh_media_core::track::TrackKind::Camera));
+        let grant = livekit_grant(RoomId::new(), PermissionSet::VIEW_ROOM);
+        assert_eq!(grant["canSubscribe"], true);
+        assert_eq!(grant["canPublish"], false);
     }
 
     #[test]
-    fn a_plain_member_may_speak_and_use_video_but_not_share_a_screen() {
-        let media = media_permissions_from(PermissionSet::default_member());
-        assert!(media.may_subscribe());
-        assert!(media.may_publish(genzh_media_core::track::TrackKind::Audio));
-        assert!(media.may_publish(genzh_media_core::track::TrackKind::Camera));
-        assert!(!media.may_publish(genzh_media_core::track::TrackKind::ScreenShare));
-        assert!(!media.contains(MediaPermissions::MODERATE_MUTE));
+    fn a_plain_member_may_publish_audio_and_video_but_not_data() {
+        let grant = livekit_grant(RoomId::new(), PermissionSet::default_member());
+        assert_eq!(grant["canSubscribe"], true);
+        assert_eq!(grant["canPublish"], true);
+        assert_eq!(grant["canPublishData"], false);
     }
 
     #[test]
-    fn an_administrator_gets_every_media_capability() {
-        let media = media_permissions_from(PermissionSet::ADMINISTRATOR);
-        assert_eq!(media, MediaPermissions::all());
-    }
-
-    #[test]
-    fn no_permissions_means_no_media_capabilities() {
-        assert_eq!(
-            media_permissions_from(PermissionSet::empty()),
-            MediaPermissions::empty()
-        );
-    }
-
-    #[test]
-    fn moderation_permissions_cross_the_boundary_individually() {
-        let mute_only =
-            media_permissions_from(PermissionSet::VIEW_ROOM | PermissionSet::MUTE_MEMBERS);
-        assert!(mute_only.contains(MediaPermissions::MODERATE_MUTE));
-        assert!(!mute_only.contains(MediaPermissions::MODERATE_MOVE));
+    fn no_permissions_means_no_grants() {
+        let grant = livekit_grant(RoomId::new(), PermissionSet::empty());
+        assert_eq!(grant["canSubscribe"], false);
+        assert_eq!(grant["canPublish"], false);
+        assert_eq!(grant["canPublishData"], false);
     }
 
     #[test]
     fn control_plane_permissions_do_not_leak_into_the_media_plane() {
         // Managing roles has nothing to do with media and must not appear.
-        let manager = media_permissions_from(
-            PermissionSet::MANAGE_ROLES
-                | PermissionSet::MANAGE_COMMUNITY
-                | PermissionSet::MANAGE_ROOM,
+        let grant = livekit_grant(
+            RoomId::new(),
+            PermissionSet::MANAGE_ROLES | PermissionSet::MANAGE_COMMUNITY | PermissionSet::MANAGE_ROOM,
         );
-        assert_eq!(manager, MediaPermissions::empty());
+        assert_eq!(grant["canSubscribe"], false);
+        assert_eq!(grant["canPublish"], false);
     }
 
     #[test]
-    fn every_participant_of_a_room_is_sent_to_the_same_media_server() {
-        let servers = StaticMediaServers::from_env_value(
-            "ws://media-a:8081/ws/media,ws://media-b:8081/ws/media,ws://media-c:8081/ws/media",
+    fn a_signed_token_carries_the_expected_claims() {
+        let gen = generator();
+        let room_id = RoomId::new();
+        let user_id = UserId::new();
+
+        let token = gen
+            .issue(room_id, user_id, "Ada", PermissionSet::default_member(), 3600)
+            .expect("token signs");
+
+        let key = jsonwebtoken::DecodingKey::from_secret(b"test-secret-at-least-32-bytes-long");
+        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+        validation.set_required_spec_claims(&["exp"]);
+        let decoded = jsonwebtoken::decode::<serde_json::Value>(&token.token, &key, &validation)
+            .expect("token verifies with the same secret");
+
+        assert_eq!(decoded.claims["iss"], "test-key");
+        assert_eq!(decoded.claims["sub"], user_id.as_uuid().to_string());
+        assert_eq!(decoded.claims["name"], "Ada");
+        assert_eq!(
+            decoded.claims["video"]["room"],
+            room_id.as_uuid().to_string()
         );
-        let room = RoomId::new();
-
-        let chosen = servers.select(room).expect("a server");
-        for _ in 0..100 {
-            assert_eq!(servers.select(room).as_deref(), Some(chosen.as_str()));
-        }
     }
 
     #[test]
-    fn different_rooms_spread_across_the_configured_servers() {
-        let servers = StaticMediaServers::from_env_value("ws://a/ws,ws://b/ws,ws://c/ws");
-        let mut seen = std::collections::HashSet::new();
-        for _ in 0..200 {
-            if let Some(url) = servers.select(RoomId::new()) {
-                seen.insert(url);
-            }
-        }
-        assert_eq!(seen.len(), 3, "all three servers should be used");
-    }
+    fn a_tampered_secret_fails_verification() {
+        let gen = generator();
+        let token = gen
+            .issue(
+                RoomId::new(),
+                UserId::new(),
+                "Ada",
+                PermissionSet::default_member(),
+                3600,
+            )
+            .expect("token signs");
 
-    #[test]
-    fn no_configured_servers_yields_no_selection() {
-        let servers = StaticMediaServers::from_env_value("");
-        assert!(servers.is_empty());
-        assert!(servers.select(RoomId::new()).is_none());
-    }
-
-    #[test]
-    fn whitespace_and_empty_entries_are_ignored() {
-        let servers = StaticMediaServers::from_env_value(" ws://a/ws , , ws://b/ws ");
-        assert_eq!(servers.len(), 2);
-        assert!(
-            servers
-                .select(RoomId::new())
-                .is_some_and(|url| !url.contains(' '))
-        );
+        let key = jsonwebtoken::DecodingKey::from_secret(b"wrong-secret-at-least-32-bytes-long");
+        let validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+        assert!(jsonwebtoken::decode::<serde_json::Value>(&token.token, &key, &validation).is_err());
     }
 }

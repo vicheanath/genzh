@@ -11,7 +11,6 @@ genzh-domain.workspace = true
 genzh-community.workspace = true
 genzh-graph.workspace = true
 genzh-infrastructure.workspace = true
-genzh-media-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

@@ -19,12 +19,11 @@ use genzh_infrastructure::{
     InMemoryEventBus, InMemoryFloodGuard, InMemoryPresenceStore, InMemoryRateLimiter, PgConfig,
     PresenceStore, RateLimiter, connect,
 };
-use genzh_media_core::token::MediaTokenSigner;
 use genzh_messaging::MessagingService;
 use genzh_notification::NotificationService;
 use genzh_room::{
-    DirectRooms, MediaSessionService, ReadStateService, RoomDirectory, RoomService,
-    StaticMediaServers,
+    DirectRooms, LiveKitTokenGenerator, MediaSessionService, ReadStateService, RoomDirectory,
+    RoomService,
 };
 
 use crate::config::Config;
@@ -94,10 +93,8 @@ pub struct AppState {
     pub invites: InviteService,
     /// Where each person got to in each room.
     pub read_state: ReadStateService,
-    /// Media join authorization and token minting.
+    /// Media join authorization and LiveKit token minting.
     pub media: Arc<MediaSessionService>,
-    /// LiveKit token generator (optional, for LiveKit integration).
-    pub livekit_generator: Option<Arc<genzh_room::LiveKitTokenGenerator>>,
     /// The configuration this process started with.
     pub config: Arc<Config>,
     /// General per-address request budget.
@@ -190,33 +187,16 @@ impl AppState {
         let invites = InviteService::new(pool.clone(), communities.clone());
         let read_state = ReadStateService::new(pool.clone());
 
-        let signer = Arc::new(MediaTokenSigner::new(
-            config.media_token_secret.as_bytes(),
-            &config.jwt_issuer,
-            config.media_token_ttl_seconds,
-        ));
-
-        // The media server prints the same fingerprint for the secret it
-        // verifies with. If the two lines disagree, every join will be rejected
-        // — and this is the only place either process can say so, because they
-        // never exchange the key.
-        tracing::info!(
-            secret_fingerprint = %genzh_media_core::token::secret_fingerprint(
-                config.media_token_secret.as_bytes()
-            ),
-            token_issuer = %config.jwt_issuer,
-            token_ttl_seconds = signer.ttl_seconds(),
-            "signing media tokens — this fingerprint must match the media server's"
-        );
-        let servers = Arc::new(StaticMediaServers::from_env_value(
-            &config.media_server_urls,
+        let livekit_generator = Arc::new(LiveKitTokenGenerator::new(
+            config.livekit_api_key.clone(),
+            config.livekit_api_secret.clone(),
         ));
 
         let media = Arc::new(MediaSessionService::new(
             rooms.clone(),
-            signer,
-            servers,
-            config.ice.clone(),
+            livekit_generator,
+            config.livekit_url.clone(),
+            config.livekit_token_ttl_seconds,
         ));
 
         let rate_limiter: Arc<dyn RateLimiter> = InMemoryRateLimiter::new(
@@ -236,19 +216,6 @@ impl AppState {
         // runs on a timer.
         let scheduler = Arc::new(CronScheduler::new().await?);
         let pool_for_recommend = pool.clone();
-
-        // Initialize LiveKit token generator if credentials are configured
-        let livekit_generator = if !config.livekit_api_key.is_empty()
-            && !config.livekit_api_secret.is_empty() {
-            tracing::info!("LiveKit token generator enabled");
-            Some(Arc::new(genzh_room::LiveKitTokenGenerator::new(
-                &config.livekit_api_key,
-                &config.livekit_api_secret,
-            )))
-        } else {
-            tracing::debug!("LiveKit token generator disabled (credentials not configured)");
-            None
-        };
 
         // ── volatile state ──────────────────────────────────────────────────
         // The only place in the process that names a concrete implementation of
@@ -281,7 +248,6 @@ impl AppState {
             invites,
             read_state,
             media,
-            livekit_generator,
             flood,
             events: InMemoryEventBus::new(EVENT_BUFFER),
             presence: InMemoryPresenceStore::new(),

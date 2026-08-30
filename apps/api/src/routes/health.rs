@@ -33,8 +33,8 @@ pub struct Readiness {
     pub status: &'static str,
     /// Whether PostgreSQL answered.
     pub database: bool,
-    /// Whether any media server is configured.
-    pub media_servers: bool,
+    /// Whether LiveKit is configured.
+    pub livekit: bool,
 }
 
 /// `GET /health`
@@ -49,9 +49,9 @@ pub async fn health() -> Json<Health> {
 /// `GET /ready`
 pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Readiness>) {
     let database = genzh_infrastructure::db::ping(&state.pool).await;
-    let media_servers = state.media.has_media_servers();
+    let livekit = state.media.is_configured();
 
-    let ready = database && media_servers;
+    let ready = database && livekit;
     let status = if ready {
         StatusCode::OK
     } else {
@@ -63,7 +63,7 @@ pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Readiness
         Json(Readiness {
             status: if ready { "ready" } else { "degraded" },
             database,
-            media_servers,
+            livekit,
         }),
     )
 }

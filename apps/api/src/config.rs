@@ -1,19 +1,20 @@
 //! Configuration, entirely from the environment.
 //!
-//! Two rules are enforced here rather than left to a deployment checklist:
-//!
-//! * secrets have **no defaults** — a missing `JWT_SECRET` fails startup
-//!   rather than silently signing tokens with a well-known string;
-//! * the two token secrets must **differ** — the media plane and the user
-//!   plane are separate trust domains, and sharing a key would let a
-//!   compromised media server mint user sessions.
+//! A rule enforced here rather than left to a deployment checklist: secrets
+//! have **no defaults** — a missing `JWT_SECRET` or `LIVEKIT_API_SECRET`
+//! fails startup rather than silently signing tokens with a well-known
+//! string.
 
 use std::env::VarError;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use genzh_media_core::ice::IceConfig;
-use genzh_media_core::token::DEFAULT_TOKEN_TTL_SECONDS;
+/// Default lifetime of a LiveKit access token, in seconds.
+///
+/// Long enough that a reconnect after a brief network blip does not need a
+/// fresh join, short enough that a permission change is reflected on the next
+/// one.
+const DEFAULT_LIVEKIT_TOKEN_TTL_SECONDS: i64 = 3600;
 
 /// Everything the API needs to start.
 #[derive(Debug, Clone)]
@@ -38,22 +39,16 @@ pub struct Config {
     /// Refresh-token lifetime.
     pub refresh_ttl_seconds: i64,
 
-    /// Secret shared with the media servers. **Not** `jwt_secret`.
-    pub media_token_secret: String,
-    /// Media-token lifetime.
-    pub media_token_ttl_seconds: i64,
-    /// Comma-separated media server WebSocket URLs.
-    pub media_server_urls: String,
-
-    /// LiveKit API key (optional, for LiveKit integration).
+    /// LiveKit project API key.
     pub livekit_api_key: String,
-    /// LiveKit API secret (optional, for LiveKit integration).
+    /// LiveKit project API secret. Signs every access token this process
+    /// issues.
     pub livekit_api_secret: String,
-    /// LiveKit server URL (optional, for LiveKit integration).
+    /// WebSocket URL a *browser* dials to reach LiveKit — not necessarily the
+    /// address this process would use internally.
     pub livekit_url: String,
-
-    /// ICE servers handed to clients.
-    pub ice: IceConfig,
+    /// LiveKit access-token lifetime, in seconds.
+    pub livekit_token_ttl_seconds: i64,
 
     /// Maximum request body, in bytes.
     pub max_body_bytes: usize,
@@ -172,26 +167,16 @@ impl Config {
     /// Read the configuration from the process environment.
     pub fn from_env() -> Result<Self, ConfigError> {
         let jwt_secret = require("JWT_SECRET")?;
-        let media_token_secret = require("MEDIA_TOKEN_SECRET")?;
-
-        // A shared secret would collapse two trust domains into one.
-        if jwt_secret == media_token_secret {
+        if jwt_secret.len() < 32 {
             return Err(ConfigError::Invalid {
-                name: "MEDIA_TOKEN_SECRET",
-                reason: "must differ from JWT_SECRET".to_owned(),
+                name: "JWT_SECRET",
+                reason: "must be at least 32 characters".to_owned(),
             });
         }
-        for (name, secret) in [
-            ("JWT_SECRET", &jwt_secret),
-            ("MEDIA_TOKEN_SECRET", &media_token_secret),
-        ] {
-            if secret.len() < 32 {
-                return Err(ConfigError::Invalid {
-                    name,
-                    reason: "must be at least 32 characters".to_owned(),
-                });
-            }
-        }
+
+        let livekit_api_key = require("LIVEKIT_API_KEY")?;
+        let livekit_api_secret = require("LIVEKIT_API_SECRET")?;
+        let livekit_url = require("LIVEKIT_URL")?;
 
         let bind: SocketAddr = optional("API_BIND")
             .unwrap_or_else(|| "0.0.0.0:8080".to_owned())
@@ -200,18 +185,6 @@ impl Config {
                 name: "API_BIND",
                 reason: format!("{error}"),
             })?;
-
-        let ice = IceConfig::from_parts(
-            optional("STUN_URL").as_deref(),
-            optional("TURN_URL").as_deref(),
-            optional("TURN_USERNAME").as_deref(),
-            optional("TURN_PASSWORD").as_deref(),
-            flag("ICE_RELAY_ONLY", false),
-        )
-        .map_err(|error| ConfigError::Invalid {
-            name: "STUN_URL/TURN_URL",
-            reason: error.to_string(),
-        })?;
 
         Ok(Self {
             bind,
@@ -225,16 +198,13 @@ impl Config {
             access_ttl_seconds: number("ACCESS_TOKEN_TTL_SECONDS", 900)?,
             refresh_ttl_seconds: number("REFRESH_TOKEN_TTL_SECONDS", 30 * 24 * 3600)?,
 
-            media_token_secret,
-            media_token_ttl_seconds: number("MEDIA_TOKEN_TTL_SECONDS", DEFAULT_TOKEN_TTL_SECONDS)?,
-            media_server_urls: optional("MEDIA_SERVER_URL")
-                .unwrap_or_else(|| "ws://127.0.0.1:8081/ws/media".to_owned()),
-
-            livekit_api_key: optional("LIVEKIT_API_KEY").unwrap_or_default(),
-            livekit_api_secret: optional("LIVEKIT_API_SECRET").unwrap_or_default(),
-            livekit_url: optional("LIVEKIT_URL").unwrap_or_default(),
-
-            ice,
+            livekit_api_key,
+            livekit_api_secret,
+            livekit_url,
+            livekit_token_ttl_seconds: number(
+                "LIVEKIT_TOKEN_TTL_SECONDS",
+                DEFAULT_LIVEKIT_TOKEN_TTL_SECONDS,
+            )?,
 
             max_body_bytes: number("MAX_BODY_BYTES", 256 * 1024)?,
             request_timeout_seconds: number("REQUEST_TIMEOUT_SECONDS", 30)?,

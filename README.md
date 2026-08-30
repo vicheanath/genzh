@@ -2,14 +2,13 @@
 
 Rust backend for a mobile-first social hangout platform: accounts, communities,
 rooms, permissions, chat — and realtime voice, video and screen sharing through
-a selective forwarding unit.
+LiveKit.
 
-Two independently deployable binaries, one PostgreSQL database, no other
-infrastructure.
+One independently deployable binary, one PostgreSQL database, LiveKit for media,
+no other infrastructure.
 
 ```
 apps/api    control plane  — who you are, what you may do
-apps/media  media plane    — WebRTC, RTP forwarding
 apps/web    web client     — React + Base UI + CSS Modules
 ```
 
@@ -17,56 +16,35 @@ apps/web    web client     — React + Base UI + CSS Modules
 
 ## 1. Architecture
 
-### The split, and why
+### The separation of concerns
 
-The API and the media server solve completely different problems and fail in
-completely different ways.
+The API handles all control-plane logic: accounts, communities, roles, rooms,
+messages, and permissions. LiveKit handles all media: peer connections, tracks,
+RTP forwarding, and bandwidth management.
 
-| | control plane (`apps/api`) | media plane (`apps/media`) |
-|---|---|---|
-| Owns | accounts, communities, roles, rooms, messages | peer connections, tracks, RTP |
-| Talks to | PostgreSQL | UDP sockets |
-| Scales with | requests per second | concurrent streams and bandwidth |
-| Failure mode | a request 500s | a call drops |
-| Restart cost | in-flight requests | **every live call** |
-
-Keeping them in one process would mean a schema migration can interrupt a
-conversation, and a busy voice room can slow down a login. Keeping them apart
-means the API can be redeployed at any time while calls continue, and media
-servers can be scaled on entirely different metrics.
-
-### How they meet: one signed token
-
-The media server has **no database credentials**. It cannot look up a user, a
-room, or a permission. Everything it is allowed to believe arrives in a
-short-lived token the API signs.
+The API mints short-lived LiveKit access tokens, signed with a shared secret.
+When a client joins a room, the API issues a token and the client uses it to
+connect directly to LiveKit. No media flows through the API.
 
 ```
   client ──POST /rooms/{id}/media/join──▶ API ──▶ PostgreSQL
                                            │      "is this user a member?
-                                           │       does their role grant speak?
-                                           │       is this even a voice room?"
+                                           │       does their role grant speak?"
                                            │
-                                           │ mints a 2-minute HS256 token
+                                           │ mints LiveKit access token (2 min)
                                            ▼
-  client ──wss://media/ws/media { token } ─▶ media ── verify HMAC locally ──▶ admit
+  client ──────────────────────────────▶ LiveKit ── forward media
 ```
 
-The consequences are the point:
+The benefits:
 
-* **No database query on the media path.** Admitting a participant costs one
-  HMAC verification. Forwarding a packet costs nothing at all — it never
-  touches the control plane.
-* **PostgreSQL never sees RTP.** Nor does the API: no audio or video byte
-  passes through `apps/api` at any point.
-* **The blast radius is bounded.** A compromised media server can forge media
-  tokens for its own secret, and nothing else. It cannot mint user sessions,
-  because `MEDIA_TOKEN_SECRET` and `JWT_SECRET` are different keys — the API
-  refuses to start if they match.
-
-The token is a *snapshot of an authorization decision*, which is exactly why it
-lives for two minutes rather than an hour. Live permission changes are a
-signalling-level concern, not a token-lifetime concern.
+* **No database query on the media path.** LiveKit admits a participant with a
+  simple signature check on the token.
+* **PostgreSQL never sees RTP.** No audio or video passes through `apps/api`.
+* **The API can scale and redeploy independently.** Calls continue unaffected
+  while the control plane updates.
+* **LiveKit handles all media complexity.** Codec negotiation, bandwidth
+  adaptation, participant management — all delegated to a proven service.
 
 ### Layers inside the API
 
@@ -91,20 +69,17 @@ return domain errors. The domain crate has no database dependency of its own,
 so its rules are unit-testable without a connection — which is why the
 permission model has 25 tests that run in microseconds.
 
-### Dependency direction across the boundary
+### Dependency direction
 
 ```
 apps/api ──▶ genzh-{auth,community,room,messaging,graph} ──▶ genzh-domain ──▶ (sqlx)
     │
-    └──▶ genzh-core ◀── genzh-room ◀── apps/media
-                  ▲
-        the ONLY crate both planes share:
-        token claims, media permissions, ICE config,
-        codec registry, track kinds, room events, VAD trait
+    └──▶ (standard dependencies: axum, tokio, etc.)
 ```
 
-`genzh-core` has no SQLx, no HTTP, and no dependency on `genzh-domain`.
-The media plane therefore *cannot* reference a database model even by accident.
+The API has no dependency on media infrastructure. LiveKit integration happens
+purely at the HTTP level: the API generates tokens and responds with LiveKit
+connection details; the client connects to LiveKit directly.
 
 ---
 
@@ -113,9 +88,9 @@ The media plane therefore *cannot* reference a database model even by accident.
 ```
 genzh-backend/
 ├── Cargo.toml                   workspace, shared dependency versions
-├── docker-compose.yml           postgres + api + media
+├── docker-compose.yml           postgres + api + livekit (docker-compose handles livekit setup)
 ├── Dockerfile.api
-├── Dockerfile.media
+├── Dockerfile.seed              seed database for development
 ├── .env.example
 │
 ├── apps/
@@ -132,15 +107,6 @@ genzh-backend/
 │   │   │   └── routes/          thin handlers
 │   │   └── tests/               integration tests against real PostgreSQL
 │   │
-│   ├── media/                   media plane
-│   │   └── src/
-│   │       ├── main.rs          startup, health, graceful room teardown
-│   │       ├── config.rs        no DATABASE_URL, no JWT_SECRET
-│   │       ├── state.rs
-│   │       ├── auth.rs          media token verification — the whole trust boundary
-│   │       ├── signaling.rs     the per-connection loop
-│   │       └── error.rs         close codes
-│   │
 │   └── web/                     web client (see apps/web/README.md)
 │       └── src/
 │           ├── components/      Base UI + CSS Modules, one folder each
@@ -148,7 +114,7 @@ genzh-backend/
 │           └── lib/
 │               ├── api/         typed client
 │               ├── auth/        session and refresh
-│               └── media/       VoiceClient — the browser half of the SFU
+│               └── media/       LiveKit client integration
 │
 ├── crates/
 │   ├── domain/                  ids, entities, RoomType, Permission — pure
@@ -156,14 +122,15 @@ genzh-backend/
 │   ├── auth/                    Argon2id, JWT, sessions
 │   ├── community/               communities, roles, the permission resolver
 │   ├── social/                  friendships, blocks
-│   ├── room/                    rooms, room authorization, media session issuing
+│   ├── room/                    rooms, room authorization, LiveKit token issuing
 │   ├── messaging/               messages, reactions
-│   ├── media-core/              the two-plane contract (no db, no http)
-│   ├── media-signaling/         the wire protocol and its limits
-│   └── media-room/              rooms, participants, tracks, and the SFU
+│   ├── notification/            notifications
+│   ├── admin/                   admin functions
+│   ├── cron/                    scheduled jobs
+│   └── recommend/               recommendation engine
 │
-├── migrations/                  0001_initial_schema.sql, 0002_seed_permissions.sql
-└── docs/                        API reference, signalling protocol, SFU internals
+├── migrations/                  database schema and seed data
+└── docs/                        API reference
 ```
 
 ---
@@ -176,6 +143,8 @@ Rust 1.90+ and PostgreSQL 14+. Nothing else.
 
 ### Local, without Docker
 
+Requires: PostgreSQL 14+ and a running LiveKit server.
+
 ```bash
 # 1. secrets
 cp .env.example .env
@@ -185,30 +154,33 @@ printf 'MEDIA_TOKEN_SECRET=%s\n' "$(openssl rand -base64 48)" >> .env
 # 2. database
 createdb social
 
-# 3. build and check
+# 3. configure LiveKit
+# Point LIVEKIT_URL to your LiveKit server (or docker-compose livekit service)
+# export LIVEKIT_URL="ws://localhost:7880"
+# export LIVEKIT_API_KEY="devkey"
+# export LIVEKIT_API_SECRET="secret"
+
+# 4. build and check
 cargo check --workspace
 cargo test  --workspace
 
-# 4. run (two terminals)
-cargo run -p api      # :8080 — applies migrations on startup
-cargo run -p media    # :8081
+# 5. run API (applies migrations on startup)
+cargo run -p api      # :8080
 ```
 
 ```bash
 curl -s localhost:8080/ready | jq
-curl -s localhost:8081/ready | jq
 ```
 
 ### With Docker
 
 ```bash
-cp .env.example .env   # fill in the two secrets first
+cp .env.example .env
+# Optionally fill in JWT_SECRET and MEDIA_TOKEN_SECRET for production
 docker compose up --build
 ```
 
-On Linux, prefer `network_mode: host` for the `media` service — WebRTC needs
-real UDP reachability, and bridge NAT breaks host candidates. See the comment
-in `Dockerfile.media`.
+LiveKit is included in the compose stack and handles all media streaming.
 
 ---
 
@@ -218,15 +190,15 @@ Everything is in `.env.example` with commentary. The ones that matter most:
 
 | Variable | Used by | Notes |
 |---|---|---|
-| `DATABASE_URL` | api | The media server has none, by design. |
+| `DATABASE_URL` | api | PostgreSQL connection string. |
 | `JWT_SECRET` | api | Signs user access tokens. No default; ≥32 chars. |
-| `MEDIA_TOKEN_SECRET` | api + media | The shared key. **Must differ from `JWT_SECRET`** — startup fails otherwise. |
-| `MEDIA_SERVER_URL` | api | Comma-separated WS URLs, as a *client* dials them. |
-| `STUN_URL` | both | Discovers the public address. |
-| `TURN_URL` / `TURN_USERNAME` / `TURN_PASSWORD` | both | Without a relay, restrictive networks cannot connect at all. |
-| `MEDIA_CODECS` | media | e.g. `opus,vp8,h264`. Blank = everything. |
-| `MEDIA_VAD_MODE` | media | `client` (default) or `server`. |
-| `RUST_LOG` | both | e.g. `info,api=debug`. |
+| `MEDIA_TOKEN_SECRET` | api | Secret for signing LiveKit access tokens. **Must differ from `JWT_SECRET`**. |
+| `LIVEKIT_URL` | api + client | WebSocket URL for LiveKit server. |
+| `LIVEKIT_API_KEY` | api | LiveKit API key for token generation. |
+| `LIVEKIT_API_SECRET` | api | LiveKit API secret for token generation. |
+| `STUN_URL` | client | STUN server for NAT traversal (optional). |
+| `TURN_URL` / `TURN_USERNAME` / `TURN_PASSWORD` | client | TURN server for restrictive networks (optional). |
+| `RUST_LOG` | api | e.g. `info,api=debug`. |
 
 ---
 
@@ -320,112 +292,39 @@ moderator takes effect on their next request rather than in fifteen minutes.
 
 ---
 
-## 7. Media signalling protocol
+## 7. LiveKit Integration
 
-Full reference in [`docs/media-protocol.md`](docs/media-protocol.md).
-JSON over `wss://…/ws/media`, tagged on `type`, versioned by
-`protocol_version` in the `joined` reply.
+The API does not handle media directly. When a client joins a voice room:
 
-**Each participant runs two peer connections:**
+1. The client calls `POST /api/v1/rooms/{id}/media/join`.
+2. The API verifies permissions and generates a LiveKit access token (2-minute TTL).
+3. The client receives the token and connects to LiveKit.
+4. LiveKit handles all media: encoding, decoding, forwarding, bandwidth management.
 
-| Target | Offerer | Carries |
-|---|---|---|
-| `publisher` | the client | that participant's own mic / camera / screen |
-| `subscriber` | the server | everybody else's tracks |
+The client uses the LiveKit JavaScript SDK to manage the WebRTC connection,
+handle tracks, and control the local mic/camera.
 
-This is a deliberate departure from a single-connection design, and it buys
-one specific thing: **there is never a glare condition**. With one connection,
-the server adds a track (someone joined) at the same moment the client adds one
-(the user unmuted), both sides offer, and correct handling needs rollback and a
-politeness rule. With one offerer per connection the problem does not exist.
-
-```
-client → join, offer(publisher), answer(subscriber), ice_candidate,
-         publish_intent, subscribe, unsubscribe, mute, camera,
-         screen_share, speaking, ping, leave
-
-server → joined, offer(subscriber), answer(publisher), ice_candidate,
-         event{participant_joined, participant_left, track_published,
-               track_unpublished, speaking_started, speaking_stopped,
-               microphone_muted, microphone_unmuted, camera_enabled,
-               camera_disabled, screen_share_started, screen_share_stopped},
-         error, pong
-```
-
-Realtime events are never written to PostgreSQL. A speaking indicator that
-flips several times a second is worthless a minute later, and persisting it
-would put the media plane back on the database's critical path.
-
----
-
-## 8. How the SFU works
-
-Full details in [`docs/sfu.md`](docs/sfu.md), and the code is heavily commented
-in `crates/media-room/src/sfu.rs`.
-
-```
-  Alice ──publisher PC──▶ on_track ──▶ pump task ──▶ tokio::broadcast (512 slots)
-                                                            │
-                                  ┌─────────────────────────┼──────────────────┐
-                                  ▼                         ▼                  ▼
-                            Bob's forward task        Sarah's             Mike's
-                                  │                         │                  │
-                            subscriber PC             subscriber PC      subscriber PC
-```
-
-**Nothing is decoded and nothing is re-encoded.** The packet that arrives is
-the packet that leaves, with three header fields rewritten. CPU grows with
-*packets*, not with pixels.
-
-Those three rewrites are mandatory, and each one is a real constraint of the
-underlying stack (`rtc::RtpSender::write_rtp` validates every packet):
-
-1. **SSRC** — each subscriber's track has its own synchronisation source;
-   forwarding the publisher's is rejected with `ErrSenderWithNoSSRCs`.
-2. **Payload type** — Alice's browser may have negotiated Opus as PT 111 while
-   Bob's negotiated 109. The correct value is discovered from the subscriber's
-   own sender parameters after negotiation and cached.
-3. **Header extensions** — extension *ids* are per-connection, so the
-   publisher's are meaningless on a subscriber's leg. They are stripped once in
-   the pump task rather than remapped per subscriber.
-
-Sequence numbers, timestamps, marker bits and the payload pass through
-untouched, which is what keeps the stream decodable.
-
-Other load-bearing details:
-
-* **No payload copying.** `rtp::Packet`'s payload is `Bytes`; cloning it per
-  subscriber bumps a refcount.
-* **One task per track, not per packet.** A room's task count grows with tracks.
-* **Bounded everywhere.** A subscriber that stops draining is *lagged* by the
-  broadcast channel and loses packets — then gets a keyframe. Buffering instead
-  would trade a momentary glitch for unbounded memory and growing latency.
-* **Keyframes are relayed, not generated.** An SFU has no encoder. Subscriber
-  PLIs are forwarded upstream to the publisher, rate-limited to one per 500 ms
-  so ten simultaneous joins do not become ten keyframe requests.
-* **Audio is auto-subscribed; video is not.** Nobody joins a hangout and then
-  asks to hear each person individually. But a twenty-person room must not push
-  nineteen video streams at a phone on cellular, so cameras and screen shares
-  are explicit (`MEDIA_AUTO_SUBSCRIBE_VIDEO=true` overrides).
-
-Built on **webrtc-rs 0.20.3** (`webrtc` + `rtc`), whose API was verified
-against the installed crate source rather than assumed — 0.20 is a rewrite over
-a sans-I/O core and shares almost no surface with 0.11-era tutorials.
+Full API reference in [`docs/api.md`](docs/api.md).
 
 ---
 
 ## 9. Running two clients against a voice room
 
-`apps/web` is the client. Three processes:
+With docker-compose (recommended for development):
 
 ```bash
-# terminal 1 — control plane
+cp .env.example .env
+# Fill in JWT_SECRET and MEDIA_TOKEN_SECRET if not present
+docker compose up --build
+```
+
+Or locally with Cargo (requires PostgreSQL and LiveKit running separately):
+
+```bash
+# terminal 1 — control plane + PostgreSQL
 CORS_ALLOWED_ORIGINS=http://localhost:5173 cargo run -p api
 
-# terminal 2 — media plane
-cargo run -p media
-
-# terminal 3 — web client
+# terminal 2 — web client
 cd apps/web && npm install && npm run dev
 ```
 
@@ -438,92 +337,70 @@ Then, in two browser windows (or two devices on the same network):
    **Join with an invite**, and open the same room.
 5. Both press **Join voice**, then **Unmute**.
 
-Each participant appears with a speaking ring driven by the SFU's
-`speaking_started` / `speaking_stopped` events. Leaving, or closing the tab,
-tears down both peer connections and releases the microphone.
+Each participant connects to LiveKit. Leaving, or closing the tab,
+tears down the WebRTC connection and releases the microphone.
 
 To confirm media is actually flowing rather than trusting the UI, open
-`chrome://webrtc-internals` and look for non-zero `packetsSent` on the
-publisher connection and `packetsReceived` on the subscriber.
+`chrome://webrtc-internals` and look for non-zero `packetsSent` and
+`packetsReceived` on the connection.
 
-## 10. Known limitations
+## 8. Known limitations
 
-Honest list. None of these are hidden in the code.
-
-1. **No simulcast or SVC yet.** Every subscriber gets the publisher's single
-   encoding. A participant on cellular receives the same 2 Mbps stream as one on
-   fibre. The codec registry and per-subscription track model are where layer
-   selection will go; the wire protocol does not need to change.
-2. **No transcoding, deliberately.** A client that cannot decode a negotiated
-   codec simply does not receive that track. Transcoding is a CPU-per-stream
-   cost that changes the shape of the whole service.
-3. **Server-side VAD needs a configured extension id.** `MEDIA_VAD_MODE=server`
-   reads the RFC 6464 audio level, but the negotiated extension id is chosen by
-   the offerer and this build reads `MEDIA_AUDIO_LEVEL_EXT_ID` instead of the
-   negotiated value. The default mode is client-reported, so this does not
-   affect normal operation — but it is why the default is what it is.
-4. **Room state is in memory.** A media server restart drops its calls. This is
-   inherent to owning the UDP sockets; the fix is draining and re-signalling,
-   not shared state.
-5. **Media server selection is a hash of the room id.** Stable and correct, but
-   changing `MEDIA_SERVER_URL` reshuffles rooms, and it does not consider load.
-   `MediaServerSelector` is the seam.
-6. **Rate limiting is per-process.** Two API replicas mean two budgets, and
-   the same is true of the per-account anti-spam guard. The `RateLimiter` and
-   `FloodGuard` traits exist precisely so both can become shared.
-7. **`X-Forwarded-For` is not trusted.** Rate limiting keys on the peer address,
+1. **Rate limiting is per-process.** Two API replicas mean two separate budgets.
+   The `RateLimiter` and `FloodGuard` traits exist precisely so both can become
+   shared (e.g., backed by Redis).
+2. **`X-Forwarded-For` is not trusted.** Rate limiting keys on the peer address,
    which behind a proxy is the proxy. Correct rather than convenient; the proxy
    should enforce it or be configured as trusted.
-8. **Integration tests skip without a database.** `cargo test --workspace`
+3. **Integration tests skip without a database.** `cargo test --workspace`
    passes on a fresh clone because the database-backed tests announce a skip.
    Set `TEST_DATABASE_URL` to actually run them — and do, in CI.
-9. **No presence, activities, marketplace or monetisation.** Out of scope for
+4. **No presence, activities, marketplace or monetisation.** Out of scope for
    this phase; the schema and room model leave room for them.
-10. **One screen share per participant**, enforced by the track model.
+5. **Media features are LiveKit's responsibility.** Simulcast, SVC, transcoding,
+   dynamic bandwidth adaptation, and other media-layer features are handled by
+   LiveKit and its configuration.
 
 ---
 
-## 11. Next steps for production scale
+## 9. Next steps for production scale
 
 Roughly in the order the load will demand them.
 
-**10 → 100 users.** What is here. One API, one media server, one PostgreSQL.
-Add a TURN server (coturn) before real users arrive — without a relay, a
-meaningful fraction of mobile networks cannot connect at all.
+**10 → 100 users.** What is here. One API instance, one PostgreSQL database,
+LiveKit media server. Add a TURN server (coturn) before real users arrive —
+without a relay, a meaningful fraction of mobile networks cannot connect at all.
 
-**100 → 1,000.** Several API replicas behind a load balancer (they are already
-stateless). Several media servers — room-to-server mapping already exists.
-Move rate limiting and the anti-spam guard behind a shared store. Add a read replica if message history
-becomes the hot path.
+**100 → 1,000 users.** Scale the API horizontally: several replicas behind a
+load balancer (they are already stateless). Move rate limiting and the
+anti-spam guard behind a shared store (e.g., Redis). Add a PostgreSQL read
+replica if message history becomes the hot path.
 
-**1,000 → 10,000.**
-* *Simulcast.* The single biggest quality-per-bit win, and the point where a
-  20-person video room becomes usable on a phone.
-* *A real media-server registry.* Replace the hash with servers that register
-  themselves and report load, so rooms land on capacity rather than on a
-  modulus. `MediaServerSelector` is the interface.
+**1,000 → 10,000 users.**
 * *Redis for presence and the room directory* — the first genuinely shared
-  state. Note what it is *not* for: not media, not authorization, not caching
-  permissions until there is a measured problem.
+  state. Note what it is *not* for: not authorization, not caching permissions
+  until there is a measured problem.
 * *Partition messages by room*, or move history to a time-series-shaped store.
+* *LiveKit federation or multi-region deployment* — for latency-sensitive
+  real-time communication.
 
-**10,000+.**
-* *Cascading SFUs*, so a room can span servers and regions.
-* *Regional media deployment* — latency is geography, and no amount of
-  optimisation beats a shorter path.
-* *A separate WebSocket presence service*; presence fan-out has a very
-  different shape from media forwarding.
+**10,000+ users.**
 * *An event bus* (NATS or Kafka) once several services genuinely need the same
   events. Not before: today there is exactly one producer and one consumer per
   event, and a broker between them would be pure operational cost.
+* *Separate WebSocket presence service* if presence fan-out becomes a bottleneck.
 
 What deliberately does **not** appear on this list: microservices per domain,
 Kubernetes, CQRS, event sourcing. Each solves a problem this system does not
 have, and each adds a failure mode it would then need to handle.
 
+Media scaling is LiveKit's responsibility. The choice of LiveKit means
+simulcast, SVC, adaptive bitrate, and regional deployment are available
+but outside this backend's scope.
+
 ---
 
-## Testing
+## 10. Testing
 
 ```bash
 cargo test --workspace                                   # unit tests, no database needed
@@ -535,15 +412,9 @@ Roughly 200 tests. The ones worth knowing about:
 | Area | Where |
 |---|---|
 | Permission resolution, room overrides, escalation guard | `crates/domain`, `crates/community` |
-| Media token: forged, expired, wrong room, wrong issuer, tampered | `crates/media-core`, `apps/media/src/auth.rs` |
-| Room lifecycle: join, publish, subscribe, unpublish, leave, destroy | `crates/media-room` |
-| RTP fan-out, lag behaviour, header stripping, keyframe relay | `crates/media-room` |
-| Register → community → voice room → media token, end to end | `apps/api/tests/api.rs` |
-| Outsiders get no room access and no media token | `apps/api/tests/api.rs` |
-
-The media-room tests run the whole participant lifecycle against a recording
-transport double, so "does leaving detach every subscriber?" is answerable in
-milliseconds instead of by hand with two browsers.
+| LiveKit token: forged, expired, wrong room, wrong issuer, tampered | `crates/room`, `apps/api/src/routes/media.rs` |
+| Register → community → voice room → LiveKit token, end to end | `apps/api/tests/api.rs` |
+| Outsiders get no room access and no LiveKit token | `apps/api/tests/api.rs` |
 
 ## License
 
