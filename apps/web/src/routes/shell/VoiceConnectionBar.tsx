@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { MicIcon, MicOffIcon, PhoneOffIcon } from '@/components/Icons'
 import { Tooltip } from '@/components/Tooltip'
 import { cx } from '@/lib/cx'
-import { useVoice } from '@/lib/media'
+import { useVoiceRoom } from '@/lib/media'
 
 import styles from './shell.module.css'
 
@@ -14,7 +14,7 @@ import styles from './shell.module.css'
  * and quick in-call controls (Mute / Disconnect).
  */
 export function VoiceConnectionBar() {
-  const voice = useVoice()
+  const voice = useVoiceRoom()
   const navigate = useNavigate()
 
   if (!voice.activeRoomId || voice.status === 'idle') return null

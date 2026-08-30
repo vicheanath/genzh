@@ -59,14 +59,14 @@ interface VoicePanelProps {
 
 export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) {
   const { user } = useAuth()
-  const voice = useVoiceRoom(room.id)
+  const voice = useVoiceRoom()
 
   const isStage = room.room_type === 'stage'
   const canSpeak = can(room.your_permissions, 'speak')
   const canShare = can(room.your_permissions, 'screen_share')
   const canUseVideo = can(room.your_permissions, 'use_video')
   const canModerate = can(room.your_permissions, 'manage_room')
-  const isCurrentRoom = voice.isCurrent
+  const isCurrentRoom = voice.activeRoomId === room.id
   const connected = isCurrentRoom && voice.status === 'connected'
   const pending = isCurrentRoom && (voice.status === 'connecting' || voice.status === 'reconnecting')
   const inOtherRoom = Boolean(voice.activeRoomId && voice.activeRoomId !== room.id)
@@ -124,7 +124,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
   // shows one and offers the rest as a switcher rather than picking silently.
   const presentations = useMemo<Presentation[]>(() => {
     const list: Presentation[] = []
-    if (voice.isScreenSharing) {
+    if (voice.screenSharing) {
       list.push({ key: 'self', name: 'Your screen', isSelf: true, stream: voice.screenStream })
     }
     for (const participant of voice.participants) {
@@ -137,7 +137,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
       })
     }
     return list
-  }, [voice.isScreenSharing, voice.screenStream, voice.participants])
+  }, [voice.screenSharing, voice.screenStream, voice.participants])
 
   const activePresentation =
     presentations.find((item) => item.key === pinnedPresenter) ?? presentations[0] ?? null
@@ -306,7 +306,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                   speaking={voice.speaking}
                   muted={voice.muted}
                   cameraStream={voice.cameraStream}
-                  screenSharing={voice.isScreenSharing}
+                  screenSharing={voice.screenSharing}
                   compact
                   you
                 />
@@ -367,7 +367,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
                     muted={voice.muted}
                     role={stageRole}
                     cameraStream={voice.cameraStream}
-                    screenSharing={voice.isScreenSharing}
+                    screenSharing={voice.screenSharing}
                     you
                     onStepDown={
                       isStage && stageRole !== 'host'
@@ -450,7 +450,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
             content={
               !canUseVideo
                 ? 'You do not have permission to use video here'
-                : voice.isCameraOn
+                : voice.cameraOn
                   ? 'Turn camera off'
                   : 'Turn camera on'
             }
@@ -458,13 +458,13 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
             <span className={styles.controlSlot}>
               <button
                 type="button"
-                className={cx(styles.controlBtn, voice.isCameraOn && styles.controlBtnActive)}
+                className={cx(styles.controlBtn, voice.cameraOn && styles.controlBtnActive)}
                 onClick={() => void voice.toggleCamera()}
                 disabled={!connected || !canUseVideo}
-                aria-label={voice.isCameraOn ? 'Turn camera off' : 'Turn camera on'}
-                aria-pressed={voice.isCameraOn}
+                aria-label={voice.cameraOn ? 'Turn camera off' : 'Turn camera on'}
+                aria-pressed={voice.cameraOn}
               >
-                {voice.isCameraOn ? <VideoIcon size={20} /> : <VideoOffIcon size={20} />}
+                {voice.cameraOn ? <VideoIcon size={20} /> : <VideoOffIcon size={20} />}
               </button>
             </span>
           </Tooltip>
@@ -473,7 +473,7 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
             content={
               !canShare
                 ? 'You do not have permission to share here'
-                : voice.isScreenSharing
+                : voice.screenSharing
                   ? 'Stop sharing'
                   : 'Share your screen'
             }
@@ -483,13 +483,13 @@ export function VoicePanel({ room, onToggleChat, isChatOpen }: VoicePanelProps) 
             <span className={styles.controlSlot}>
               <button
                 type="button"
-                className={cx(styles.controlBtn, voice.isScreenSharing && styles.controlBtnActive)}
+                className={cx(styles.controlBtn, voice.screenSharing && styles.controlBtnActive)}
                 onClick={() => void voice.toggleScreenShare()}
                 disabled={!connected || !canShare}
                 aria-label="Share your screen"
-                aria-pressed={voice.isScreenSharing}
+                aria-pressed={voice.screenSharing}
               >
-                {voice.isScreenSharing ? (
+                {voice.screenSharing ? (
                   <ScreenShareOffIcon size={20} />
                 ) : (
                   <ScreenShareIcon size={20} />

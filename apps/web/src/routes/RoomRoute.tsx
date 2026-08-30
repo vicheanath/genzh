@@ -143,9 +143,9 @@ function RoomView({ room }: { room: RoomWithPermissions }) {
   // A direct conversation is its own call: the media session belongs to this
   // room, so calling somebody is joining the room you are already reading.
   const setPersona = useSetPersonaMutation(room.id)
-  const voice = useVoiceRoom(room.id)
+  const voice = useVoiceRoom()
   const call = useCall()
-  const inCall = isDM && voice.isCurrent && voice.status !== 'idle'
+  const inCall = isDM && voice.activeRoomId === room.id && voice.status !== 'idle'
   const ringing = call.outgoing?.roomId === room.id
 
   async function startCall(video: boolean) {

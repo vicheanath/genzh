@@ -13,7 +13,7 @@ import { useEndCallMutation, useRingMutation, type CallEndReason } from '@/featu
 import { useSocketEvent } from '@/features/realtime'
 import type { Uuid } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useVoice } from '@/lib/media'
+import { useVoiceRoom } from '@/lib/media'
 
 /**
  * How long a ring stands before it is treated as missed.
@@ -70,7 +70,7 @@ const CallContext = createContext<CallValue | null>(null)
  */
 export function CallProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  const voice = useVoice()
+  const voice = useVoiceRoom()
   const ring = useRingMutation()
   const endCall = useEndCallMutation()
 
@@ -86,7 +86,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const outgoingRef = useRef<OutgoingCall | null>(null)
   outgoingRef.current = outgoing
 
-  // `useVoice()` hands back a fresh object on every render of its provider —
+  // `useVoiceRoom()` hands back a fresh object on every render of its provider —
   // and it re-renders on every speaking flag, several times a second while
   // somebody talks. Depending on it directly would tear down and re-attach the
   // socket listeners at that rate and restart the ring clock each time, so a
