@@ -1,7 +1,9 @@
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { FlameIcon, GemIcon, TrophyIcon } from '@/components/Icons'
 import { Skeleton } from '@/components/Skeleton'
 import { useToast } from '@/components/Toast'
+import { cx } from '@/lib/cx'
 import { errorText } from '@/lib/errors'
 
 import { useBalanceQuery, useDailyCheckinMutation } from './api'
@@ -20,6 +22,9 @@ export function WalletStrip() {
   const toast = useToast()
 
   if (balance.isLoading) return <Skeleton height="6rem" />
+  if (balance.error) {
+    return <Callout tone="danger">{errorText(balance.error, 'Could not load your balance')}</Callout>
+  }
 
   const data = balance.data
   if (!data) return null
@@ -57,10 +62,7 @@ export function WalletStrip() {
           <span className={styles.walletLabel}>
             <FlameIcon
               size={14}
-              style={{
-                color: data.daily_streak > 0 ? '#f97316' : 'inherit',
-                filter: data.daily_streak > 0 ? 'drop-shadow(0 0 6px rgba(249, 115, 22, 0.8))' : 'none',
-              }}
+              className={cx(styles.streakFlame, data.daily_streak > 0 && styles.streakFlameLit)}
             />{' '}
             Streak
           </span>
@@ -77,7 +79,10 @@ export function WalletStrip() {
       >
         <div className={styles.claimCopy}>
           <span className={styles.claimTitle}>
-            <GemIcon size={18} style={{ color: data.can_claim_daily ? 'var(--color-accent)' : 'inherit' }} />
+            <GemIcon
+              size={18}
+              className={cx(styles.claimGem, data.can_claim_daily && styles.claimGemActive)}
+            />
             {data.can_claim_daily ? 'Your daily points are ready to claim!' : 'Claimed for today'}
           </span>
           <span className={styles.claimHint}>

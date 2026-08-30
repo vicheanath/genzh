@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
 
+import { Callout } from '@/components/Callout'
 import { Skeleton } from '@/components/Skeleton'
 import { useToast } from '@/components/Toast'
 import { useCurrentUser } from '@/features/api'
 import { errorText } from '@/lib/errors'
+
+import styles from './rewards.module.css'
 
 import type { EquipInput, EquippedCosmetics, ItemType, StoreItem, StoreListing } from './api'
 import {
@@ -194,9 +197,12 @@ export function OutfitStudioPanel() {
   if (storeQuery.isLoading) {
     return <Skeleton height="24rem" />
   }
+  if (storeQuery.error) {
+    return <Callout tone="danger">{errorText(storeQuery.error, 'Could not load the store')}</Callout>
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+    <div className={styles.stackLg}>
       <OutfitStudioStage
         displayName={name}
         handle={me.data?.handle}

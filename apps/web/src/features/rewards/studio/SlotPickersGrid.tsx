@@ -4,6 +4,7 @@ import { Select } from '@/components/Select'
 
 import type { ItemType, StoreItem, StoreListing } from '../api'
 import { slotLabel } from '../slots'
+import styles from '../rewards.module.css'
 
 export interface SlotPickersGridProps {
   itemsBySlot: Record<ItemType, StoreListing[]>
@@ -33,18 +34,12 @@ export function SlotPickersGrid({
   onSlotChange,
 }: SlotPickersGridProps) {
   return (
-    <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      <h3 style={{ margin: 0, fontSize: 'var(--text-base)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <section className={styles.sectionStack}>
+      <h3 className={styles.panelTitle}>
         <PackageIcon size={16} /> Customize Every Slot
       </h3>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))',
-          gap: 'var(--space-3)',
-        }}
-      >
+      <div className={styles.slotPickerGrid}>
         {ALL_SLOTS.map((slot) => {
           const list = itemsBySlot[slot] ?? []
           const currentSelected = studioWorn[slot]
@@ -57,22 +52,9 @@ export function SlotPickersGrid({
           ]
 
           return (
-            <div
-              key={slot}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 'var(--space-1)',
-                padding: 'var(--space-3)',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-md, 0.5rem)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
-                  {slotLabel(slot)}
-                </span>
+            <div key={slot} className={styles.slotPickerCard}>
+              <div className={styles.cardTitleRow}>
+                <span className={styles.slotPickerLabel}>{slotLabel(slot)}</span>
                 {currentSelected && (
                   <Badge tone={currentSelected.price_points === 0 ? 'neutral' : 'accent'}>
                     {currentSelected.rarity}

@@ -77,18 +77,7 @@ function LedgerRow({ entry }: { entry: BalanceTransaction }) {
 
   return (
     <div className={styles.row}>
-      <div
-        style={{
-          width: '2rem',
-          height: '2rem',
-          borderRadius: 'var(--radius-full)',
-          display: 'grid',
-          placeItems: 'center',
-          background: credit ? 'rgba(34, 197, 94, 0.12)' : 'var(--color-sunken)',
-          color: credit ? 'var(--color-success)' : 'var(--color-text-muted)',
-          flexShrink: 0,
-        }}
-      >
+      <div className={cx(styles.ledgerIcon, credit && styles.ledgerIconCredit)}>
         <IconComponent size={14} />
       </div>
 

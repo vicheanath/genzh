@@ -32,7 +32,7 @@ export function ReferralHub() {
 
   return (
     <div className={styles.referral}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', minWidth: 0 }}>
+      <div className={styles.referralColumn}>
         <section className={styles.panel}>
           <h3 className={styles.panelTitle}>Your invite link</h3>
           <span className={styles.code}>{data.referral_code}</span>
@@ -106,7 +106,7 @@ export function ReferralHub() {
           ))}
         </div>
 
-        <div className={styles.row} style={{ borderBottom: 'none', paddingTop: 'var(--space-3)' }}>
+        <div className={cx(styles.row, styles.rowNoBorder)}>
           <UsersIcon size={15} />
           <div className={styles.rowMain}>
             <span className={styles.rowTitle}>{data.total_referred} joined</span>

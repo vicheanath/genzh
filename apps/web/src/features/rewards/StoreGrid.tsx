@@ -14,6 +14,8 @@ import {
 import { GemIcon, SparklesIcon, XIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 import { Skeleton } from '@/components/Skeleton'
+import { Toggle, ToggleGroup } from '@/components/ToggleGroup'
+import { Tooltip } from '@/components/Tooltip'
 import { useToast } from '@/components/Toast'
 import { useCurrentUser } from '@/features/api'
 import { errorText } from '@/lib/errors'
@@ -96,10 +98,10 @@ export function StoreGrid() {
   }, [items.data, slot, rarity, search])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+    <div className={styles.stack}>
       {/* Search & Slot Filters */}
-      <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div style={{ flex: '1 1 14rem', maxWidth: '22rem' }}>
+      <div className={styles.filterRow}>
+        <div className={styles.searchField}>
           <Input
             label="Search items"
             placeholder="Search cosmetics…"
@@ -108,36 +110,39 @@ export function StoreGrid() {
           />
         </div>
 
-        <div className={styles.filters} style={{ flex: 1 }}>
+        <ToggleGroup
+          variant="loose"
+          size="sm"
+          aria-label="Filter by item type"
+          className={styles.filters}
+          value={[slot]}
+          onValueChange={(next) => setSlot((next[0] as ItemType | 'all' | undefined) ?? 'all')}
+        >
           {SLOTS.map((option) => {
             const count = slotCounts[option.value] ?? 0
             return (
-              <Button
-                key={option.value}
-                size="sm"
-                variant={slot === option.value ? 'primary' : 'secondary'}
-                onClick={() => setSlot(option.value)}
-              >
-                {option.label} {count > 0 && <span style={{ opacity: 0.7, fontSize: '0.85em', marginLeft: 2 }}>({count})</span>}
-              </Button>
+              <Toggle key={option.value} value={option.value}>
+                {option.label} {count > 0 && <span className={styles.countBadge}>({count})</span>}
+              </Toggle>
             )
           })}
-        </div>
+        </ToggleGroup>
       </div>
 
       {/* Rarity Pills */}
-      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+      <ToggleGroup
+        variant="loose"
+        size="sm"
+        aria-label="Filter by rarity"
+        value={[rarity]}
+        onValueChange={(next) => setRarity((next[0] as ItemRarity | 'all' | undefined) ?? 'all')}
+      >
         {RARITIES.map((r) => (
-          <Button
-            key={r.value}
-            size="sm"
-            variant={rarity === r.value ? 'primary' : 'ghost'}
-            onClick={() => setRarity(r.value)}
-          >
+          <Toggle key={r.value} value={r.value}>
             {r.label}
-          </Button>
+          </Toggle>
         ))}
-      </div>
+      </ToggleGroup>
 
       {/* Try-on banner preview when active */}
       {tryOnItem && <TryOnPreview item={tryOnItem} onClose={() => setTryOnItem(null)} />}
@@ -198,20 +203,9 @@ function TryOnPreview({ item, onClose }: { item: StoreListing; onClose: () => vo
   }
 
   return (
-    <div
-      style={{
-        padding: 'var(--space-4)',
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-accent)',
-        borderRadius: 'var(--radius-lg, 0.75rem)',
-        boxShadow: 'var(--glow-accent)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+    <div className={styles.spotlightPanel}>
+      <div className={styles.spotlightHeader}>
+        <div className={styles.spotlightHeading}>
           <SparklesIcon size={16} />
           <strong>Trying on: {item.name}</strong>
           <Badge tone={RARITY_TONE[item.rarity]}>{item.rarity}</Badge>
@@ -221,15 +215,8 @@ function TryOnPreview({ item, onClose }: { item: StoreListing; onClose: () => vo
         </Button>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))',
-          gap: 'var(--space-4)',
-          alignItems: 'center',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+      <div className={styles.tryOnGrid}>
+        <div className={styles.tryOnIdentity}>
           <DecoratedAvatar
             name={name}
             src={me.data?.profile?.avatar_url}
@@ -237,8 +224,8 @@ function TryOnPreview({ item, onClose }: { item: StoreListing; onClose: () => vo
             cosmetics={previewWorn}
             showBadge
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <div className={styles.tryOnNameColumn}>
+            <div className={styles.tryOnNameRow}>
               <CosmeticName
                 item={previewWorn.name_color}
                 fontItem={previewWorn.name_font}
@@ -253,7 +240,7 @@ function TryOnPreview({ item, onClose }: { item: StoreListing; onClose: () => vo
         </div>
 
         <CosmeticChatBubble item={previewWorn.chat_bubble}>
-          <div style={{ fontSize: 'var(--text-xs)' }}>
+          <div className={styles.tryOnMessage}>
             This is a preview of your chat message with <strong>{item.name}</strong>!
           </div>
         </CosmeticChatBubble>
@@ -322,15 +309,12 @@ function StoreCard({
           )}
         </span>
 
-        <div style={{ display: 'flex', gap: 'var(--space-1)', alignItems: 'center' }}>
-          <Button
-            size="sm"
-            variant={isTryingOn ? 'primary' : 'ghost'}
-            onClick={onTryOn}
-            title="Try this on your avatar and name"
-          >
-            {isTryingOn ? 'Trying' : 'Try on'}
-          </Button>
+        <div className={styles.badgeRow}>
+          <Tooltip content="Try this on your avatar and name">
+            <Button size="sm" variant={isTryingOn ? 'primary' : 'ghost'} onClick={onTryOn}>
+              {isTryingOn ? 'Trying' : 'Try on'}
+            </Button>
+          </Tooltip>
 
           {item.owned ? (
             <Badge tone="success">{item.equipped ? 'Equipped' : 'Owned'}</Badge>

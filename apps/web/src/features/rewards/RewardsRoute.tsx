@@ -31,7 +31,7 @@ export function RewardsRoute() {
       <WalletStrip />
 
       <TabsRoot value={tab} onValueChange={(value) => setTab(value as string)}>
-        <TabsList>
+        <TabsList className={styles.tabsList}>
           <Tab value="store">
             <StoreIcon size={15} /> Store
           </Tab>

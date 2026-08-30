@@ -11,6 +11,8 @@ import {
   ItemPreview,
 } from '@/components/Cosmetics'
 import { Skeleton } from '@/components/Skeleton'
+import { Toggle, ToggleGroup } from '@/components/ToggleGroup'
+import { Tooltip } from '@/components/Tooltip'
 import { useToast } from '@/components/Toast'
 import { useCurrentUser } from '@/features/api'
 import { cx } from '@/lib/cx'
@@ -50,15 +52,12 @@ export function InventoryPanel() {
   const equipped = useEquippedQuery()
   const [filter, setFilter] = useState<ItemType | 'all'>('all')
 
-  if (inventory.isLoading) return <Skeleton height="18rem" />
-  if (inventory.error) {
-    return (
-      <Callout tone="danger">{errorText(inventory.error, 'Could not load your items')}</Callout>
-    )
-  }
-
+  // Every hook above this line runs unconditionally, on every render — the
+  // two returns below it are not. `items` falls back to `[]` while loading
+  // so this can sit ahead of them too; skip that and the hook count itself
+  // changes once data arrives, which is what "Rendered more hooks than
+  // during the previous render" was actually reporting here.
   const items = inventory.data ?? []
-
   const categoryCounts = useMemo(() => {
     const map: Record<string, number> = { all: items.length }
     for (const entry of items) {
@@ -67,27 +66,35 @@ export function InventoryPanel() {
     return map
   }, [items])
 
+  if (inventory.isLoading) return <Skeleton height="18rem" />
+  if (inventory.error) {
+    return (
+      <Callout tone="danger">{errorText(inventory.error, 'Could not load your items')}</Callout>
+    )
+  }
+
   const filteredItems = filter === 'all' ? items : items.filter((i) => i.item.item_type === filter)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+    <div className={styles.stack}>
       <Loadout />
 
-      <div className={styles.filters}>
+      <ToggleGroup
+        variant="loose"
+        size="sm"
+        aria-label="Filter your items by type"
+        value={[filter]}
+        onValueChange={(next) => setFilter((next[0] as ItemType | 'all' | undefined) ?? 'all')}
+      >
         {INVENTORY_CATEGORIES.map((cat) => {
           const count = categoryCounts[cat.value] ?? 0
           return (
-            <Button
-              key={cat.value}
-              size="sm"
-              variant={filter === cat.value ? 'primary' : 'secondary'}
-              onClick={() => setFilter(cat.value)}
-            >
-              {cat.label} {count > 0 && <span style={{ opacity: 0.7, fontSize: '0.85em', marginLeft: 2 }}>({count})</span>}
-            </Button>
+            <Toggle key={cat.value} value={cat.value}>
+              {cat.label} {count > 0 && <span className={styles.countBadge}>({count})</span>}
+            </Toggle>
           )
         })}
-      </div>
+      </ToggleGroup>
 
       {items.length === 0 ? (
         <p className={styles.empty}>
@@ -159,25 +166,18 @@ function Loadout() {
           const item = worn?.[slotKey(slot)] ?? null
           return (
             <div key={slot} className={styles.slot}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className={styles.cardTitleRow}>
                 <span className={styles.slotLabel}>{slotLabel(slot)}</span>
                 {item && (
-                  <button
-                    type="button"
-                    onClick={() => void unequipSlot(slot)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      cursor: 'pointer',
-                      fontSize: 'var(--text-2xs)',
-                      color: 'var(--color-text-muted)',
-                      textDecoration: 'underline',
-                    }}
-                    title={`Take off ${item.name}`}
-                  >
-                    Remove
-                  </button>
+                  <Tooltip content={`Take off ${item.name}`}>
+                    <button
+                      type="button"
+                      onClick={() => void unequipSlot(slot)}
+                      className={styles.removeLink}
+                    >
+                      Remove
+                    </button>
+                  </Tooltip>
                 )}
               </div>
               <span className={cx(styles.slotValue, !item && styles.slotEmpty)}>
@@ -225,7 +225,7 @@ function InventoryCard({ entry, equipped }: { entry: InventoryItem; equipped: bo
       <div className={styles.cardBody}>
         <div className={styles.cardTitleRow}>
           <span className={styles.cardName}>{entry.item.name}</span>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <div className={styles.badgeRow}>
             <Badge tone={RARITY_TONE[entry.item.rarity]}>{entry.item.rarity}</Badge>
             {entry.source === 'grant' && <Badge tone="mint">Gift</Badge>}
           </div>

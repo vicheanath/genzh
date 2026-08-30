@@ -3,6 +3,7 @@ import { MessageSquareIcon } from '@/components/Icons'
 import { Input } from '@/components/Input'
 
 import type { StoreItem } from '../api'
+import styles from '../rewards.module.css'
 
 export interface ChatBubbleSandboxProps {
   bubbleItem: StoreItem | null
@@ -19,28 +20,18 @@ export function ChatBubbleSandbox({
   onMessageChange,
 }: ChatBubbleSandboxProps) {
   return (
-    <section
-      style={{
-        padding: 'var(--space-4) var(--space-5)',
-        borderRadius: 'var(--radius-lg, 0.75rem)',
-        border: '1px solid var(--color-border)',
-        background: 'var(--color-sunken)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <section className={styles.sandboxCard}>
+      <div className={styles.sandboxHeader}>
+        <span className={styles.sandboxLabel}>
           <MessageSquareIcon size={14} /> Live Chat Bubble Sandbox
         </span>
-        <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>
+        <span className={styles.sandboxHint}>
           Type below to preview your message styling in real-time
         </span>
       </div>
 
       <CosmeticChatBubble item={bubbleItem}>
-        <div style={{ fontSize: 'var(--text-sm)' }}>
+        <div className={styles.sandboxMessage}>
           {message || 'Type something to preview your chat bubble…'}
         </div>
       </CosmeticChatBubble>
