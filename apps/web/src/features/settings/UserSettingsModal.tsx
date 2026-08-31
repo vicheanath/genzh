@@ -1,5 +1,6 @@
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ArrowLeftIcon, SignOutIcon, XIcon } from '@/components/Icons'
 import { Tabs } from '@/components/Tabs'
@@ -12,6 +13,7 @@ import { AnonymousTab } from './AnonymousTab'
 import { AppearanceTab } from './AppearanceTab'
 import { BlockedTab } from './BlockedTab'
 import { DevicesTab } from './DevicesTab'
+import { LanguageTab } from './LanguageTab'
 import { ProfileTab } from './ProfileTab'
 import { SETTINGS_GROUPS, type SettingsTab } from './tabs'
 import styles from './settings.module.css'
@@ -73,6 +75,7 @@ export function UserSettingsModal({
   initialTab,
   onClose,
 }: UserSettingsModalProps) {
+  const { t } = useTranslation()
   const { user, logout } = useAuth()
   const storeTab = useAppStore((s) => s.userSettingsTab)
   const requested = initialTab ?? storeTab
@@ -109,7 +112,7 @@ export function UserSettingsModal({
                 type="button"
                 className={styles.mobileBarButton}
                 onClick={() => setShowPanel(false)}
-                aria-label="Back to settings menu"
+                aria-label={t('settings.back')}
               >
                 <ArrowLeftIcon size={18} />
               </button>
@@ -120,14 +123,14 @@ export function UserSettingsModal({
             )}
 
             <BaseDialog.Title className={styles.mobileBarTitle}>
-              {showPanel ? labelOf(activeTab) : 'Settings'}
+              {showPanel ? labelOf(activeTab) : t('settings.title')}
             </BaseDialog.Title>
 
             <button
               type="button"
               className={styles.mobileBarButton}
               onClick={onClose}
-              aria-label="Close settings"
+              aria-label={t('settings.close')}
             >
               <XIcon size={18} />
             </button>
@@ -169,7 +172,7 @@ export function UserSettingsModal({
                   onClick={() => void logout()}
                 >
                   <SignOutIcon size={16} />
-                  Sign out
+                  {t('auth.signOut')}
                 </button>
               </div>
             </aside>
@@ -180,7 +183,7 @@ export function UserSettingsModal({
                   type="button"
                   className={styles.closeButton}
                   onClick={onClose}
-                  aria-label="Close settings"
+                  aria-label={t('settings.close')}
                 >
                   <XIcon size={18} />
                 </button>
@@ -201,6 +204,9 @@ export function UserSettingsModal({
               </Tabs.Panel>
               <Tabs.Panel value="voice" className={styles.scrollArea}>
                 <DevicesTab />
+              </Tabs.Panel>
+              <Tabs.Panel value="language" className={styles.scrollArea}>
+                <LanguageTab />
               </Tabs.Panel>
               <Tabs.Panel value="blocked" className={styles.scrollArea}>
                 <BlockedTab />

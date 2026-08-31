@@ -1,0 +1,138 @@
+{
+  "nav": {
+    "home": "Home",
+    "browse": "Browse",
+    "servers": "Servers",
+    "friends": "Friends",
+    "explore": "Explore",
+    "rewards": "Rewards",
+    "notifications": "Notifications",
+    "me": "My Account"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "register": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "handle": "Handle",
+    "displayName": "Display name"
+  },
+  "settings": {
+    "title": "Settings",
+    "back": "Back to settings menu",
+    "close": "Close settings",
+    "groups": {
+      "userSettings": "User Settings",
+      "appSettings": "App Settings"
+    },
+    "tabs": {
+      "profile": "Profile",
+      "anonymous": "Anonymous Persona",
+      "account": "My Account",
+      "appearance": "Appearance",
+      "voice": "Voice & Video",
+      "blocked": "Blocked Users",
+      "language": "Language"
+    },
+    "hints": {
+      "profile": "Name, avatar, accent",
+      "anonymous": "Your masked identity",
+      "account": "E-mail, password, sessions",
+      "appearance": "Theme",
+      "voice": "Microphone, camera, output",
+      "blocked": "Who cannot reach you",
+      "language": "Display language"
+    },
+    "profile": {
+      "title": "Profile",
+      "description": "How you appear across communities and direct messages.",
+      "displayName": "Display name",
+      "bio": "About me",
+      "bioPlaceholder": "Tell everyone a bit about yourself…",
+      "avatarUrl": "Avatar image URL",
+      "accentColor": "Accent colour",
+      "customHex": "Custom hex",
+      "saveChanges": "Save changes",
+      "saved": "Profile saved",
+      "savedDescription": "Your changes are now visible to everyone.",
+      "accentColorOption": "Accent colour {{color}}"
+    },
+    "account": {
+      "title": "My account",
+      "description": "Your credentials and the identifier other people use to find you.",
+      "userId": "User ID",
+      "handle": "Handle",
+      "email": "Email",
+      "security": "Security",
+      "securityDescription": "Signed in with a bearer session that refreshes automatically. Signing out ends it on this device.",
+      "copyUserId": "Copy",
+      "userIdCopied": "User ID copied",
+      "copyFailed": "Could not copy your user ID"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "How genzh looks on this device.",
+      "themes": {
+        "dark": "Dark",
+        "darkHint": "Low light, warm espresso ground",
+        "light": "Light",
+        "lightHint": "Bright, warm bone ground",
+        "system": "System",
+        "systemHint": "Follow your OS setting"
+      }
+    },
+    "language": {
+      "title": "Language",
+      "description": "Choose how the app is displayed.",
+      "saved": "Language saved",
+      "savedDescription": "The app will now display in {{language}}.",
+      "languages": {
+        "en": "English",
+        "km": "ភាសាខ្មែរ (Khmer)"
+      }
+    },
+    "anonymous": {
+      "title": "Anonymous persona",
+      "description": "Your masked alias, icon, and default posting state. Your real account stays private behind it.",
+      "postByDefault": "Post anonymously by default",
+      "postByDefaultHint": "In rooms that permit anonymity, start in your masked persona rather than as yourself.",
+      "personaFallback": "Anonymous Persona",
+      "maskedLabel": "Masked persona · hidden profile",
+      "previewBio": "Your handle (@{{handle}}) and avatar are hidden from others while you speak under this persona.",
+      "alias": "Alias",
+      "randomise": "Randomise",
+      "aliasPlaceholder": "e.g. Shadow Fox",
+      "mask": "Mask",
+      "maskOption": "Mask {{option}}",
+      "accentColor": "Persona accent colour",
+      "save": "Save persona",
+      "saved": "Anonymous persona saved",
+      "savedDescription": "Your masked identity is ready for rooms."
+    },
+    "blocked": {
+      "title": "Blocked users",
+      "description": "Blocked users cannot send you friend requests or reach you directly.",
+      "userIdLabel": "User ID to block",
+      "userIdPlaceholder": "Paste a user ID…",
+      "block": "Block",
+      "unblock": "Unblock",
+      "empty": "You haven't blocked anyone.",
+      "userBlocked": "User blocked",
+      "userBlockedDescription": "They can no longer reach you.",
+      "userUnblocked": "User unblocked",
+      "unblockFailed": "Could not unblock",
+      "loadFailed": "Could not load blocked users"
+    }
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "copy": "Copy"
+  }
+}

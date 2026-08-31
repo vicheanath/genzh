@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -19,6 +20,7 @@ interface BlockFormValues {
 }
 
 export function BlockedTab() {
+  const { t } = useTranslation()
   const toast = useToast()
   const submit = useSubmission()
   const form = useForm<BlockFormValues>({ defaultValues: { userId: '' } })
@@ -46,39 +48,39 @@ export function BlockedTab() {
     if (!done) return
 
     form.reset()
-    toast.success('User blocked', 'They can no longer reach you.')
+    toast.success(t('settings.blocked.userBlocked'), t('settings.blocked.userBlockedDescription'))
   }
 
   async function handleUnblock(userId: Uuid) {
     try {
       await unblockUser.mutateAsync(userId)
-      toast.success('User unblocked')
+      toast.success(t('settings.blocked.userUnblocked'))
     } catch (cause) {
-      toast.error('Could not unblock', errorText(cause))
+      toast.error(t('settings.blocked.unblockFailed'), errorText(cause))
     }
   }
 
   return (
     <div>
-      <h2 className={styles.panelTitle}>Blocked users</h2>
+      <h2 className={styles.panelTitle}>{t('settings.blocked.title')}</h2>
       <p className={styles.panelDescription}>
-        Blocked users cannot send you friend requests or reach you directly.
+        {t('settings.blocked.description')}
       </p>
 
       {submit.error && <Callout tone="danger">{submit.error}</Callout>}
-      {blocked.error && <Callout tone="danger">{errorText(blocked.error, 'Could not load blocked users')}</Callout>}
+      {blocked.error && <Callout tone="danger">{errorText(blocked.error, t('settings.blocked.loadFailed'))}</Callout>}
 
       <form className={styles.formRow} onSubmit={form.handleSubmit(handleBlock)}>
         <Input
           className={styles.grow}
-          label="User ID to block"
+          label={t('settings.blocked.userIdLabel')}
           {...form.register('userId', { required: true })}
-          placeholder="Paste a user ID…"
+          placeholder={t('settings.blocked.userIdPlaceholder')}
           required
         />
         <Button type="submit" variant="danger" disabled={submit.busy}>
           {submit.busy && <Spinner />}
-          Block
+          {t('settings.blocked.block')}
         </Button>
       </form>
 
@@ -86,7 +88,7 @@ export function BlockedTab() {
         {blocked.isLoading && <Spinner />}
 
         {!blocked.isLoading && current.length === 0 && (
-          <p className={styles.emptyNote}>You haven&apos;t blocked anyone.</p>
+          <p className={styles.emptyNote}>{t('settings.blocked.empty')}</p>
         )}
 
         {current.map((id) => {
@@ -101,7 +103,7 @@ export function BlockedTab() {
               size="sm"
               actions={
                 <Button size="sm" variant="secondary" onClick={() => void handleUnblock(id)}>
-                  Unblock
+                  {t('settings.blocked.unblock')}
                 </Button>
               }
             />

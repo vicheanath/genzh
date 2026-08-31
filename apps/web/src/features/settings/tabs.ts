@@ -1,5 +1,6 @@
 import {
   BanIcon,
+  GlobeIcon,
   HeadphonesIcon,
   LockIcon,
   ShieldIcon,
@@ -14,6 +15,7 @@ export type SettingsTab =
   | 'appearance'
   | 'voice'
   | 'blocked'
+  | 'language'
 
 export interface SettingsTabInfo {
   id: SettingsTab
@@ -66,10 +68,12 @@ export const SETTINGS_GROUPS: ReadonlyArray<{
         hint: 'Microphone, camera, output',
         icon: HeadphonesIcon,
       },
+      { id: 'language', label: 'Language', hint: 'Display language', icon: GlobeIcon },
       { id: 'blocked', label: 'Blocked Users', hint: 'Who cannot reach you', icon: BanIcon },
     ],
   },
 ]
+
 
 /**
  * The swatch palette, shared by the profile and persona pickers.

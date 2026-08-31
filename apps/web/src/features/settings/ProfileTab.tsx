@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
 
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
@@ -24,6 +25,7 @@ interface ProfileFormValues {
 }
 
 export function ProfileTab({ user }: { user: CurrentUser }) {
+  const { t } = useTranslation()
   const { applyProfile } = useAuth()
   const updateProfile = useUpdateProfileMutation()
   const toast = useToast()
@@ -67,16 +69,14 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
     )
     if (updated) {
       applyProfile(updated)
-      toast.success('Profile saved', 'Your changes are now visible to everyone.')
+      toast.success(t('settings.profile.saved'), t('settings.profile.savedDescription'))
     }
   }
 
   return (
     <div>
-      <h2 className={styles.panelTitle}>Profile</h2>
-      <p className={styles.panelDescription}>
-        How you appear across communities and direct messages.
-      </p>
+      <h2 className={styles.panelTitle}>{t('settings.profile.title')}</h2>
+      <p className={styles.panelDescription}>{t('settings.profile.description')}</p>
 
       {save.error && <Callout tone="danger">{save.error}</Callout>}
 
@@ -106,35 +106,35 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
 
       <form className={styles.formGrid} onSubmit={form.handleSubmit(onSubmit)}>
         <Input
-          label="Display name"
+          label={t('settings.profile.displayName')}
           {...form.register('displayName', { required: true })}
-          placeholder="Enter display name"
+          placeholder={t('settings.profile.displayName')}
           maxLength={32}
           required
         />
 
         <div className={styles.textareaField}>
           <label className={styles.fieldLabel} htmlFor="settings-bio">
-            About me
+            {t('settings.profile.bio')}
           </label>
           <textarea
             id="settings-bio"
             className={styles.textarea}
             {...form.register('bio')}
-            placeholder="Tell everyone a bit about yourself…"
+            placeholder={t('settings.profile.bioPlaceholder')}
             rows={3}
             maxLength={190}
           />
         </div>
 
         <Input
-          label="Avatar image URL"
+          label={t('settings.profile.avatarUrl')}
           {...form.register('avatarUrl')}
           placeholder="https://example.com/avatar.png"
         />
 
         <div>
-          <span className={styles.fieldLabel}>Accent colour</span>
+          <span className={styles.fieldLabel}>{t('settings.profile.accentColor')}</span>
           <div className={styles.colorSwatches}>
             {PRESET_COLORS.map((color) => (
               <button
@@ -146,12 +146,12 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
                 )}
                 style={{ backgroundColor: color }}
                 onClick={() => form.setValue('accentColor', color, { shouldDirty: true })}
-                aria-label={`Accent colour ${color}`}
+                aria-label={t('settings.profile.accentColorOption', { color })}
                 aria-pressed={accentColor === color}
               />
             ))}
             <Input
-              label="Custom hex"
+              label={t('settings.profile.customHex')}
               {...form.register('accentColor')}
               placeholder={DEFAULT_ACCENT}
             />
@@ -161,7 +161,7 @@ export function ProfileTab({ user }: { user: CurrentUser }) {
         <div className={styles.formActions}>
           <Button type="submit" disabled={save.busy}>
             {save.busy && <Spinner />}
-            Save changes
+            {t('settings.profile.saveChanges')}
           </Button>
         </div>
       </form>

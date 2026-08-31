@@ -460,3 +460,45 @@
   --shadow-xl: 0 8px 16px oklch(0 0 0 / 0.40), 0 28px 60px oklch(0 0 0 / 0.65);
   --shadow-2xl: 0 12px 24px oklch(0 0 0 / 0.45), 0 40px 84px oklch(0 0 0 / 0.72);
 }
+
+/* ── Khmer locale overrides ────────────────────────────────────────────────
+ *
+ * When i18next sets lang="km" on <html>, switch to Noto Sans Khmer for both
+ * the UI face and the display face.  Bricolage Grotesque and Inter have no
+ * Khmer glyphs at all, so without this override the script falls back to the
+ * OS Khmer face — which varies wildly across devices and will not match the
+ * design token weights.
+ *
+ * Typography adjustments:
+ *   - letter-spacing → 0:  kerning / tracking is a Latin concept; the
+ *     Khmer syllabic block renders correctly only at the face's natural width.
+ *   - line-height → 1.85:  Khmer vowel signs, subscript consonants and
+ *     diacritics stack above and below the baseline by ~40 % of the cap height,
+ *     which clashes at the Latin default of 1.55.
+ *   - font-optical-sizing: auto is kept — Noto Sans Khmer is variable.
+ */
+:root:lang(km) {
+  --font-sans:
+    'Noto Sans Khmer', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display:
+    'Noto Sans Khmer', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Body text needs the looser leading. */
+:root:lang(km) body {
+  line-height: 1.85;
+  /* Khmer glyphs have no meaningful inter-letter spacing — reset the
+     global feature settings that only apply to Latin opentype tables. */
+  font-feature-settings: normal;
+  letter-spacing: 0;
+}
+
+/* Headings: remove the negative tracking that suits Bricolage but not Noto. */
+:root:lang(km) h1,
+:root:lang(km) h2,
+:root:lang(km) h3,
+:root:lang(km) h4 {
+  letter-spacing: 0;
+  /* A slightly relaxed leading also helps multi-line Khmer headings. */
+  line-height: 1.55;
+}

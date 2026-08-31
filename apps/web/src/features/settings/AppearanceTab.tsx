@@ -1,27 +1,30 @@
+import { useTranslation } from 'react-i18next'
+
 import { MonitorIcon, MoonIcon, SunIcon } from '@/components/Icons'
 import { Radio, RadioGroup } from '@/components/RadioGroup'
 import { useTheme, type Theme } from '@/lib/useTheme'
 
 import styles from './settings.module.css'
 
-const THEMES: ReadonlyArray<{
-  value: Theme
-  label: string
-  hint: string
-  icon: typeof SunIcon
-}> = [
-  { value: 'dark', label: 'Dark', hint: 'Low light, warm espresso ground', icon: MoonIcon },
-  { value: 'light', label: 'Light', hint: 'Bright, warm bone ground', icon: SunIcon },
-  { value: 'system', label: 'System', hint: 'Follow your OS setting', icon: MonitorIcon },
-]
-
 export function AppearanceTab() {
+  const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
+
+  const THEMES: ReadonlyArray<{
+    value: Theme
+    label: string
+    hint: string
+    icon: typeof SunIcon
+  }> = [
+    { value: 'dark', label: t('settings.appearance.themes.dark'), hint: t('settings.appearance.themes.darkHint'), icon: MoonIcon },
+    { value: 'light', label: t('settings.appearance.themes.light'), hint: t('settings.appearance.themes.lightHint'), icon: SunIcon },
+    { value: 'system', label: t('settings.appearance.themes.system'), hint: t('settings.appearance.themes.systemHint'), icon: MonitorIcon },
+  ]
 
   return (
     <div>
-      <h2 className={styles.panelTitle}>Appearance</h2>
-      <p className={styles.panelDescription}>How genzh looks on this device.</p>
+      <h2 className={styles.panelTitle}>{t('settings.appearance.title')}</h2>
+      <p className={styles.panelDescription}>{t('settings.appearance.description')}</p>
 
       {/*
         This was three `role="radio"` buttons with `aria-checked`, which looks
@@ -32,7 +35,7 @@ export function AppearanceTab() {
       */}
       <RadioGroup
         variant="cards"
-        aria-label="Theme"
+        aria-label={t('settings.appearance.title')}
         value={theme}
         onValueChange={(value) => setTheme(value as Theme)}
       >

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/Button'
 import { Input } from '@/components/Input'
@@ -31,6 +32,7 @@ const RANDOM_ALIASES = [
 const MASK_SYMBOLS = ['🎭', '🕶️', '🦊', '👻', '🤖', '🦉', '🐺', '🐼', '⚡', '🔮', '👾', '🛸']
 
 export function AnonymousTab({ user }: { user: CurrentUser }) {
+  const { t } = useTranslation()
   const toast = useToast()
 
   const anonymousAlias = useAppStore((s) => s.anonymousAlias)
@@ -54,29 +56,27 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
       avatarSeed: symbol,
       isAnonymousByDefault: byDefault,
     })
-    toast.success('Anonymous persona saved', 'Your masked identity is ready for rooms.')
+    toast.success(t('settings.anonymous.saved'), t('settings.anonymous.savedDescription'))
   }
 
   return (
     <div>
-      <h2 className={styles.panelTitle}>Anonymous persona</h2>
+      <h2 className={styles.panelTitle}>{t('settings.anonymous.title')}</h2>
       <p className={styles.panelDescription}>
-        Your masked alias, icon, and default posting state. Your real account stays private
-        behind it.
+        {t('settings.anonymous.description')}
       </p>
 
       <div className={styles.toggleCard}>
         <div className={styles.toggleInfo}>
-          <div className={styles.toggleTitle}>Post anonymously by default</div>
+          <div className={styles.toggleTitle}>{t('settings.anonymous.postByDefault')}</div>
           <div className={styles.toggleSubtitle}>
-            In rooms that permit anonymity, start in your masked persona rather than as
-            yourself.
+            {t('settings.anonymous.postByDefaultHint')}
           </div>
         </div>
         <Switch
           checked={byDefault}
           onCheckedChange={setByDefault}
-          aria-label="Post anonymously by default"
+          aria-label={t('settings.anonymous.postByDefault')}
         />
       </div>
 
@@ -91,11 +91,10 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
               {symbol}
             </div>
           </div>
-          <div className={styles.previewName}>{alias || 'Anonymous Persona'}</div>
-          <div className={styles.previewHandle}>Masked persona · hidden profile</div>
+          <div className={styles.previewName}>{alias || t('settings.anonymous.personaFallback')}</div>
+          <div className={styles.previewHandle}>{t('settings.anonymous.maskedLabel')}</div>
           <div className={styles.previewBio}>
-            Your handle (@{user.handle}) and avatar are hidden from others while you speak
-            under this persona.
+            {t('settings.anonymous.previewBio', { handle: user.handle })}
           </div>
         </div>
       </div>
@@ -103,7 +102,7 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
       <form className={styles.formGrid} onSubmit={handleSave}>
         <div>
           <div className={styles.labelRow}>
-            <span className={styles.fieldLabel}>Alias</span>
+            <span className={styles.fieldLabel}>{t('settings.anonymous.alias')}</span>
             <Button
               type="button"
               size="sm"
@@ -115,21 +114,21 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
                 )
               }
             >
-              Randomise
+              {t('settings.anonymous.randomise')}
             </Button>
           </div>
           <Input
-            label="Anonymous alias"
+            label={t('settings.anonymous.alias')}
             value={alias}
             onChange={(event) => setAlias(event.target.value)}
-            placeholder="e.g. Shadow Fox"
+            placeholder={t('settings.anonymous.aliasPlaceholder')}
             maxLength={32}
             required
           />
         </div>
 
         <div>
-          <span className={styles.fieldLabel}>Mask</span>
+          <span className={styles.fieldLabel}>{t('settings.anonymous.mask')}</span>
           <div className={styles.anonSymbolChips}>
             {MASK_SYMBOLS.map((option) => (
               <button
@@ -140,7 +139,7 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
                   symbol === option && styles.anonSymbolChipActive,
                 )}
                 onClick={() => setSymbol(option)}
-                aria-label={`Mask ${option}`}
+                aria-label={t('settings.anonymous.maskOption', { option })}
                 aria-pressed={symbol === option}
               >
                 {option}
@@ -150,7 +149,7 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
         </div>
 
         <div>
-          <span className={styles.fieldLabel}>Persona accent colour</span>
+          <span className={styles.fieldLabel}>{t('settings.anonymous.accentColor')}</span>
           <div className={styles.colorSwatches}>
             {PRESET_COLORS.map((color) => (
               <button
@@ -162,7 +161,7 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
                 )}
                 style={{ backgroundColor: color }}
                 onClick={() => setAccent(color)}
-                aria-label={`Accent colour ${color}`}
+                aria-label={t('settings.profile.accentColorOption', { color })}
                 aria-pressed={accent === color}
               />
             ))}
@@ -176,7 +175,7 @@ export function AnonymousTab({ user }: { user: CurrentUser }) {
         </div>
 
         <div className={styles.formActions}>
-          <Button type="submit">Save persona</Button>
+          <Button type="submit">{t('settings.anonymous.save')}</Button>
         </div>
       </form>
     </div>
