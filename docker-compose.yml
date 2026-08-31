@@ -55,6 +55,20 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       MEDIA_TOKEN_SECRET: ${MEDIA_TOKEN_SECRET:?set MEDIA_TOKEN_SECRET in .env}
 
+      # Required by Config::from_env — the process refuses to start without
+      # them. This block went stale when media moved to LiveKit: compose still
+      # passed only the old MEDIA_* pair, so `docker compose up api` died at
+      # startup with "LIVEKIT_API_KEY must be set" before serving anything.
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in .env}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env}
+      # The address a *browser* dials, not the compose-internal hostname.
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://127.0.0.1:7880}
+
+      # Optional. Blank turns the composer's GIF button off rather than
+      # failing: /api/v1/auth/config reports features.gifs false and the
+      # clients do not offer it.
+      GIPHY_API_KEY: ${GIPHY_API_KEY:-}
+
       # How clients reach the media server. This is the address a *browser*
       # dials, not a compose-internal hostname.
       MEDIA_SERVER_URL: ${MEDIA_SERVER_URL:-ws://127.0.0.1:8081/ws/media}
