@@ -1,13 +1,13 @@
-//! GIF search, proxied to Tenor.
+//! GIF search, proxied to GIPHY.
 //!
-//! The API sits in front of Tenor for two reasons. The key stays server-side —
+//! The API sits in front of GIPHY for two reasons. The key stays server-side —
 //! shipping it to a browser publishes it — and the response is narrowed to the
-//! handful of fields a picker draws. Tenor's `media_formats` object carries a
-//! dozen renditions of every result; forwarding it whole would make the picker
-//! ten times the bytes it needs to be, over a connection that is usually a
-//! phone's.
+//! handful of fields a picker draws. GIPHY's `images` object carries about
+//! thirty renditions of every result; forwarding it whole would make the picker
+//! an order of magnitude more bytes than it needs to be, over a connection that
+//! is usually a phone's.
 //!
-//! Nothing is cached here. Tenor's own CDN serves the images, and the search
+//! Nothing is cached here. GIPHY's own CDN serves the images, and search
 //! results are a person typing — by the time a cache helped, they have typed
 //! something else.
 
@@ -19,18 +19,24 @@ use crate::error::{ApiError, ApiResult};
 use crate::middleware::CurrentUser;
 use crate::state::AppState;
 
-/// Tenor's v2 base. No trailing slash.
-const TENOR_BASE: &str = "https://tenor.googleapis.com/v2";
+/// GIPHY's v1 base. No trailing slash.
+const GIPHY_BASE: &str = "https://api.giphy.com/v1/gifs";
 
 /// How many results one page may hold.
 ///
-/// Tenor's own ceiling is 50. The picker asks for far fewer; the clamp exists
+/// GIPHY's own ceiling is 50. The picker asks for far fewer; the clamp exists
 /// so a client cannot turn one keystroke into the maximum request.
 const LIMIT_MAX: u32 = 50;
 /// Page size when the client does not ask for one.
 const LIMIT_DEFAULT: u32 = 24;
 
-/// How long to wait on Tenor before giving up.
+/// GIPHY's content rating filter, at its strictest.
+///
+/// `g` is the only defensible setting for a product with teenage users. The
+/// alternative is moderating an image search by hand.
+const RATING: &str = "g";
+
+/// How long to wait on GIPHY before giving up.
 ///
 /// Short: this sits between a person and a picker that is already open. A slow
 /// answer is worse than "search is unavailable", because they are still typing.
@@ -44,7 +50,7 @@ pub struct SearchQuery {
     /// Page size.
     #[serde(default)]
     pub limit: Option<u32>,
-    /// Opaque cursor from a previous response's `next`.
+    /// Cursor from a previous response's `next`.
     #[serde(default)]
     pub pos: Option<String>,
 }
@@ -55,7 +61,7 @@ pub struct TrendingQuery {
     /// Page size.
     #[serde(default)]
     pub limit: Option<u32>,
-    /// Opaque cursor from a previous response's `next`.
+    /// Cursor from a previous response's `next`.
     #[serde(default)]
     pub pos: Option<String>,
 }
@@ -63,12 +69,12 @@ pub struct TrendingQuery {
 /// One GIF, reduced to what a picker draws.
 #[derive(Debug, Serialize)]
 pub struct GifView {
-    /// Tenor's id for the result.
+    /// GIPHY's id for the result.
     pub id: String,
-    /// Alt text. Tenor's `content_description`, which is why it reads like a
-    /// caption rather than a filename.
+    /// Alt text. GIPHY's `title`, which is why it reads like a caption rather
+    /// than a filename.
     pub description: String,
-    /// The full-size GIF — what gets posted into the room.
+    /// The GIF that gets posted into the room.
     pub url: String,
     /// A small looping preview for the grid.
     pub preview_url: String,
@@ -83,55 +89,95 @@ pub struct GifView {
 pub struct GifPage {
     /// The results themselves.
     pub results: Vec<GifView>,
-    /// Cursor for the next page. Empty string from Tenor means "no more",
-    /// which is normalised to `null` here so clients test one thing.
+    /// Cursor for the next page, or `null` at the end.
+    ///
+    /// Opaque to clients on purpose. It happens to be a numeric offset, because
+    /// that is how GIPHY pages, but nothing outside this module may rely on
+    /// that — the previous implementation proxied a provider whose cursor was
+    /// an opaque token, and the client contract survived the swap precisely
+    /// because it never looked inside.
     pub next: Option<String>,
 }
 
-// ── Tenor's wire shape ──────────────────────────────────────────────────────
+// ── GIPHY's wire shape ──────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
-struct TenorResponse {
+struct GiphyResponse {
     #[serde(default)]
-    results: Vec<TenorResult>,
+    data: Vec<GiphyResult>,
     #[serde(default)]
-    next: Option<String>,
+    pagination: Option<GiphyPagination>,
 }
 
 #[derive(Debug, Deserialize)]
-struct TenorResult {
+struct GiphyResult {
     id: String,
     #[serde(default)]
-    content_description: String,
+    title: String,
     #[serde(default)]
-    media_formats: TenorFormats,
+    images: GiphyImages,
+}
+
+/// Where GIPHY says it is in the result set.
+#[derive(Debug, Deserialize)]
+struct GiphyPagination {
+    #[serde(default)]
+    total_count: i64,
+    #[serde(default)]
+    count: i64,
+    #[serde(default)]
+    offset: i64,
 }
 
 /// The renditions this proxy actually uses.
 ///
-/// Everything else Tenor sends is ignored by omission — serde drops unknown
+/// Everything else GIPHY sends is ignored by omission — serde drops unknown
 /// fields, so a new rendition appearing upstream costs nothing here.
 #[derive(Debug, Default, Deserialize)]
-struct TenorFormats {
-    /// Full-size GIF.
+struct GiphyImages {
+    /// Full-size. Can be several megabytes.
     #[serde(default)]
-    gif: Option<TenorMedia>,
-    /// A smaller GIF, used when the full one is missing.
+    original: Option<GiphyMedia>,
+    /// Capped at 5MB, which is what makes it the better thing to post.
     #[serde(default)]
-    mediumgif: Option<TenorMedia>,
-    /// Grid preview, in preference order.
+    downsized_medium: Option<GiphyMedia>,
+    /// Grid previews, in preference order.
     #[serde(default)]
-    tinygif: Option<TenorMedia>,
+    fixed_width: Option<GiphyMedia>,
     #[serde(default)]
-    nanogif: Option<TenorMedia>,
+    fixed_width_small: Option<GiphyMedia>,
 }
 
+/// One rendition.
+///
+/// `width` and `height` are strings on the wire — GIPHY sends `"480"`, not
+/// `480` — so they are read as strings and parsed. Typing them as numbers
+/// makes every single response fail to deserialize.
 #[derive(Debug, Deserialize)]
-struct TenorMedia {
-    url: String,
-    /// Tenor sends `[width, height]`.
+struct GiphyMedia {
     #[serde(default)]
-    dims: Vec<u32>,
+    url: Option<String>,
+    #[serde(default)]
+    width: Option<String>,
+    #[serde(default)]
+    height: Option<String>,
+}
+
+impl GiphyMedia {
+    /// The dimension pair, with anything unparseable as zero.
+    ///
+    /// Zero is meaningful to the client: it means "no intrinsic size", and the
+    /// grid falls back to a square cell rather than computing a ratio from a
+    /// number it does not have.
+    fn dims(&self) -> (u32, u32) {
+        let read = |value: &Option<String>| {
+            value
+                .as_deref()
+                .and_then(|raw| raw.parse::<u32>().ok())
+                .unwrap_or(0)
+        };
+        (read(&self.width), read(&self.height))
+    }
 }
 
 /// `GET /api/v1/gifs/search`
@@ -145,13 +191,12 @@ pub async fn search(
         return Err(ApiError::bad_request("A search term is required"));
     }
 
-    let mut params = vec![
+    let params = vec![
         ("q".to_owned(), term.to_owned()),
         ("limit".to_owned(), clamp_limit(query.limit).to_string()),
+        ("offset".to_owned(), parse_offset(query.pos).to_string()),
+        ("lang".to_owned(), "en".to_owned()),
     ];
-    if let Some(pos) = query.pos.filter(|p| !p.trim().is_empty()) {
-        params.push(("pos".to_owned(), pos));
-    }
 
     fetch(&state, "search", params).await.map(Json)
 }
@@ -164,43 +209,31 @@ pub async fn trending(
     _caller: CurrentUser,
     Query(query): Query<TrendingQuery>,
 ) -> ApiResult<Json<GifPage>> {
-    let mut params = vec![("limit".to_owned(), clamp_limit(query.limit).to_string())];
-    if let Some(pos) = query.pos.filter(|p| !p.trim().is_empty()) {
-        params.push(("pos".to_owned(), pos));
-    }
+    let params = vec![
+        ("limit".to_owned(), clamp_limit(query.limit).to_string()),
+        ("offset".to_owned(), parse_offset(query.pos).to_string()),
+    ];
 
-    fetch(&state, "featured", params).await.map(Json)
+    fetch(&state, "trending", params).await.map(Json)
 }
 
-/// Ask Tenor for one page and narrow the answer.
+/// Ask GIPHY for one page and narrow the answer.
 async fn fetch(
     state: &AppState,
     endpoint: &str,
     mut params: Vec<(String, String)>,
 ) -> ApiResult<GifPage> {
-    let key = state.config.tenor_api_key.as_deref().ok_or_else(|| {
+    let key = state.config.giphy_api_key.as_deref().ok_or_else(|| {
         // Not an internal error: the deployment is configured this way on
         // purpose, and the client's correct response is to hide the button
         // rather than to retry.
         ApiError::Unavailable("GIF search is not configured on this server".to_owned())
     })?;
 
-    params.push(("key".to_owned(), key.to_owned()));
-    params.push((
-        "client_key".to_owned(),
-        state.config.tenor_client_key.clone(),
-    ));
-    // Only the renditions `GifView` reads. Tenor bills nothing for the rest,
-    // but it sends a great deal of it.
-    params.push((
-        "media_filter".to_owned(),
-        "gif,mediumgif,tinygif,nanogif".to_owned(),
-    ));
-    // Tenor's own safety filter, at its strictest. This is a product with
-    // teenage users; the alternative is moderating an image search by hand.
-    params.push(("contentfilter".to_owned(), "high".to_owned()));
+    params.push(("api_key".to_owned(), key.to_owned()));
+    params.push(("rating".to_owned(), RATING.to_owned()));
 
-    let url = format!("{TENOR_BASE}/{endpoint}");
+    let url = format!("{GIPHY_BASE}/{endpoint}");
 
     let response = state
         .http
@@ -210,51 +243,71 @@ async fn fetch(
         .send()
         .await
         .map_err(|error| {
-            tracing::warn!(%error, endpoint, "tenor request failed");
+            tracing::warn!(%error, endpoint, "giphy request failed");
             ApiError::Unavailable("GIF search is temporarily unavailable".to_owned())
         })?;
 
     if !response.status().is_success() {
-        // The status is logged and deliberately not forwarded: Tenor's 403 for
+        // The status is logged and deliberately not forwarded: GIPHY's 403 for
         // a bad key is this server's misconfiguration, not the caller's fault,
         // and telling a client "forbidden" would send it to re-authenticate.
-        tracing::warn!(status = %response.status(), endpoint, "tenor rejected the request");
+        tracing::warn!(status = %response.status(), endpoint, "giphy rejected the request");
         return Err(ApiError::Unavailable(
             "GIF search is temporarily unavailable".to_owned(),
         ));
     }
 
-    let body: TenorResponse = response.json().await.map_err(|error| {
-        tracing::warn!(%error, endpoint, "tenor sent an unreadable body");
+    let body: GiphyResponse = response.json().await.map_err(|error| {
+        tracing::warn!(%error, endpoint, "giphy sent an unreadable body");
         ApiError::Unavailable("GIF search is temporarily unavailable".to_owned())
     })?;
 
+    let next = body.pagination.as_ref().and_then(next_offset);
+
     Ok(GifPage {
-        results: body.results.into_iter().filter_map(narrow).collect(),
-        next: body.next.filter(|next| !next.is_empty()),
+        results: body.data.into_iter().filter_map(narrow).collect(),
+        next,
     })
 }
 
-/// One Tenor result, or nothing if it carries no usable GIF.
+/// Where the next page starts, or `None` at the end of the results.
+fn next_offset(pagination: &GiphyPagination) -> Option<String> {
+    let next = pagination.offset + pagination.count;
+    // `count` is how many came back in *this* page. Zero means the results are
+    // exhausted, and without this check an empty page would hand back a cursor
+    // pointing at itself — an infinite scroll that never ends and never grows.
+    if pagination.count <= 0 || next >= pagination.total_count {
+        return None;
+    }
+    Some(next.to_string())
+}
+
+/// One GIPHY result, or nothing if it carries no usable GIF.
 ///
 /// Dropped rather than defaulted: a result with no image is a hole in the grid
 /// either way, and a broken `<img>` is the worse of the two.
-fn narrow(result: TenorResult) -> Option<GifView> {
-    let formats = result.media_formats;
-    let full = formats.gif.or(formats.mediumgif)?;
-    let preview = formats
-        .tinygif
-        .or(formats.nanogif)
-        .map(|media| media.url)
-        .unwrap_or_else(|| full.url.clone());
+fn narrow(result: GiphyResult) -> Option<GifView> {
+    let images = result.images;
+
+    // The capped rendition first: `original` is occasionally tens of megabytes,
+    // and that is the file every person in the room then downloads.
+    let full = images.downsized_medium.or(images.original)?;
+    let url = full.url.clone()?;
+    let (width, height) = full.dims();
+
+    let preview = images
+        .fixed_width_small
+        .or(images.fixed_width)
+        .and_then(|media| media.url)
+        .unwrap_or_else(|| url.clone());
 
     Some(GifView {
         id: result.id,
-        description: result.content_description,
+        description: result.title,
+        url,
         preview_url: preview,
-        width: full.dims.first().copied().unwrap_or(0),
-        height: full.dims.get(1).copied().unwrap_or(0),
-        url: full.url,
+        width,
+        height,
     })
 }
 
@@ -264,9 +317,27 @@ fn clamp_limit(requested: Option<u32>) -> u32 {
     requested.unwrap_or(LIMIT_DEFAULT).clamp(1, LIMIT_MAX)
 }
 
+/// Read the cursor a client sent back, defaulting to the start.
+///
+/// An unparseable cursor is treated as the first page rather than refused: it
+/// can only come from a client that mangled one of ours, and the first page is
+/// a harmless answer to "I don't know where I was".
+fn parse_offset(pos: Option<String>) -> u32 {
+    pos.and_then(|raw| raw.trim().parse::<u32>().ok())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn media(url: &str, width: &str, height: &str) -> GiphyMedia {
+        GiphyMedia {
+            url: Some(url.to_owned()),
+            width: Some(width.to_owned()),
+            height: Some(height.to_owned()),
+        }
+    }
 
     #[test]
     fn page_sizes_are_clamped_not_rejected() {
@@ -277,33 +348,74 @@ mod tests {
     }
 
     #[test]
+    fn cursors_round_trip_and_survive_nonsense() {
+        assert_eq!(parse_offset(None), 0);
+        assert_eq!(parse_offset(Some("48".to_owned())), 48);
+        assert_eq!(parse_offset(Some("  48 ".to_owned())), 48);
+        assert_eq!(parse_offset(Some("not a number".to_owned())), 0);
+        assert_eq!(parse_offset(Some("-5".to_owned())), 0);
+    }
+
+    #[test]
+    fn dimensions_are_parsed_from_giphys_strings() {
+        assert_eq!(media("u", "480", "270").dims(), (480, 270));
+        // The whole reason `dims` exists rather than a serde number type.
+        assert_eq!(media("u", "", "").dims(), (0, 0));
+        assert_eq!(media("u", "wide", "tall").dims(), (0, 0));
+    }
+
+    #[test]
     fn a_result_without_artwork_is_dropped() {
-        let empty = TenorResult {
+        let empty = GiphyResult {
             id: "1".to_owned(),
-            content_description: "nothing".to_owned(),
-            media_formats: TenorFormats::default(),
+            title: "nothing".to_owned(),
+            images: GiphyImages::default(),
         };
         assert!(narrow(empty).is_none());
     }
 
     #[test]
-    fn the_preview_falls_back_to_the_full_image() {
-        let result = TenorResult {
+    fn the_capped_rendition_is_preferred_over_the_original() {
+        let result = GiphyResult {
             id: "1".to_owned(),
-            content_description: "a cat".to_owned(),
-            media_formats: TenorFormats {
-                gif: Some(TenorMedia {
-                    url: "https://media.tenor.com/cat.gif".to_owned(),
-                    dims: vec![480, 270],
-                }),
-                mediumgif: None,
-                tinygif: None,
-                nanogif: None,
+            title: "a cat".to_owned(),
+            images: GiphyImages {
+                original: Some(media("https://media.giphy.com/huge.gif", "1920", "1080")),
+                downsized_medium: Some(media("https://media.giphy.com/small.gif", "480", "270")),
+                fixed_width: None,
+                fixed_width_small: None,
             },
         };
 
         let view = narrow(result).expect("a usable result");
-        assert_eq!(view.preview_url, view.url);
+        assert_eq!(view.url, "https://media.giphy.com/small.gif");
         assert_eq!((view.width, view.height), (480, 270));
+        // No preview rendition, so it falls back to the image itself.
+        assert_eq!(view.preview_url, view.url);
+    }
+
+    #[test]
+    fn the_last_page_reports_no_cursor() {
+        let more = GiphyPagination {
+            total_count: 100,
+            count: 24,
+            offset: 0,
+        };
+        assert_eq!(next_offset(&more), Some("24".to_owned()));
+
+        let last = GiphyPagination {
+            total_count: 30,
+            count: 6,
+            offset: 24,
+        };
+        assert_eq!(next_offset(&last), None);
+
+        // An empty page must not hand back a cursor pointing at itself.
+        let empty = GiphyPagination {
+            total_count: 100,
+            count: 0,
+            offset: 24,
+        };
+        assert_eq!(next_offset(&empty), None);
     }
 }

@@ -72,7 +72,7 @@ pub enum ApiError {
     ///
     /// Distinct from [`Self::Store`], which is about this system's own
     /// dependencies being degraded. This one says a *feature* is off: GIF
-    /// search with no Tenor key is not a fault to page anybody about, it is a
+    /// search with no GIPHY key is not a fault to page anybody about, it is a
     /// deployment that did not turn it on, and the client's correct response is
     /// to stop offering the button.
     #[error("{0}")]

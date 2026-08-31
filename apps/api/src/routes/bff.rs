@@ -202,7 +202,7 @@ pub async fn me_overview(
         app_env: state.config.app_env.clone(),
         allow_password_signup: state.config.allow_password_signup,
         features: FeaturesConfig {
-            gifs: state.config.tenor_api_key.is_some(),
+            gifs: state.config.giphy_api_key.is_some(),
         },
         oauth_providers: OAuthProvidersConfig {
             google: configured("google"),

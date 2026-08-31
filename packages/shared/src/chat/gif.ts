@@ -24,8 +24,13 @@
  * `media.tenor.com` matches `tenor.com` while `tenor.com.evil.test` does not.
  */
 const GIF_HOSTS: readonly string[] = [
-  'tenor.com',
+  // What the picker posts. GIPHY serves images from `media0.giphy.com` through
+  // `media4.giphy.com` and `i.giphy.com`, all of which the dot-suffix covers.
   'giphy.com',
+  // Kept although nothing produces them any more: these are links people paste
+  // by hand, and a message that rendered as a picture yesterday should not
+  // become a bare URL today because the picker changed provider.
+  'tenor.com',
   'gfycat.com',
 ]
 
@@ -33,7 +38,7 @@ const GIF_HOSTS: readonly string[] = [
 export interface GifEmbed {
   /** The image to draw. */
   url: string
-  /** Which host it came from, for attribution the picker owes Tenor. */
+  /** Which host it came from, for the attribution the picker owes GIPHY. */
   host: string
 }
 

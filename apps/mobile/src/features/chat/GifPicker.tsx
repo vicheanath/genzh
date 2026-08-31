@@ -19,7 +19,7 @@ import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 /**
  * How long to wait after the last keystroke before searching.
  *
- * Every search is a round-trip through our API to Tenor, and somebody typing
+ * Every search is a round-trip through our API to GIPHY, and somebody typing
  * "excited" would otherwise fire seven of them to see the results of the
  * seventh. Longer than the web's, because a phone keyboard is slower and a
  * mobile connection is dearer.
@@ -37,7 +37,7 @@ export interface GifPickerProps {
 }
 
 /**
- * Search Tenor and pick a GIF.
+ * Search GIPHY and pick a GIF.
  *
  * The searching half is only mounted while the sheet is open: the grid holds a
  * few dozen animating images, and leaving them decoding behind a closed sheet
@@ -86,7 +86,7 @@ function GifPanel({ onPick }: { onPick: (url: string) => void }) {
           style={styles.search}
           value={term}
           onChangeText={setTerm}
-          placeholder="Search Tenor"
+          placeholder="Search GIPHY"
           placeholderTextColor={c.textSubtle}
           accessibilityLabel="Search for a GIF"
           autoCorrect={false}
@@ -100,7 +100,7 @@ function GifPanel({ onPick }: { onPick: (url: string) => void }) {
         </View>
       ) : isError ? (
         <Text style={styles.stateText}>
-          {/* The one failure worth naming: a deployment with no Tenor key. */}
+          {/* The one failure worth naming: a deployment with no GIPHY key. */}
           {isUnavailable(error) ? 'GIF search is not available here.' : 'Could not load GIFs.'}
         </Text>
       ) : results.length === 0 ? (
@@ -126,8 +126,8 @@ function GifPanel({ onPick }: { onPick: (url: string) => void }) {
         />
       )}
 
-      {/* Tenor's terms require attribution wherever their results are shown. */}
-      <Text style={styles.attribution}>Powered by Tenor</Text>
+      {/* GIPHY's terms require this attribution wherever results are shown. */}
+      <Text style={styles.attribution}>Powered by GIPHY</Text>
     </View>
   );
 }

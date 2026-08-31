@@ -25,7 +25,7 @@ export async function setupMockApi(page: Page) {
         allow_password_signup: true,
         oauth_providers: { google: true, discord: true },
         // GIF search off, so the composer's GIF button is absent in tests: the
-        // picker would otherwise reach for Tenor through an unmocked route.
+        // picker would otherwise reach for GIPHY through an unmocked route.
         features: { gifs: false },
       }),
     })

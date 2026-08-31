@@ -87,16 +87,13 @@ pub struct Config {
     pub discord_client_secret: Option<String>,
     pub discord_redirect_uri: Option<String>,
 
-    /// Tenor API key for the GIF picker.
+    /// GIPHY API key for the GIF picker.
     ///
     /// Optional, and the one feature in this config that degrades rather than
     /// fails: without it `/gifs/*` reports itself unavailable and clients hide
     /// the button. A deployment that does not want GIF search simply does not
     /// set it.
-    pub tenor_api_key: Option<String>,
-    /// The `client_key` Tenor attributes requests to. Identifies this product
-    /// to them for rate-limiting; it is not a secret.
-    pub tenor_client_key: String,
+    pub giphy_api_key: Option<String>,
 
     /// How often the background maintenance jobs run.
     pub cron: CronConfig,
@@ -263,8 +260,7 @@ impl Config {
             discord_client_secret: optional("DISCORD_CLIENT_SECRET"),
             discord_redirect_uri: optional("DISCORD_REDIRECT_URI"),
 
-            tenor_api_key: optional("TENOR_API_KEY"),
-            tenor_client_key: optional("TENOR_CLIENT_KEY").unwrap_or_else(|| "genzh".to_owned()),
+            giphy_api_key: optional("GIPHY_API_KEY"),
 
             cron: CronConfig::from_env()?,
         })

@@ -10,7 +10,7 @@ import styles from './GifPicker.module.css'
 /**
  * How long to wait after the last keystroke before searching.
  *
- * Every search is a round-trip through our API to Tenor, and a person typing
+ * Every search is a round-trip through our API to GIPHY, and a person typing
  * "excited" would otherwise fire seven of them to show the results of the
  * seventh. Long enough to skip the intermediate words, short enough that it
  * still feels like it is keeping up.
@@ -27,7 +27,7 @@ export interface GifPickerProps {
 }
 
 /**
- * Search Tenor and pick a GIF.
+ * Search GIPHY and pick a GIF.
  *
  * Opens on trending, because an empty grid with a cursor in a box is a worse
  * invitation than a wall of GIFs. The query is debounced rather than tied to a
@@ -94,7 +94,7 @@ function GifPanel({ onPick }: { onPick: (url: string) => void }) {
           className={styles.search}
           value={term}
           onChange={(event) => setTerm(event.target.value)}
-          placeholder="Search Tenor"
+          placeholder="Search GIPHY"
           aria-label="Search for a GIF"
           type="search"
         />
@@ -106,7 +106,7 @@ function GifPanel({ onPick }: { onPick: (url: string) => void }) {
         </div>
       ) : isError ? (
         <p className={styles.state} role="status">
-          {/* The one failure worth naming: a deployment with no Tenor key.
+          {/* The one failure worth naming: a deployment with no GIPHY key.
               Everything else is "try again", which the retry does not say
               better than the picker staying open does. */}
           {isUnavailable(error) ? 'GIF search is not available here.' : 'Could not load GIFs.'}
@@ -124,7 +124,7 @@ function GifPanel({ onPick }: { onPick: (url: string) => void }) {
                 type="button"
                 className={styles.result}
                 onClick={() => onPick(gif.url)}
-                // The description is Tenor's caption, which is the only thing
+                // The description is GIPHY's title, which is the only thing
                 // distinguishing one moving square from another to a screen
                 // reader.
                 aria-label={gif.description || 'GIF'}
@@ -156,8 +156,8 @@ function GifPanel({ onPick }: { onPick: (url: string) => void }) {
         </>
       )}
 
-      {/* Tenor's terms require attribution wherever their results are shown. */}
-      <p className={styles.attribution}>Powered by Tenor</p>
+      {/* GIPHY's terms require this attribution wherever results are shown. */}
+      <p className={styles.attribution}>Powered by GIPHY</p>
     </div>
   )
 }

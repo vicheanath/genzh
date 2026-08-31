@@ -138,6 +138,7 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: |
           umask 077
           cat > deploy/.env <<EOF
@@ -163,6 +164,8 @@ jobs:
           DISCORD_CLIENT_ID=$DISCORD_CLIENT_ID
           DISCORD_CLIENT_SECRET=$DISCORD_CLIENT_SECRET
           DISCORD_REDIRECT_URI=http://$DEPLOY_HOST/api/v1/auth/oauth/discord/callback
+
+          GIPHY_API_KEY=$GIPHY_API_KEY
 
           RUST_LOG=${{ vars.RUST_LOG || 'info' }}
           LOG_FORMAT=json

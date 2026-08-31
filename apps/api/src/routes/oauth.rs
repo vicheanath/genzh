@@ -30,7 +30,7 @@ pub struct AuthConfigResponse {
 /// Optional features, as the frontend needs to know about them at boot.
 ///
 /// Only features a client must *not offer* when they are off belong here. A GIF
-/// button that opens a picker and then reports the server has no Tenor key is
+/// button that opens a picker and then reports the server has no GIPHY key is
 /// worse than no button, and the client cannot know which it is without being
 /// told.
 #[derive(Debug, Serialize)]
@@ -70,7 +70,7 @@ pub async fn config(State(state): State<AppState>) -> Json<AuthConfigResponse> {
         app_env: state.config.app_env.clone(),
         allow_password_signup: state.config.allow_password_signup,
         features: FeaturesConfig {
-            gifs: state.config.tenor_api_key.is_some(),
+            gifs: state.config.giphy_api_key.is_some(),
         },
         oauth_providers: OAuthProvidersConfig {
             google: configured("google"),

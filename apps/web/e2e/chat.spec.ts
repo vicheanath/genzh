@@ -10,7 +10,10 @@ test.describe('Community Chat & Messaging', () => {
     await page.goto(communityUrl)
 
     await expect(page.getByText('Developers Hangout', { exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'general' })).toBeVisible()
+    // Exact: the transcript also renders the channel intro's "Welcome to
+    // general" heading once history stops paging, so a substring match is
+    // ambiguous. This is the room title in the header, not the intro.
+    await expect(page.getByRole('heading', { name: 'general', exact: true })).toBeVisible()
     await expect(page.getByText('Hello everyone! Welcome to the Developers Hangout.')).toBeVisible()
     await expect(page.getByText('Glad to be here! Let us build something cool.')).toBeVisible()
   })

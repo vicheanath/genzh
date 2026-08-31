@@ -61,6 +61,11 @@ services:
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:-}
 
+      # Optional. Blank turns the composer's GIF button off rather than
+      # failing: `/api/v1/auth/config` reports `features.gifs: false` and the
+      # clients do not offer it.
+      GIPHY_API_KEY: ${GIPHY_API_KEY:-}
+
       # This process signs LiveKit access tokens with the same key/secret
       # LiveKit itself verifies with (see the livekit service below).
       # LIVEKIT_URL is the address a *browser* dials — DEPLOY_HOST is checked

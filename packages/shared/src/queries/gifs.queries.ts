@@ -34,7 +34,8 @@ export function useGifSearchInfinite(query: string, enabled = true) {
         ? gifs.search(null, term, PAGE_SIZE, pageParam)
         : gifs.trending(null, PAGE_SIZE, pageParam),
     initialPageParam: undefined as string | undefined,
-    // Tenor sends an empty cursor at the end, which the API normalises to null.
+    // The API normalises the end of the results to a null cursor, whatever
+    // shape the upstream provider paginates with.
     getNextPageParam: (lastPage: GifPage) => lastPage.next ?? undefined,
     enabled,
     staleTime: GIF_STALE_TIME,

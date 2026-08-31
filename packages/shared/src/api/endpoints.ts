@@ -1274,7 +1274,7 @@ export const emojis = {
 // ── gifs ──────────────────────────────────────────────────────────────────
 
 /**
- * GIF search, proxied by the API so the Tenor key never reaches a browser.
+ * GIF search, proxied by the API so the GIPHY key never reaches a browser.
  *
  * Both calls fail with a 503 and code `FEATURE_UNAVAILABLE` when the
  * deployment has no key configured. Clients should read

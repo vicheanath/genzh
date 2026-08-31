@@ -523,7 +523,7 @@ export interface CreateEmojiInput {
 
 // ── gifs ──────────────────────────────────────────────────────────────────
 
-/** One search result, narrowed by the API from Tenor's much larger shape. */
+/** One search result, narrowed by the API from GIPHY's much larger shape. */
 export interface GifResult {
   id: string
   /** Alt text, written as a caption. */
