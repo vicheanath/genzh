@@ -18,6 +18,7 @@
 
 pub mod audit;
 pub mod community;
+pub mod emoji;
 pub mod error;
 pub mod gamification;
 pub mod ids;
@@ -32,14 +33,15 @@ pub mod spam;
 pub mod support;
 pub mod user;
 
+pub use emoji::CustomEmoji;
 pub use error::{DomainError, DomainResult};
 pub use gamification::{
     BalanceTransaction, EquippedCosmetics, ItemRarity, ItemType, ReferralMilestone, ReferralRecord,
     ReferralWithProfile, StoreItem, StoreListing, UserBalance, UserInventoryItem,
 };
 pub use ids::{
-    CommunityId, InventoryId, MessageId, NotificationId, ReferralId, RoleId, RoomId, SessionId,
-    StoreItemId, TransactionId, UserId,
+    CommunityId, EmojiId, InventoryId, MessageId, NotificationId, ReferralId, RoleId, RoomId,
+    SessionId, StoreItemId, TransactionId, UserId,
 };
 pub use permission::{Permission, PermissionSet};
 pub use platform::PlatformRole;

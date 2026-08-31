@@ -1,6 +1,7 @@
 import {
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -39,6 +40,13 @@ import {
 } from '@/components/ContextMenu'
 import {
   ApiError,
+  gifEmbedOf,
+  indexEmoji,
+  isEmojiOnly,
+  splitEmoji,
+  useRoomEmojisQuery,
+  type CustomEmoji,
+  type EmojiIndex,
   type Message,
   type PublicProfile,
   type ReactionSummary,
@@ -57,6 +65,7 @@ import {
   useEditMessageMutation,
   usePinMessageMutation,
   useReactionMutation,
+  useAuthConfig,
   useRoomMessagesInfinite,
   useRoomPinsQuery,
   useSendMessageMutation,
@@ -117,6 +126,18 @@ export function Chat({
   const queryClient = useQueryClient()
 
   const transcript = useRoomMessagesInfinite(room.id)
+
+  // This room's custom emoji, fetched once and indexed once. Every message row
+  // reads the same `Map`; building one per row per render is what makes a long
+  // transcript stutter while scrolling.
+  const roomEmoji = useRoomEmojisQuery(room.id)
+  const emojiIndex = useMemo(() => indexEmoji(roomEmoji.data ?? []), [roomEmoji.data])
+
+  // Whether this deployment configured GIF search at all. Read from the boot
+  // config rather than discovered from a failed request, so the button is
+  // simply absent instead of present and broken.
+  const authConfig = useAuthConfig()
+  const gifsEnabled = authConfig.data?.features?.gifs ?? false
   const items = transcript.data?.items ?? []
   const loading = transcript.isLoading
   const loadingOlder = transcript.isFetchingNextPage
@@ -538,6 +559,7 @@ export function Chat({
               <MessageRow
                 message={message}
                 author={lookup(message.author_id)}
+                emoji={emojiIndex}
                 cosmetics={cosmetics.data?.get(message.author_id)}
                 repliedMessage={repliedMsg}
                 repliedAuthorName={repliedAuthorName}
@@ -606,6 +628,8 @@ export function Chat({
         <Composer
           room={room}
           onSend={send}
+          customEmoji={roomEmoji.data}
+          gifsEnabled={gifsEnabled}
           onTyping={notifyTyping}
           isAnonymous={isAnonymousPersona}
           onTogglePersona={onTogglePersona}
@@ -634,6 +658,8 @@ export function Chat({
 interface MessageRowProps {
   message: Message
   author: PublicProfile | null
+  /** This room's custom emoji, for drawing `:shortcode:` runs in the body. */
+  emoji: EmojiIndex
   /** What the author is wearing. Ignored for an anonymous message. */
   cosmetics?: EquippedCosmetics | null
   repliedMessage?: Message | null
@@ -658,6 +684,7 @@ interface MessageRowProps {
 function MessageRow({
   message,
   author,
+  emoji,
   cosmetics,
   repliedMessage,
   repliedAuthorName,
@@ -844,15 +871,7 @@ function MessageRow({
             </div>
           ) : (
             <CosmeticChatBubble item={isAnonymous ? null : cosmetics?.chat_bubble}>
-              <p className={styles.content}>
-                <Linkified text={message.content} />
-                {message.edited_at && (
-                  <span className={styles.edited} title={formatFull(message.edited_at)}>
-                    {' '}
-                    (edited)
-                  </span>
-                )}
-              </p>
+              <MessageBody message={message} emoji={emoji} />
             </CosmeticChatBubble>
           )}
 
@@ -862,6 +881,7 @@ function MessageRow({
                 <ReactionChip
                   key={reaction.reaction}
                   reaction={reaction}
+                  emoji={emoji}
                   disabled={!canReact && !reaction.me}
                   onClick={() =>
                     onToggleReaction(message.id, reaction.reaction, reaction.me)
@@ -872,6 +892,7 @@ function MessageRow({
                 <EmojiPicker
                   title="Add a reaction"
                   verb="React with"
+                  custom={[...emoji.values()]}
                   align="end"
                   onPick={(emoji) =>
                     onToggleReaction(
@@ -917,6 +938,7 @@ function MessageRow({
               <EmojiPicker
                 title="Add a reaction"
                 verb="React with"
+                custom={[...emoji.values()]}
                 align="end"
                 onPick={(emoji) =>
                   onToggleReaction(
@@ -1094,13 +1116,21 @@ function PendingRow({
 
 function ReactionChip({
   reaction,
+  emoji,
   disabled,
   onClick,
 }: {
   reaction: ReactionSummary
+  emoji: EmojiIndex
   disabled: boolean
   onClick: () => void
 }) {
+  // A reaction key is either a unicode emoji or `:name:`. The custom one is
+  // resolved here rather than upstream because the tally arrives as a bare
+  // string from both the REST response and the socket, and neither knows what
+  // artwork it stands for.
+  const custom = customReactionOf(reaction.reaction, emoji)
+
   return (
     <button
       type="button"
@@ -1112,10 +1142,36 @@ function ReactionChip({
         reaction.count === 1 ? 'reaction' : 'reactions'
       }`}
     >
-      <span className={styles.chipEmoji}>{reaction.reaction}</span>
+      {custom ? (
+        <img
+          className={styles.chipImage}
+          src={custom.image_url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        <span className={styles.chipEmoji}>{reaction.reaction}</span>
+      )}
       <span className={styles.chipCount}>{reaction.count}</span>
     </button>
   )
+}
+
+/**
+ * The glyph a `:name:` reaction key stands for, or `null` for a unicode one.
+ *
+ * A key whose emoji has since been deleted also answers `null`, and the chip
+ * falls back to showing the shortcode as text — the reaction still happened,
+ * and dropping it from the tally would silently rewrite the count.
+ */
+function customReactionOf(reaction: string, emoji: EmojiIndex): CustomEmoji | null {
+  // Guarded rather than assumed: this is a string off the wire, and a chip
+  // that crashes the transcript is a far worse failure than one that draws
+  // the key as plain text.
+  if (typeof reaction !== 'string') return null
+  if (!reaction.startsWith(':') || !reaction.endsWith(':') || reaction.length < 4) return null
+  return emoji.get(reaction.slice(1, -1).toLowerCase()) ?? null
 }
 
 function DayDivider({ iso }: { iso: string }) {
@@ -1161,14 +1217,87 @@ function MessageSkeletons() {
 }
 
 /**
+ * One message's body: a GIF, or marked-up text.
+ *
+ * The GIF case is checked first and returns early, because a GIF message *is*
+ * its URL — there is no text to mark up, and rendering the link as well would
+ * put the address under the picture it points at.
+ */
+function MessageBody({ message, emoji }: { message: Message; emoji: EmojiIndex }) {
+  const gif = gifEmbedOf(message.content)
+
+  if (gif) {
+    return (
+      <div className={styles.gifWrap}>
+        <img
+          className={styles.gif}
+          src={gif.url}
+          // The URL is all there is to describe it with. Better than an empty
+          // alt, which would announce the message as having no content at all.
+          alt={`GIF from ${gif.host}`}
+          loading="lazy"
+          decoding="async"
+        />
+        {message.edited_at && (
+          <span className={styles.edited} title={formatFull(message.edited_at)}>
+            (edited)
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // A message that is nothing but custom emoji is drawn large, the way a lone
+  // unicode emoji is everywhere else: at that point it is a gesture, not text.
+  const large = isEmojiOnly(splitEmoji(message.content, emoji))
+
+  return (
+    <p className={cx(styles.content, large && styles.contentJumbo)}>
+      <Linkified text={message.content} emoji={emoji} />
+      {message.edited_at && (
+        <span className={styles.edited} title={formatFull(message.edited_at)}>
+          {' '}
+          (edited)
+        </span>
+      )}
+    </p>
+  )
+}
+
+/**
+ * One custom emoji, drawn inline.
+ *
+ * The alt text is the shortcode, which is what the author typed and what a
+ * screen reader should read out. It is also what remains visible if the image
+ * fails to load, so a dead CDN degrades to the text the message actually
+ * contained rather than to nothing.
+ */
+function CustomEmojiImage({ emoji, shortcode }: { emoji: CustomEmoji; shortcode: string }) {
+  return (
+    <img
+      className={styles.customEmoji}
+      src={emoji.image_url}
+      alt={shortcode}
+      title={shortcode}
+      loading="lazy"
+      decoding="async"
+    />
+  )
+}
+
+/**
  * Render bare URLs in message text as links.
  *
  * Deliberately not full Markdown: links are the one thing people paste and
  * expect to work, and everything past that is a sanitising problem. Text is
  * rendered as text, so nothing here can inject markup.
+ *
+ * URLs are split off *before* emoji, and the order matters: a path can contain
+ * a colon, so scanning for shortcodes first could find one inside a link and
+ * tear the address in half.
  */
-/** Message body with links and @mentions marked up. */
-function Linkified({ text }: { text: string }) {
+/** Message body with links, custom emoji and @mentions marked up. */
+function Linkified({ text, emoji }: { text: string; emoji: EmojiIndex }) {
   const { user } = useAuth()
   const parts = text.split(/(https?:\/\/[^\s<]+)/g)
 
@@ -1188,7 +1317,43 @@ function Linkified({ text }: { text: string }) {
             {part}
           </a>
         ) : (
-          <Mentioned key={index} text={part} handle={user?.handle} />
+          <Emojified key={index} text={part} emoji={emoji} handle={user?.handle} />
+        ),
+      )}
+    </>
+  )
+}
+
+/**
+ * Draws the `:shortcode:` runs inside one non-URL span, and hands what is left
+ * to the mention pass.
+ *
+ * A shortcode with no matching glyph falls through as text, which is what
+ * `splitEmoji` already decided — so removing an emoji leaves old messages
+ * reading `:blob:` rather than showing a broken image.
+ */
+function Emojified({
+  text,
+  emoji,
+  handle,
+}: {
+  text: string
+  emoji: EmojiIndex
+  handle?: string
+}) {
+  const segments = splitEmoji(text, emoji)
+
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.kind === 'emoji' ? (
+          <CustomEmojiImage
+            key={index}
+            emoji={segment.emoji}
+            shortcode={segment.shortcode}
+          />
+        ) : (
+          <Mentioned key={index} text={segment.text} handle={handle} />
         ),
       )}
     </>

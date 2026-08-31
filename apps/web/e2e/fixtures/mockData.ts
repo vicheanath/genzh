@@ -138,8 +138,12 @@ export const mockMessages = [
     content: 'Hello everyone! Welcome to the Developers Hangout.',
     created_at: '2026-08-25T10:00:00Z',
     updated_at: null,
+    // `ReactionSummary`, as the API actually sends it. This used to read
+    // `{ emoji, count, user_ids }`, which no endpoint has ever returned — the
+    // transcript rendered a chip with an undefined key and nobody noticed,
+    // because an undefined label draws as nothing.
     reactions: [
-      { emoji: '👋', count: 3, user_ids: [mockUser.id] },
+      { reaction: '👋', count: 3, me: true },
     ],
     pinned: false,
     reply_to: null,

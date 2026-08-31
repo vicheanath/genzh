@@ -263,6 +263,11 @@ fn api_config(database_url: String) -> api::Config {
         discord_client_secret: None,
         discord_redirect_uri: None,
 
+        // No key, so `/gifs/*` reports itself unavailable rather than reaching
+        // for the network — which is what a test run wants regardless.
+        tenor_api_key: None,
+        tenor_client_key: "genzh-test".to_owned(),
+
         // Long enough that no sweep fires during a test run. The harness never
         // starts the scheduler, so these only have to be values that parse —
         // but a test that did start it should not have rows pruned underneath

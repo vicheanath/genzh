@@ -111,6 +111,10 @@ typed_id!(
     /// Identifies a referral record.
     ReferralId
 );
+typed_id!(
+    /// Identifies a community's custom emoji.
+    EmojiId
+);
 
 #[cfg(test)]
 mod tests {

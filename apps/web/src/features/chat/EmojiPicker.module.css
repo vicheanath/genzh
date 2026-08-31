@@ -33,3 +33,28 @@
   background: var(--color-hover);
   transform: scale(1.2);
 }
+
+/* Section headings only appear once a community has glyphs of its own — with
+   a single grid there is nothing to tell apart, and a lone "Standard" label
+   above it would be noise. */
+.sectionLabel {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sectionLabel:first-child {
+  margin-top: 0;
+}
+
+/* Contained rather than stretched: custom emoji are uploaded at whatever
+   aspect ratio their author had, and a squashed blob is worse than a small
+   one in a square cell. */
+.customImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

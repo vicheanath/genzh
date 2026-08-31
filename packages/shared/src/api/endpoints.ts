@@ -20,9 +20,12 @@ import type {
   CommunityMember,
   CommunityWithPermissions,
   CommunityTemplate,
+  CreateEmojiInput,
   CurrentUser,
+  CustomEmoji,
   DiscoveryResponse,
   Friendship,
+  GifPage,
   MediaJoinResponse,
   Message,
   MessagePage,
@@ -1222,4 +1225,73 @@ export const storeAdmin = {
       body: input,
       token,
     }),
+}
+
+// ── custom emoji ──────────────────────────────────────────────────────────
+
+export const emojis = {
+  /**
+   * What may be drawn in this room.
+   *
+   * The call a chat client makes on open. A room outside any community — a
+   * direct conversation, a playground — answers with an empty list rather than
+   * a 404, so this needs no special case at the call site.
+   */
+  forRoom: (token: string | null, roomId: Uuid) =>
+    request<CustomEmoji[]>(`/api/v1/rooms/${roomId}/emojis`, { token }),
+
+  /** The set a community settings screen manages. */
+  list: (token: string | null, communityId: Uuid) =>
+    request<CustomEmoji[]>(`/api/v1/communities/${communityId}/emojis`, { token }),
+
+  create: (token: string | null, communityId: Uuid, input: CreateEmojiInput) =>
+    request<CustomEmoji>(`/api/v1/communities/${communityId}/emojis`, {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+
+  /**
+   * Rename one.
+   *
+   * The artwork is deliberately not editable: repointing a shortcode at a
+   * different image would silently rewrite every message that already used it.
+   */
+  rename: (token: string | null, communityId: Uuid, emojiId: Uuid, name: string) =>
+    request<CustomEmoji>(`/api/v1/communities/${communityId}/emojis/${emojiId}`, {
+      method: 'PATCH',
+      body: { name },
+      token,
+    }),
+
+  remove: (token: string | null, communityId: Uuid, emojiId: Uuid) =>
+    request<void>(`/api/v1/communities/${communityId}/emojis/${emojiId}`, {
+      method: 'DELETE',
+      token,
+    }),
+}
+
+// ── gifs ──────────────────────────────────────────────────────────────────
+
+/**
+ * GIF search, proxied by the API so the Tenor key never reaches a browser.
+ *
+ * Both calls fail with a 503 and code `FEATURE_UNAVAILABLE` when the
+ * deployment has no key configured. Clients should read
+ * `AuthConfig.features.gifs` at boot and not offer the button at all rather
+ * than discovering this from an error.
+ */
+export const gifs = {
+  /** What the picker shows before anybody types. */
+  trending: (token: string | null, limit = 24, pos?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (pos) params.set('pos', pos)
+    return request<GifPage>(`/api/v1/gifs/trending?${params}`, { token })
+  },
+
+  search: (token: string | null, query: string, limit = 24, pos?: string) => {
+    const params = new URLSearchParams({ q: query, limit: String(limit) })
+    if (pos) params.set('pos', pos)
+    return request<GifPage>(`/api/v1/gifs/search?${params}`, { token })
+  },
 }

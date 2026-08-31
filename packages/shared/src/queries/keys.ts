@@ -45,6 +45,33 @@ export const queryKeys = {
     /** The rooms you are already in, direct messages included. */
     mine: () => [...queryKeys.rooms.all, 'mine'] as const,
   },
+  /**
+   * A community's custom emoji.
+   *
+   * `forRoom` is keyed by room even though the answer is per *community*: the
+   * chat client knows the room and not always the community, and a room's set
+   * is invalidated by the community mutations below through nothing cleverer
+   * than a refetch — the alternative is teaching every room which community it
+   * belongs to purely to share one cache entry.
+   */
+  emojis: {
+    all: ['emojis'] as const,
+    forCommunity: (communityId: Uuid) =>
+      [...queryKeys.emojis.all, 'community', communityId] as const,
+    forRoom: (roomId: Uuid) => [...queryKeys.emojis.all, 'room', roomId] as const,
+  },
+  /**
+   * GIF search results.
+   *
+   * Keyed by the query text, so going back to a term the picker has already
+   * searched is instant — people scrub back and forth between two words far
+   * more than they type a third.
+   */
+  gifs: {
+    all: ['gifs'] as const,
+    trending: () => [...queryKeys.gifs.all, 'trending'] as const,
+    search: (query: string) => [...queryKeys.gifs.all, 'search', query] as const,
+  },
   messages: {
     all: ['messages'] as const,
     list: (roomId: Uuid) => [...queryKeys.messages.all, 'room', roomId] as const,

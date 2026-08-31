@@ -11,7 +11,7 @@ use genzh_admin::{
     SecurityService, SettingsService, StaffService, SupportService, SystemTelemetryService,
 };
 use genzh_auth::{AuthService, JwtService};
-use genzh_community::{CommunityService, InviteService, RoleService};
+use genzh_community::{CommunityService, EmojiService, InviteService, RoleService};
 use genzh_graph::SocialService;
 use genzh_cron::CronScheduler;
 use genzh_infrastructure::{
@@ -57,6 +57,8 @@ pub struct AppState {
     pub communities: CommunityService,
     /// Roles, and the rule that nobody may grant what they do not hold.
     pub roles: RoleService,
+    /// A community's custom `:shortcode:` emoji.
+    pub emojis: EmojiService,
     /// Rooms and room authorization.
     pub rooms: RoomService,
     /// Two-person conversations.
@@ -97,6 +99,12 @@ pub struct AppState {
     pub media: Arc<MediaSessionService>,
     /// The configuration this process started with.
     pub config: Arc<Config>,
+    /// One HTTP client for every outbound call this process makes.
+    ///
+    /// Shared rather than built per request: a `reqwest::Client` owns the
+    /// connection pool, and constructing one per GIF search would open a fresh
+    /// TLS session for every keystroke.
+    pub http: reqwest::Client,
     /// General per-address request budget.
     pub rate_limiter: Arc<dyn RateLimiter>,
     /// Tighter budget for credential endpoints.
@@ -152,6 +160,7 @@ impl AppState {
         let auth = AuthService::new(pool.clone(), jwt);
         let communities = CommunityService::new(pool.clone());
         let roles = communities.roles();
+        let emojis = communities.emojis();
         // Rooms consult the social graph so a block makes a direct conversation
         // invisible; everything layered on rooms inherits that.
         let social = SocialService::new(pool.clone());
@@ -229,6 +238,7 @@ impl AppState {
             auth,
             communities,
             roles,
+            emojis,
             rooms,
             directs,
             directory,
@@ -254,6 +264,7 @@ impl AppState {
             attention: InMemoryAttentionStore::new(),
             scheduler,
             recommend: genzh_recommend::RecommendationService::new(pool_for_recommend),
+            http: reqwest::Client::new(),
             config: Arc::new(config),
         })
     }

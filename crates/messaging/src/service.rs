@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use genzh_community::EmojiRepository;
+use genzh_domain::emoji;
 use genzh_domain::message::{self, Message, ReactionSummary};
 use genzh_domain::spam;
 use genzh_domain::{DomainError, MessageId, Permission, RoomId, UserId, now};
@@ -26,6 +28,11 @@ pub struct MessagingService {
     messages: MessageRepository,
     rooms: RoomService,
     flood: Arc<dyn FloodGuard>,
+    /// Only ever asked one question: does this community define `:name:`?
+    ///
+    /// Held here rather than checked by the callers because a reaction arrives
+    /// over two transports, and the rule has to hold on both.
+    emojis: EmojiRepository,
 }
 
 // Written out rather than derived: the guard is a trait object, and requiring
@@ -41,9 +48,10 @@ impl MessagingService {
     /// Build the service with a flood guard.
     pub fn new(pool: DbPool, rooms: RoomService, flood: Arc<dyn FloodGuard>) -> Self {
         Self {
-            messages: MessageRepository::new(pool),
+            messages: MessageRepository::new(pool.clone()),
             rooms,
             flood,
+            emojis: EmojiRepository::new(pool),
         }
     }
 
@@ -235,6 +243,32 @@ impl MessagingService {
         access.require(Permission::AddReaction)?;
 
         let reaction = message::validate_reaction(reaction)?;
+
+        // A `:shortcode:` has to name a glyph that actually exists here.
+        // Without this, any string between colons becomes a permanent reaction
+        // key that every client renders as literal text and nobody can explain.
+        //
+        // Costed deliberately: unicode emoji — very nearly all of them — skip
+        // the lookup entirely, because `shortcode_name` answers `None`.
+        if let Some(name) = emoji::shortcode_name(&reaction) {
+            let defined = match access.room.community_id {
+                Some(community_id) => self
+                    .emojis
+                    .find_by_name(community_id, &name)
+                    .await?
+                    .is_some(),
+                // A direct conversation belongs to no community, so it has no
+                // custom glyphs to offer.
+                None => false,
+            };
+
+            if !defined {
+                return Err(ServiceError::Domain(DomainError::invalid(
+                    "reaction",
+                    format!(":{name}: is not an emoji in this community"),
+                )));
+            }
+        }
 
         // Reactions are cheaper than messages but not free: each one is a row
         // and a broadcast to everyone in the room, and toggling one on and off

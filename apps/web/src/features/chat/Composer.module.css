@@ -195,6 +195,18 @@
   color: var(--color-text);
 }
 
+/* The word rather than a glyph: every chat product labels this button "GIF",
+   and no icon says it. Composed from `.tool` so hover and open states stay in
+   step with the buttons beside it. */
+.gifTool {
+  composes: tool;
+  width: auto;
+  padding: 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 /* ── persona ────────────────────────────────────────────────────────────── */
 
 .persona {

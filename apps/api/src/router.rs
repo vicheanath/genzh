@@ -253,6 +253,15 @@ pub fn build(state: AppState) -> Router {
             "/communities/{id}/roles/{role_id}",
             patch(routes::communities::update_role),
         )
+        // ---- custom emoji ----
+        .route(
+            "/communities/{id}/emojis",
+            get(routes::emoji::list).post(routes::emoji::create),
+        )
+        .route(
+            "/communities/{id}/emojis/{emoji_id}",
+            patch(routes::emoji::rename).delete(routes::emoji::delete),
+        )
         // ---- users ----
         .route("/users/{id}", get(routes::users::get))
         // ---- playground rooms & discovery ----
@@ -286,12 +295,18 @@ pub fn build(state: AppState) -> Router {
         .route("/rooms/{id}/leave", post(routes::rooms::leave))
         .route("/rooms/{id}/persona", patch(routes::rooms::set_persona))
         .route("/rooms/{id}/participants", get(routes::rooms::participants))
+        // What a chat client may draw here, without it having to know which
+        // community — if any — the room belongs to.
+        .route("/rooms/{id}/emojis", get(routes::emoji::list_for_room))
         // ---- media ----
         .route("/rooms/{id}/media/join", post(routes::media::join))
         .route("/rooms/{id}/media/leave", post(routes::media::leave))
         // ---- direct calls ----
         .route("/rooms/{id}/call/ring", post(routes::media::ring))
         .route("/rooms/{id}/call/end", post(routes::media::end_call))
+        // ---- gifs ----
+        .route("/gifs/search", get(routes::gifs::search))
+        .route("/gifs/trending", get(routes::gifs::trending))
         // ---- messages ----
         .route(
             "/rooms/{id}/messages",

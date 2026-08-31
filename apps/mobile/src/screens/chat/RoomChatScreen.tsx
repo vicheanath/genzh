@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +15,11 @@ import { Phone, PhoneOff, Users, Video } from 'lucide-react-native';
 import {
   ApiError,
   can,
+  gifEmbedOf,
+  indexEmoji,
+  splitEmoji,
+  useAuthConfigQuery,
+  useRoomEmojisQuery,
   useRoomQuery,
   useSendMessageMutation,
   useAddReactionMutation,
@@ -25,6 +31,8 @@ import {
   MENTION,
   QUICK_REACTIONS,
   type ChatServerEvent,
+  type CustomEmoji,
+  type EmojiIndex,
   type Message,
   type ReactionSummary,
   type RoomWithPermissions,
@@ -82,6 +90,18 @@ export function RoomChatScreen({ route, navigation }: any) {
   const removeReactionMutation = useRemoveReactionMutation(token);
   const editMutation = useEditMessageMutation(token);
   const deleteMutation = useDeleteMessageMutation(token);
+
+  // This room's custom emoji, fetched once and indexed once. Every row reads
+  // the same `Map`; rebuilding one per row per render is what makes a long
+  // transcript stutter while scrolling.
+  const roomEmoji = useRoomEmojisQuery(roomId);
+  const emojiIndex = useMemo(() => indexEmoji(roomEmoji.data ?? []), [roomEmoji.data]);
+
+  // Whether this deployment configured GIF search at all. Read from the boot
+  // config rather than discovered from a failed request, so the button is
+  // simply absent instead of present and broken.
+  const authConfig = useAuthConfigQuery();
+  const gifsEnabled = authConfig.data?.features?.gifs ?? false;
 
   const history = useMessageHistory(roomId);
   const { setItems } = history;
@@ -433,6 +453,7 @@ export function RoomChatScreen({ route, navigation }: any) {
                   <MessageRow
                     message={item}
                     author={lookup(item.author_id)}
+                    emoji={emojiIndex}
                     grouped={grouped}
                     isOwn={item.author_id === user?.id}
                     myHandle={user?.handle}
@@ -462,6 +483,8 @@ export function RoomChatScreen({ route, navigation }: any) {
         <Composer
           room={current}
           onSend={send}
+          customEmoji={roomEmoji.data}
+          gifsEnabled={gifsEnabled}
           onTyping={onTyping}
           disabled={!canPost}
           disabledReason="You do not have permission to post in this channel."
@@ -516,6 +539,7 @@ export function RoomChatScreen({ route, navigation }: any) {
       <EmojiPicker
         open={reactFor !== null}
         onOpenChange={(open) => !open && setReactFor(null)}
+        custom={roomEmoji.data}
         title="React"
         onPick={(emoji) => {
           if (!reactFor) return;
@@ -535,6 +559,8 @@ export function RoomChatScreen({ route, navigation }: any) {
 interface MessageRowProps {
   message: Message;
   author: { display_name: string; avatar_url: string | null; accent_color: string | null } | null;
+  /** This room's custom emoji, for drawing `:shortcode:` runs in the body. */
+  emoji: EmojiIndex;
   grouped: boolean;
   isOwn: boolean;
   myHandle?: string;
@@ -548,6 +574,7 @@ interface MessageRowProps {
 function MessageRow({
   message,
   author,
+  emoji,
   grouped,
   isOwn,
   myHandle,
@@ -566,6 +593,11 @@ function MessageRow({
     ? message.anonymous_author.accent_color
     : author?.accent_color;
   const avatarUrl = message.anonymous_author ? undefined : author?.avatar_url;
+
+  // A message that is nothing but a GIF URL is drawn as the picture. Checked
+  // before the text path because there is then no text to mark up, and showing
+  // the address under the image it points at is noise.
+  const gif = gifEmbedOf(message.content);
 
   return (
     // Long-press is the touchscreen equivalent of the web's hover bar and
@@ -596,10 +628,19 @@ function MessageRow({
           </View>
         ) : null}
 
-        <Text style={styles.content}>
-          <MessageText text={message.content} myHandle={myHandle} />
-          {message.edited_at ? <Text style={styles.edited}> (edited)</Text> : null}
-        </Text>
+        {gif ? (
+          <Image
+            source={{ uri: gif.url }}
+            style={styles.gif}
+            resizeMode="contain"
+            accessibilityLabel={`GIF from ${gif.host}`}
+          />
+        ) : (
+          <Text style={styles.content}>
+            <MessageText text={message.content} emoji={emoji} myHandle={myHandle} />
+            {message.edited_at ? <Text style={styles.edited}> (edited)</Text> : null}
+          </Text>
+        )}
 
         <View style={styles.reactions}>
           {message.reactions.map((reaction) => (
@@ -617,7 +658,7 @@ function MessageRow({
                 onPress={() => onToggleReaction(message.id, reaction.reaction, reaction.me)}
                 style={[styles.reaction, reaction.me && styles.reactionMine]}
               >
-                <Text style={styles.reactionEmoji}>{reaction.reaction}</Text>
+                <ReactionGlyph reaction={reaction.reaction} emoji={emoji} />
                 <Text style={[styles.reactionCount, reaction.me && styles.reactionCountMine]}>
                   {reaction.count}
                 </Text>
@@ -651,12 +692,78 @@ function MessageRow({
 }
 
 /**
- * Message text with its mentions picked out.
+ * One reaction chip's glyph: artwork for a `:name:` key, text for a unicode one.
  *
- * Uses the same `MENTION` pattern the composer completes against and the server
- * parses with, so what is highlighted is exactly what notified somebody.
+ * A key whose emoji has since been deleted falls back to the shortcode as
+ * text. The reaction still happened, and dropping it would silently rewrite
+ * the count.
  */
-function MessageText({ text, myHandle }: { text: string; myHandle?: string }) {
+function ReactionGlyph({ reaction, emoji }: { reaction: string; emoji: EmojiIndex }) {
+  const styles = useThemedStyles(makeStyles);
+  const custom = customReactionOf(reaction, emoji);
+
+  if (custom) {
+    return (
+      <Image source={{ uri: custom.image_url }} style={styles.reactionImage} resizeMode="contain" />
+    );
+  }
+
+  return <Text style={styles.reactionEmoji}>{reaction}</Text>;
+}
+
+/** The glyph a `:name:` reaction key stands for, or `null` for a unicode one. */
+function customReactionOf(reaction: string, emoji: EmojiIndex): CustomEmoji | null {
+  // Guarded rather than assumed: this is a string off the wire, and a chip
+  // that crashes the transcript is a far worse failure than one that draws
+  // the key as plain text.
+  if (typeof reaction !== 'string') return null;
+  if (!reaction.startsWith(':') || !reaction.endsWith(':') || reaction.length < 4) return null;
+  return emoji.get(reaction.slice(1, -1).toLowerCase()) ?? null;
+}
+
+/**
+ * Message text with its custom emoji drawn and its mentions picked out.
+ *
+ * Custom emoji are resolved first and the leftover text goes through the
+ * mention pass, so a glyph beside a mention gets both treatments.
+ *
+ * The mention half uses the same `MENTION` pattern the composer completes
+ * against and the server parses with, so what is highlighted is exactly what
+ * notified somebody.
+ */
+function MessageText({
+  text,
+  emoji,
+  myHandle,
+}: {
+  text: string;
+  emoji: EmojiIndex;
+  myHandle?: string;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  const segments = splitEmoji(text, emoji);
+
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.kind === 'emoji' ? (
+          <Image
+            key={index}
+            source={{ uri: segment.emoji.image_url }}
+            style={styles.customEmoji}
+            resizeMode="contain"
+            accessibilityLabel={segment.shortcode}
+          />
+        ) : (
+          <Mentioned key={index} text={segment.text} myHandle={myHandle} />
+        ),
+      )}
+    </>
+  );
+}
+
+/** Marks up `@handle` runs inside one plain-text span. */
+function Mentioned({ text, myHandle }: { text: string; myHandle?: string }) {
   const styles = useThemedStyles(makeStyles);
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
@@ -812,6 +919,31 @@ const makeStyles = (c: Palette) =>
   reactionMine: {
     borderColor: c.accent,
     backgroundColor: c.accentSubtle,
+  },
+  /* Sized against the line rather than a fixed count, so a glyph sits with the
+     words around it. RN has no `vertical-align`, so a small negative margin is
+     what keeps it from spacing the line unevenly. */
+  customEmoji: {
+    width: 20,
+    height: 20,
+    marginBottom: -4,
+  },
+  /* A GIF is capped in both directions: a tall one must not push the rest of
+     the transcript off screen, and `width: '100%'` keeps a wide one inside the
+     column. */
+  gif: {
+    width: '100%',
+    height: 180,
+    maxWidth: 280,
+    borderRadius: Radius.lg,
+    backgroundColor: c.surfaceMuted,
+    marginTop: Spacing.xs,
+  },
+  /* Matches `reactionEmoji`'s optical size — a square image at the same
+     numeric height reads noticeably larger than a glyph. */
+  reactionImage: {
+    width: 14,
+    height: 14,
   },
   reactionEmoji: {
     fontSize: 13,

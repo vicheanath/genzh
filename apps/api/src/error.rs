@@ -67,6 +67,17 @@ pub enum ApiError {
     #[error("too many requests")]
     RateLimited,
 
+    /// An optional upstream this endpoint depends on is not configured, or did
+    /// not answer.
+    ///
+    /// Distinct from [`Self::Store`], which is about this system's own
+    /// dependencies being degraded. This one says a *feature* is off: GIF
+    /// search with no Tenor key is not a fault to page anybody about, it is a
+    /// deployment that did not turn it on, and the client's correct response is
+    /// to stop offering the button.
+    #[error("{0}")]
+    Unavailable(String),
+
     /// A volatile store — presence, request budgets, real-time fan-out —
     /// could not answer.
     ///
@@ -130,6 +141,11 @@ impl ApiError {
                 StatusCode::TOO_MANY_REQUESTS,
                 "RATE_LIMITED".to_owned(),
                 "Too many requests, slow down".to_owned(),
+            ),
+            ApiError::Unavailable(message) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "FEATURE_UNAVAILABLE".to_owned(),
+                message.clone(),
             ),
             // 503 rather than 500: nothing is broken, something is briefly
             // unreachable, and a client is right to try again shortly.

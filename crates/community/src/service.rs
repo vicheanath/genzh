@@ -85,6 +85,18 @@ impl CommunityService {
         crate::roles::RoleService::new(self.clone(), self.repository.clone())
     }
 
+    /// The custom-emoji service over this community's storage.
+    ///
+    /// Built here for the same reason [`Self::roles`] is: emoji are governed by
+    /// community membership and `manage_community`, so the service that answers
+    /// those questions is the one that should hand out the thing that asks them.
+    pub fn emojis(&self) -> crate::emoji::EmojiService {
+        crate::emoji::EmojiService::new(
+            self.clone(),
+            crate::emoji::EmojiRepository::new(self.repository.pool()),
+        )
+    }
+
     /// Resolve a caller's standing in a community.
     ///
     /// This is *the* authorization entry point. Every mutating call in this

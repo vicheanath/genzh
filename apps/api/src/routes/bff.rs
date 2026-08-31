@@ -27,7 +27,7 @@ use crate::oauth;
 use crate::routes::auth::UserResponse;
 use crate::routes::communities::{CommunityResponse, MemberView, RoleView};
 use crate::routes::messages::{HistoryResponse, MessageView};
-use crate::routes::oauth::{AuthConfigResponse, OAuthProvidersConfig};
+use crate::routes::oauth::{AuthConfigResponse, FeaturesConfig, OAuthProvidersConfig};
 use crate::routes::rooms::{RoomResponse, UserRoomResponse};
 use crate::routes::users::PublicProfile;
 use crate::state::AppState;
@@ -201,6 +201,9 @@ pub async fn me_overview(
     let config = AuthConfigResponse {
         app_env: state.config.app_env.clone(),
         allow_password_signup: state.config.allow_password_signup,
+        features: FeaturesConfig {
+            gifs: state.config.tenor_api_key.is_some(),
+        },
         oauth_providers: OAuthProvidersConfig {
             google: configured("google"),
             discord: configured("discord"),

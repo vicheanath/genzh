@@ -1,8 +1,8 @@
-import { HashIcon, LinkIcon, LockIcon, ShieldIcon, UsersIcon } from '@/components/Icons'
+import { HashIcon, LinkIcon, LockIcon, ShieldIcon, SmileIcon, UsersIcon } from '@/components/Icons'
 import type { CommunityWithPermissions, Uuid } from '@/lib/api'
 import { can } from '@/lib/permissions'
 
-export type CommunityTab = 'overview' | 'roles' | 'members' | 'channels' | 'invites'
+export type CommunityTab = 'overview' | 'roles' | 'members' | 'channels' | 'emoji' | 'invites'
 
 export interface CommunityTabInfo {
   id: CommunityTab
@@ -24,6 +24,7 @@ export const COMMUNITY_TABS: ReadonlyArray<CommunityTabInfo> = [
   { id: 'roles', label: 'Roles & permissions', short: 'Roles', icon: LockIcon },
   { id: 'members', label: 'Members', short: 'Members', icon: UsersIcon },
   { id: 'channels', label: 'Channels', short: 'Channels', icon: HashIcon },
+  { id: 'emoji', label: 'Custom emoji', short: 'Emoji', icon: SmileIcon },
   { id: 'invites', label: 'Invite links', short: 'Invites', icon: LinkIcon },
 ]
 

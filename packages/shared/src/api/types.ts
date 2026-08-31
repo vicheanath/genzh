@@ -480,6 +480,67 @@ export interface AuthConfig {
     google: boolean
     discord: boolean
   }
+  /**
+   * Optional features this deployment turned on.
+   *
+   * Optional on the type, not on the wire: a client built against a newer API
+   * than the server it is talking to must not crash reading a field that
+   * server has never heard of.
+   */
+  features?: {
+    /** Whether GIF search can answer. False means: do not offer the button. */
+    gifs: boolean
+  }
+}
+
+// ── custom emoji ──────────────────────────────────────────────────────────
+
+/**
+ * A community's own `:shortcode:` glyph.
+ *
+ * `GET /api/v1/communities/{id}/emojis`, and — the call a chat client actually
+ * makes — `GET /api/v1/rooms/{id}/emojis`, which answers the same question
+ * without the client having to know which community a room belongs to.
+ */
+export interface CustomEmoji {
+  id: Uuid
+  community_id: Uuid
+  /** The shortcode without its colons, lower-case. */
+  name: string
+  /** Always `https://`, enforced by the server. */
+  image_url: string
+  is_animated: boolean
+  created_by: Uuid | null
+  created_at: Timestamp
+}
+
+export interface CreateEmojiInput {
+  /** Colons optional: `blob` and `:blob:` are the same name. */
+  name: string
+  image_url: string
+  is_animated?: boolean
+}
+
+// ── gifs ──────────────────────────────────────────────────────────────────
+
+/** One search result, narrowed by the API from Tenor's much larger shape. */
+export interface GifResult {
+  id: string
+  /** Alt text, written as a caption. */
+  description: string
+  /** The full-size GIF — what gets posted into the room. */
+  url: string
+  /** A small looping preview for the picker grid. */
+  preview_url: string
+  /** Intrinsic size of `url`, so a grid can reserve space before it loads. */
+  width: number
+  height: number
+}
+
+export interface GifPage {
+  results: GifResult[]
+  /** Cursor for the next page, or `null` at the end. */
+  next: string | null
 }
 
 // ── Composite view payloads ───────────────────────────────────────────────

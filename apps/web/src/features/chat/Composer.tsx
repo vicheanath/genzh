@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/Button'
 import { AtSignIcon, LockIcon, ReplyIcon, SendIcon, SmileIcon, UsersIcon, XIcon } from '@/components/Icons'
 import { Tooltip } from '@/components/Tooltip'
-import type { RoomWithPermissions, Uuid } from '@/lib/api'
+import type { CustomEmoji, RoomWithPermissions, Uuid } from '@/lib/api'
 import { cx } from '@/lib/cx'
 
 import { contentProblem, MAX_LENGTH } from './limits'
@@ -23,6 +23,7 @@ import {
 import { useMentionCandidates } from './useMentionCandidates'
 import styles from './Composer.module.css'
 import { EmojiPicker } from './EmojiPicker'
+import { GifPicker } from './GifPicker'
 
 /** The counter is noise until the ceiling is actually in sight. */
 const COUNTER_FROM = 200
@@ -39,6 +40,15 @@ export interface ReplyTarget {
 export interface ComposerProps {
   room: RoomWithPermissions
   onSend: (content: string, replyToId?: Uuid) => Promise<void>
+  /** This room's custom emoji, offered above the standard set in the picker. */
+  customEmoji?: readonly CustomEmoji[]
+  /**
+   * Whether this deployment has GIF search configured.
+   *
+   * The button is hidden rather than disabled when it is off: a control that
+   * opens a panel saying the feature does not exist is worse than no control.
+   */
+  gifsEnabled?: boolean
   onTyping?: () => void
   isAnonymous?: boolean
   onTogglePersona?: (isAnon: boolean) => void
@@ -63,6 +73,8 @@ export interface ComposerProps {
 export function Composer({
   room,
   onSend,
+  customEmoji,
+  gifsEnabled,
   onTyping,
   isAnonymous,
   onTogglePersona,
@@ -141,6 +153,23 @@ export function Composer({
     // An `@` that does not begin a word is not a mention — the server would not
     // parse it, so the picker must not offer one either.
     insert(before === undefined || /\s/.test(before) ? '@' : ' @')
+  }
+
+  /**
+   * Post a GIF as its own message, rather than pasting the URL into the draft.
+   *
+   * A GIF is only rendered as a picture when the message is *nothing but* the
+   * URL — that rule is what stops a link inside someone's sentence being
+   * silently turned into an image. Inserting it into the draft would therefore
+   * usually produce a link, which is not what the picker promised.
+   *
+   * The draft is left exactly as it was: a half-written sentence is not
+   * something a GIF should discard.
+   */
+  function sendGif(url: string) {
+    const replyId = replyingTo?.id
+    onCancelReply?.()
+    void onSend(url, replyId)
   }
 
   function submit() {
@@ -284,7 +313,18 @@ export function Composer({
 
           <div className={styles.bar}>
             <div className={styles.tools}>
-              <EmojiButton onPick={insert} />
+              <EmojiButton onPick={insert} custom={customEmoji} />
+
+              {gifsEnabled && (
+                <GifPicker
+                  onPick={sendGif}
+                  trigger={
+                    <button type="button" className={styles.gifTool} aria-label="Send a GIF">
+                      GIF
+                    </button>
+                  }
+                />
+              )}
 
               <Tooltip content="Mention someone">
                 <button
@@ -368,10 +408,17 @@ export function Composer({
 }
 
 /** Emoji into the draft, at the caret rather than at the end. */
-function EmojiButton({ onPick }: { onPick: (emoji: string) => void }) {
+function EmojiButton({
+  onPick,
+  custom,
+}: {
+  onPick: (emoji: string) => void
+  custom?: readonly CustomEmoji[]
+}) {
   return (
     <EmojiPicker
       onPick={onPick}
+      custom={custom}
       trigger={
         <button type="button" className={styles.tool} aria-label="Add an emoji">
           <SmileIcon size={16} />

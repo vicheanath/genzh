@@ -53,6 +53,16 @@ impl CommunityRepository {
         Self { pool }
     }
 
+    /// The pool behind this repository.
+    ///
+    /// Exposed only so [`crate::service::CommunityService`] can hand it to the
+    /// sibling repositories it builds — the emoji table is community-scoped
+    /// storage, and making the composition root reassemble that connection
+    /// would put knowledge of it in two places.
+    pub(crate) fn pool(&self) -> DbPool {
+        self.pool.clone()
+    }
+
     /// Create a community, its starter roles and its owner's membership in one
     /// transaction.
     ///

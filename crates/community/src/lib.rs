@@ -6,12 +6,14 @@
 //! orchestration around it.
 
 pub mod authorization;
+pub mod emoji;
 pub mod invites;
 pub mod repository;
 pub mod roles;
 pub mod service;
 
 pub use authorization::{MemberContext, resolve_member_permissions};
+pub use emoji::{CreateEmoji, EmojiRepository, EmojiService};
 pub use repository::CommunityRepository;
 pub use roles::RoleService;
 pub use service::{CommunityService, CreateCommunity, CreateRole, UpdateCommunity, UpdateRole};

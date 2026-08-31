@@ -15,6 +15,7 @@ import {
   findMentionQuery,
   MAX_LENGTH,
   rankCandidates,
+  type CustomEmoji,
   type MentionCandidate,
   type RoomWithPermissions,
 } from '@genzh/shared';
@@ -23,6 +24,7 @@ import { Radius, Spacing, type Palette } from '../../theme/tokens';
 import { useThemedStyles, useColors } from '../../theme/ThemeContext';
 
 import { EmojiPicker } from './EmojiPicker';
+import { GifPicker } from './GifPicker';
 import { MentionSuggestions } from './MentionSuggestions';
 import { useMentionCandidates } from './useMentionCandidates';
 
@@ -32,6 +34,15 @@ const COUNTER_FROM = 200;
 export interface ComposerProps {
   room: RoomWithPermissions;
   onSend: (content: string) => Promise<void>;
+  /** This room's custom emoji, offered above the standard set in the picker. */
+  customEmoji?: readonly CustomEmoji[];
+  /**
+   * Whether this deployment has GIF search configured.
+   *
+   * The button is hidden rather than disabled when it is off: a control that
+   * opens a sheet saying the feature does not exist is worse than no control.
+   */
+  gifsEnabled?: boolean;
   onTyping?: () => void;
   isAnonymous?: boolean;
   onTogglePersona?: (isAnon: boolean) => void;
@@ -56,6 +67,8 @@ export interface ComposerProps {
 export function Composer({
   room,
   onSend,
+  customEmoji,
+  gifsEnabled,
   onTyping,
   isAnonymous,
   onTogglePersona,
@@ -75,6 +88,7 @@ export function Composer({
   // without changing the text.
   const [caret, setCaret] = useState(0);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const candidates = useMentionCandidates(room);
@@ -119,6 +133,21 @@ export function Composer({
     // parse it, so the picker must not offer one either.
     insert(before === undefined || /\s/.test(before) ? '@' : ' @');
     inputRef.current?.focus();
+  }
+
+  /**
+   * Post a GIF as its own message, rather than pasting the URL into the draft.
+   *
+   * A GIF is only drawn as a picture when the message is *nothing but* the URL
+   * — the rule that stops a link inside somebody's sentence being silently
+   * turned into an image. Inserting it into the draft would therefore usually
+   * produce a link, which is not what the picker promised.
+   *
+   * The draft is left exactly as it was: a half-written sentence is not
+   * something a GIF should discard.
+   */
+  function sendGif(url: string) {
+    void onSend(url);
   }
 
   function submit() {
@@ -202,6 +231,19 @@ export function Composer({
               <Smile size={18} color={c.textMuted} />
             </Pressable>
 
+            {gifsEnabled ? (
+              <Pressable
+                accessibilityLabel="Send a GIF"
+                onPress={() => setGifOpen(true)}
+                hitSlop={8}
+                style={styles.tool}
+              >
+                {/* The word rather than a glyph: every chat product labels this
+                    "GIF", and no icon says it. */}
+                <Text style={styles.gifLabel}>GIF</Text>
+              </Pressable>
+            ) : null}
+
             <Pressable
               accessibilityLabel="Mention someone"
               onPress={startMention}
@@ -263,8 +305,11 @@ export function Composer({
         open={emojiOpen}
         onOpenChange={setEmojiOpen}
         onPick={insert}
+        custom={customEmoji}
         title="Add an emoji"
       />
+
+      <GifPicker open={gifOpen} onOpenChange={setGifOpen} onPick={sendGif} />
     </View>
   );
 }
@@ -306,6 +351,12 @@ const makeStyles = (c: Palette) =>
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+  },
+  gifLabel: {
+    color: c.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   tool: {
     padding: 2,

@@ -24,6 +24,9 @@ export async function setupMockApi(page: Page) {
         app_env: 'test',
         allow_password_signup: true,
         oauth_providers: { google: true, discord: true },
+        // GIF search off, so the composer's GIF button is absent in tests: the
+        // picker would otherwise reach for Tenor through an unmocked route.
+        features: { gifs: false },
       }),
     })
   })
@@ -488,6 +491,17 @@ export async function setupMockApi(page: Page) {
   })
 
   // Mock Pins & Search
+  // Every room the chat screen opens asks what glyphs it may draw. Mocked as
+  // empty rather than left unrouted, so a test failure is about the test and
+  // not about a request that quietly went to the real network.
+  await page.route(/\/api\/v1\/rooms\/[^/]+\/emojis$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
   await page.route(/\/api\/v1\/rooms\/[^/]+\/pins$/, async (route) => {
     await route.fulfill({
       status: 200,
